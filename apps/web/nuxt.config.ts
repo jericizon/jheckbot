@@ -14,4 +14,15 @@ export default defineNuxtConfig({
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8801',
     },
   },
+  app: {
+    head: {
+      title: 'JheckBot',
+      meta: [
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' },
+        { name: 'theme-color', content: '#4f46e5' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+      ],
+    },
+  },
 })
