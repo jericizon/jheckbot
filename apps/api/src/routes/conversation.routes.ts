@@ -6,7 +6,9 @@ import { AgentController } from '../controllers/AgentController.js'
 export function createNestedConversationRouter(
   controller: ConversationController,
 ): Router {
-  const router = Router()
+  // Express 5 does not merge parent params by default — mergeParams is required
+  // so :projectId from the mount path is available in req.params
+  const router = Router({ mergeParams: true })
 
   router.get('/', (req, res) => controller.listByProject(req, res))
   router.post('/', (req, res) => controller.create(req, res))

@@ -1,10 +1,20 @@
 import type { Request, Response } from 'express'
+import { isValidUuid } from '@jheckbot/shared'
 import { ProjectService, ProjectValidationError } from '../services/ProjectService.js'
 import { ProjectHealthService } from '../services/ProjectHealthService.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
   return Array.isArray(value) ? value[0] : value
+}
+
+function validateIdParam(req: Request, res: Response, name = 'id'): string | null {
+  const value = getParam(req, name)
+  if (!isValidUuid(value)) {
+    res.status(400).json({ error: `Invalid ${name} format` })
+    return null
+  }
+  return value
 }
 
 export class ProjectController {
@@ -19,7 +29,9 @@ export class ProjectController {
   }
 
   async get(req: Request, res: Response): Promise<void> {
-    const project = await this.projectService.get(getParam(req, 'id'))
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
     if (!project) {
       res.status(404).json({ error: 'Project not found' })
       return
@@ -46,7 +58,9 @@ export class ProjectController {
 
   async update(req: Request, res: Response): Promise<void> {
     try {
-      const project = await this.projectService.update(getParam(req, 'id'), {
+      const id = validateIdParam(req, res)
+      if (!id) return
+      const project = await this.projectService.update(id, {
         name: req.body.name,
         description: req.body.description,
         enabled: req.body.enabled,
@@ -66,7 +80,9 @@ export class ProjectController {
   }
 
   async delete(req: Request, res: Response): Promise<void> {
-    const deleted = await this.projectService.delete(getParam(req, 'id'))
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const deleted = await this.projectService.delete(id)
     if (!deleted) {
       res.status(404).json({ error: 'Project not found' })
       return
@@ -75,7 +91,9 @@ export class ProjectController {
   }
 
   async validate(req: Request, res: Response): Promise<void> {
-    const project = await this.projectService.get(getParam(req, 'id'))
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
     if (!project) {
       res.status(404).json({ error: 'Project not found' })
       return
@@ -85,7 +103,9 @@ export class ProjectController {
   }
 
   async health(req: Request, res: Response): Promise<void> {
-    const project = await this.projectService.get(getParam(req, 'id'))
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
     if (!project) {
       res.status(404).json({ error: 'Project not found' })
       return

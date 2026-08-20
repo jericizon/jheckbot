@@ -1,10 +1,20 @@
 import type { Request, Response } from 'express'
+import { isValidUuid } from '@jheckbot/shared'
 import { AgentManager, AgentManagerError } from '../agent/AgentManager.js'
 import { AgentEventRepository } from '../repositories/AgentEventRepository.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
   return Array.isArray(value) ? value[0] : value
+}
+
+function validateIdParam(req: Request, res: Response): string | null {
+  const value = getParam(req, 'id')
+  if (!isValidUuid(value)) {
+    res.status(400).json({ error: 'Invalid conversation ID format' })
+    return null
+  }
+  return value
 }
 
 export class AgentController {
@@ -14,7 +24,8 @@ export class AgentController {
   ) {}
 
   async getStatus(req: Request, res: Response): Promise<void> {
-    const conversationId = getParam(req, 'id')
+    const conversationId = validateIdParam(req, res)
+    if (!conversationId) return
     const run = this.agentManager.getStatus(conversationId)
     if (!run) {
       res.status(404).json({ error: 'No agent run for this conversation' })
@@ -24,7 +35,8 @@ export class AgentController {
   }
 
   async start(req: Request, res: Response): Promise<void> {
-    const conversationId = getParam(req, 'id')
+    const conversationId = validateIdParam(req, res)
+    if (!conversationId) return
     try {
       const run = await this.agentManager.start({
         conversationId,
@@ -49,7 +61,8 @@ export class AgentController {
   }
 
   async stop(req: Request, res: Response): Promise<void> {
-    const conversationId = getParam(req, 'id')
+    const conversationId = validateIdParam(req, res)
+    if (!conversationId) return
     const run = await this.agentManager.stop(conversationId)
     if (!run) {
       res.status(404).json({ error: 'No agent run for this conversation' })
@@ -65,7 +78,8 @@ export class AgentController {
 
   /** SSE endpoint for streaming agent output. */
   async streamEvents(req: Request, res: Response): Promise<void> {
-    const conversationId = getParam(req, 'id')
+    const conversationId = validateIdParam(req, res)
+    if (!conversationId) return
     const lastEventId = (req.headers['last-event-id'] as string) || undefined
 
     res.writeHead(200, {
