@@ -27,5 +27,5 @@
 
 <script setup lang="ts">
 const route = useRoute()
-const showNav = computed(() => route.path !== '/login')
+const showNav = computed(() => !route.path.startsWith('/login') && !route.path.startsWith('/conversations/'))
 </script>
