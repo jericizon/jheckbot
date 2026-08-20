@@ -2,19 +2,25 @@ import { Router } from 'express'
 import { ConversationController } from '../controllers/ConversationController.js'
 import { AgentController } from '../controllers/AgentController.js'
 
+/** Routes nested under /api/projects/:projectId/conversations */
+export function createNestedConversationRouter(
+  controller: ConversationController,
+): Router {
+  const router = Router()
+
+  router.get('/', (req, res) => controller.listByProject(req, res))
+  router.post('/', (req, res) => controller.create(req, res))
+
+  return router
+}
+
+/** Direct routes under /api/conversations/:id */
 export function createConversationRouter(
   controller: ConversationController,
   agentController: AgentController,
 ): Router {
   const router = Router()
 
-  // Nested under projects
-  // GET /api/projects/:projectId/conversations
-  // POST /api/projects/:projectId/conversations
-  router.get('/', (req, res) => controller.listByProject(req, res))
-  router.post('/', (req, res) => controller.create(req, res))
-
-  // Direct conversation operations
   router.get('/:id', (req, res) => controller.get(req, res))
   router.patch('/:id', (req, res) => controller.update(req, res))
   router.delete('/:id', (req, res) => controller.delete(req, res))

@@ -19,7 +19,7 @@ import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
 import { createProjectRouter } from './routes/project.routes.js'
-import { createConversationRouter } from './routes/conversation.routes.js'
+import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
 import { createAuthRouter } from './routes/auth.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
@@ -105,7 +105,7 @@ export function createApp(): express.Express {
   const projectRouter = createProjectRouter(projectController)
   projectRouter.use(
     '/:projectId/conversations',
-    createConversationRouter(conversationController, agentController),
+    createNestedConversationRouter(conversationController),
   )
   app.use('/api/projects', projectRouter)
 
