@@ -73,6 +73,14 @@ export class AgentManager {
 
     const sessionName = this.buildSessionName(project.slug, opts.conversationId)
 
+    // Clean up any stale tmux session from a previous failed run
+    if (this.tmux.sessionExists(sessionName)) {
+      this.tmux.killSession(sessionName)
+    }
+    // Clear any previous failed run so we can start fresh
+    this.runs.delete(opts.conversationId)
+    this.conversationLocks.delete(opts.conversationId)
+
     // Acquire lock
     this.conversationLocks.add(opts.conversationId)
 
