@@ -1,0 +1,27 @@
+{
+  "name": "@jheckbot/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "generate": "nuxt generate",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "echo 'No e2e tests for web package yet' && exit 0",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'Lint deferred for web package' && exit 0"
+  },
+  "dependencies": {
+    "@jheckbot/shared": "workspace:*",
+    "nuxt": "^4.5.2",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

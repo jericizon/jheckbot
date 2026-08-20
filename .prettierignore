@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.output/
+.nuxt/
+.nitro/
+.cache/
+coverage/
+pnpm-lock.yaml
+docs/
+tasks/
