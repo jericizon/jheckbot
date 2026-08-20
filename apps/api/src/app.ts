@@ -72,7 +72,7 @@ export function createApp(): express.Express {
 
   const tmux = new TmuxManager(env.tmuxBin)
   const devin = new DevinAdapter(env.devinBin, tmux)
-  const agentManager = new AgentManager(devin, tmux, repo, pathValidatorFactory)
+  const agentManager = new AgentManager(devin, tmux, repo, pathValidatorFactory, conversationRepo)
   const agentController = new AgentController(agentManager, eventRepo)
 
   const authMiddleware = createAuthMiddleware(authService)

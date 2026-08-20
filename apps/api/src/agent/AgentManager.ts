@@ -1,6 +1,7 @@
 import { DevinAdapter, DevinAdapterError } from './DevinAdapter.js'
 import { TmuxManager } from './TmuxManager.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
+import { ConversationRepository } from '../repositories/ConversationRepository.js'
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
 import type { ProjectRecord } from '../repositories/ProjectRepository.js'
 import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
@@ -42,6 +43,7 @@ export class AgentManager {
     private tmux: TmuxManager,
     private repo: ProjectRepository,
     private pathValidatorFactory: (roots: AllowedRoot[]) => PathValidator,
+    private conversationRepo?: ConversationRepository,
   ) {}
 
   async start(opts: StartAgentOptions): Promise<AgentRun> {
@@ -104,11 +106,13 @@ export class AgentManager {
 
       run.devinSessionId = sessionInfo.devinSessionId
       run.status = 'running'
+      await this.conversationRepo?.updateAgentStatus(opts.conversationId, 'running')
     } catch (err) {
       run.status = 'failed'
       run.endedAt = new Date().toISOString()
       run.error = err instanceof Error ? err.message : String(err)
       this.conversationLocks.delete(opts.conversationId)
+      await this.conversationRepo?.updateAgentStatus(opts.conversationId, 'idle')
       throw err
     }
 
@@ -124,6 +128,7 @@ export class AgentManager {
     run.status = 'stopped'
     run.endedAt = new Date().toISOString()
     this.conversationLocks.delete(conversationId)
+    await this.conversationRepo?.updateAgentStatus(conversationId, 'idle')
 
     return run
   }

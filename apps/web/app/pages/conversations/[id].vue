@@ -176,10 +176,20 @@ async function load() {
     ])
     conversation.value = conv
     messages.value = msgs
-    agentRunning.value = conv.agent_status === 'running'
     availableModels.value = modelsRes.models
     selectedModel.value = modelsRes.default
-    if (agentRunning.value) connectSSE()
+
+    // Check in-memory agent status (more reliable than DB field)
+    try {
+      const agentStatus = await convApi.agentStatus(id.value)
+      if (agentStatus && (agentStatus.status === 'running' || agentStatus.status === 'starting')) {
+        agentRunning.value = true
+        connectSSE()
+      }
+    } catch {
+      // 404 means no agent run — that's fine
+    }
+
     await nextTick()
     scrollToBottom()
   } catch {

@@ -87,6 +87,13 @@ export class ConversationRepository {
     )
   }
 
+  async updateAgentStatus(id: string, agentStatus: string): Promise<void> {
+    await pool.query(
+      'UPDATE conversations SET agent_status = $1, updated_at = NOW() WHERE id = $2',
+      [agentStatus, id],
+    )
+  }
+
   async search(query: string): Promise<SearchResult[]> {
     const { rows } = await pool.query<SearchResult>(
       `SELECT c.id AS conversation_id, c.project_id, p.name AS project_name,
