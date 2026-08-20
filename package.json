@@ -25,6 +25,6 @@
     "pnpm": ">=11.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": ["esbuild", "bcrypt"]
   }
 }
