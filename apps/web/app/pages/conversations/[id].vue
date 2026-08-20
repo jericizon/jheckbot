@@ -29,7 +29,20 @@
         </div>
       </div>
 
-      <div v-if="messages.length === 0 && liveOutput.length === 0" class="text-center text-gray-500 text-sm mt-8">
+      <!-- Preloader while agent is starting -->
+      <div v-if="agentStarting" class="space-y-1">
+        <div class="text-xs text-gray-500">Devin</div>
+        <div class="rounded-lg p-4 bg-white border border-gray-200 flex items-center gap-3">
+          <div class="flex gap-1">
+            <span class="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 0ms" />
+            <span class="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 150ms" />
+            <span class="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 300ms" />
+          </div>
+          <span class="text-sm text-gray-500">{{ startingText }}</span>
+        </div>
+      </div>
+
+      <div v-if="messages.length === 0 && liveOutput.length === 0 && !agentStarting" class="text-center text-gray-500 text-sm mt-8">
         Send a message to start working with Devin.
       </div>
     </div>
@@ -76,8 +89,37 @@ const messages = ref<Message[]>([])
 const liveOutput = ref<string[]>([])
 const input = ref('')
 const agentRunning = ref(false)
+const agentStarting = ref(false)
+const startingText = ref('Starting Devin...')
 const messagesContainer = ref<HTMLElement | null>(null)
 let eventSource: EventSource | null = null
+let startingTimer: ReturnType<typeof setInterval> | null = null
+
+const startingMessages = [
+  'Starting Devin...',
+  'Booting CLI...',
+  'Loading model...',
+  'Preparing workspace...',
+  'Connecting to project...',
+]
+
+function startStartingAnimation() {
+  agentStarting.value = true
+  let i = 0
+  startingText.value = startingMessages[0]
+  startingTimer = setInterval(() => {
+    i = (i + 1) % startingMessages.length
+    startingText.value = startingMessages[i]
+  }, 2000)
+}
+
+function stopStartingAnimation() {
+  agentStarting.value = false
+  if (startingTimer) {
+    clearInterval(startingTimer)
+    startingTimer = null
+  }
+}
 
 async function load() {
   try {
@@ -100,12 +142,16 @@ function connectSSE() {
   eventSource = sse.connect(id.value, (event) => {
     if (event.type === 'status') {
       const data = JSON.parse(event.data)
-      if (data.status === 'running') agentRunning.value = true
+      if (data.status === 'running') {
+        agentRunning.value = true
+      }
       if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
         agentRunning.value = false
+        stopStartingAnimation()
         eventSource?.close()
       }
     } else if (event.type === 'output') {
+      stopStartingAnimation()
       const data = JSON.parse(event.data)
       liveOutput.value.push(data.content)
       scrollToBottom()
@@ -141,11 +187,13 @@ async function sendMessage() {
     if (conversation.value && !agentRunning.value) {
       agentRunning.value = true
       liveOutput.value = []
+      startStartingAnimation()
       await convApi.startAgent(id.value, conversation.value.project_id, prompt)
       connectSSE()
     }
   } catch {
     agentRunning.value = false
+    stopStartingAnimation()
   }
 }
 
@@ -153,6 +201,7 @@ async function stopAgent() {
   try {
     await convApi.stopAgent(id.value)
     agentRunning.value = false
+    stopStartingAnimation()
     eventSource?.close()
   } catch {
     // ignore
@@ -160,5 +209,8 @@ async function stopAgent() {
 }
 
 onMounted(load)
-onUnmounted(() => eventSource?.close())
+onUnmounted(() => {
+  eventSource?.close()
+  stopStartingAnimation()
+})
 </script>
