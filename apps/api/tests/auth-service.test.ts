@@ -76,8 +76,15 @@ describe('AuthService', () => {
 
   it('seeds a default admin user when none exist', async () => {
     vi.mocked(userRepo.count).mockResolvedValueOnce(0)
-    await service.ensureSeedUser()
+    process.env.ADMIN_USERNAME = 'admin'
+    process.env.ADMIN_PASSWORD = 'admin'
+    vi.resetModules()
+    const { AuthService: FreshAuthService } = await import('../src/services/AuthService.js')
+    const freshService = new FreshAuthService(userRepo)
+    await freshService.ensureSeedUser()
     expect(userRepo.create).toHaveBeenCalledWith('admin', expect.any(String))
+    delete process.env.ADMIN_USERNAME
+    delete process.env.ADMIN_PASSWORD
   })
 
   it('seeds with custom credentials from env', async () => {

@@ -1,4 +1,19 @@
+import { config } from 'dotenv'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { PORTS } from '@jheckbot/shared'
+
+// Load .env from the monorepo root — try several candidate paths
+for (const candidate of [
+  resolve(process.cwd(), '.env'),
+  resolve(process.cwd(), '../.env'),
+  resolve(process.cwd(), '../../.env'),
+]) {
+  if (existsSync(candidate)) {
+    config({ path: candidate })
+    break
+  }
+}
 
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback
