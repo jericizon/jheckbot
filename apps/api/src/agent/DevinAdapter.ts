@@ -15,6 +15,7 @@ export interface StartDevinOptions {
   cwd: string
   prompt: string
   devinSessionId?: string
+  model?: string
   env?: Record<string, string>
 }
 
@@ -51,6 +52,9 @@ export class DevinAdapter {
     // Build the devin command
     // Use -- to pass the prompt, and --resume or --continue if recovering
     let devinCmd = this.devinBin
+    if (opts.model) {
+      devinCmd += ` --model ${opts.model}`
+    }
     if (opts.devinSessionId) {
       devinCmd += ` --resume ${opts.devinSessionId}`
     }

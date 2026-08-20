@@ -43,6 +43,7 @@ export class AgentController {
         projectId: req.body.projectId,
         prompt: req.body.prompt,
         devinSessionId: req.body.devinSessionId,
+        model: req.body.model,
       })
       // Persist status event
       await this.eventRepo.create({

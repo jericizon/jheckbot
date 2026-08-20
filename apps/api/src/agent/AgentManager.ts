@@ -3,6 +3,7 @@ import { TmuxManager } from './TmuxManager.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
 import type { ProjectRecord } from '../repositories/ProjectRepository.js'
+import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 
 export type AgentStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'stopped'
 
@@ -22,6 +23,7 @@ export interface StartAgentOptions {
   projectId: string
   prompt: string
   devinSessionId?: string
+  model?: string
 }
 
 const MAX_CONCURRENT_SESSIONS = 3
@@ -89,6 +91,7 @@ export class AgentManager {
         cwd: pathResult.resolvedPath,
         prompt: opts.prompt,
         devinSessionId: opts.devinSessionId,
+        model: opts.model || DEFAULT_DEVIN_MODEL,
       })
 
       run.devinSessionId = sessionInfo.devinSessionId

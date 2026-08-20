@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { existsSync } from 'node:fs'
 import type { HealthStatus } from '@jheckbot/shared'
+import { DEVIN_MODELS, DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 import { ProjectRepository } from './repositories/ProjectRepository.js'
 import { ConversationRepository } from './repositories/ConversationRepository.js'
 import { MessageRepository } from './repositories/MessageRepository.js'
@@ -100,6 +101,11 @@ export function createApp(): express.Express {
 
   // Search endpoint
   app.get('/api/search', (req, res) => conversationController.search(req, res))
+
+  // Models endpoint — returns curated Devin model list
+  app.get('/api/models', (_req, res) => {
+    res.json({ models: DEVIN_MODELS, default: DEFAULT_DEVIN_MODEL })
+  })
 
   // Project routes (includes nested conversation list/create)
   const projectRouter = createProjectRouter(projectController)

@@ -6,6 +6,19 @@
       <div class="flex-1 min-w-0">
         <h1 class="text-sm font-bold truncate">{{ conversation?.title || 'Conversation' }}</h1>
       </div>
+      <!-- Model selector -->
+      <select
+        v-model="selectedModel"
+        :disabled="agentRunning || agentStarting"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white text-gray-700 focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:opacity-50 max-w-[140px] truncate"
+        title="Devin model"
+      >
+        <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
+          <option v-for="m in group.models" :key="m.id" :value="m.id">
+            {{ m.label }}{{ m.free ? ' (Free)' : '' }}
+          </option>
+        </optgroup>
+      </select>
       <span v-if="agentRunning" class="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
     </header>
 
@@ -88,6 +101,7 @@ const id = computed(() => route.params.id as string)
 
 interface Conversation { id: string; project_id: string; title: string; agent_status: string }
 interface Message { id: string; role: string; content: string; message_type: string }
+interface ModelOption { id: string; label: string; family: string; context: string; pricing: string; free: boolean }
 
 const conversation = ref<Conversation | null>(null)
 const messages = ref<Message[]>([])
@@ -99,6 +113,26 @@ const startingText = ref('Starting Devin...')
 const messagesContainer = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 let eventSource: EventSource | null = null
+
+// Model selection
+const availableModels = ref<ModelOption[]>([])
+const selectedModel = ref('glm-5-2')
+
+const modelGroups = computed(() => {
+  const groups: { label: string; models: ModelOption[] }[] = [
+    { label: 'Free', models: [] },
+    { label: 'Budget', models: [] },
+    { label: 'Mid-range', models: [] },
+    { label: 'Premium', models: [] },
+  ]
+  for (const m of availableModels.value) {
+    if (m.free) groups[0].models.push(m)
+    else if (m.pricing.includes('$0.') || m.pricing.includes('$1.')) groups[1].models.push(m)
+    else if (m.pricing.includes('$2.') || m.pricing.includes('$3.')) groups[2].models.push(m)
+    else groups[3].models.push(m)
+  }
+  return groups.filter((g) => g.models.length > 0)
+})
 
 function autoResize() {
   const el = inputEl.value
@@ -136,13 +170,16 @@ function stopStartingAnimation() {
 
 async function load() {
   try {
-    const [conv, msgs] = await Promise.all([
+    const [conv, msgs, modelsRes] = await Promise.all([
       convApi.get(id.value),
       convApi.messages(id.value),
+      convApi.models(),
     ])
     conversation.value = conv
     messages.value = msgs
     agentRunning.value = conv.agent_status === 'running'
+    availableModels.value = modelsRes.models
+    selectedModel.value = modelsRes.default
     if (agentRunning.value) connectSSE()
     await nextTick()
     scrollToBottom()
@@ -202,7 +239,7 @@ async function sendMessage() {
       agentRunning.value = true
       liveOutput.value = []
       startStartingAnimation()
-      await convApi.startAgent(id.value, conversation.value.project_id, prompt)
+      await convApi.startAgent(id.value, conversation.value.project_id, prompt, selectedModel.value)
       connectSSE()
     }
   } catch {
