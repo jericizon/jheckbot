@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/kill-ports.mjs",
     "dev": "concurrently -n web,api -c blue,green \"pnpm --filter @jheckbot/web dev\" \"pnpm --filter @jheckbot/api dev\"",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
