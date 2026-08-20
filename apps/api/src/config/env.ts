@@ -23,6 +23,8 @@ export const env = {
   agentMaxRuntimeMs: Number(optional('AGENT_MAX_RUNTIME_MS', '3600000')),
   cookieSecure: optional('COOKIE_SECURE', 'false') === 'true',
   cookieSameSite: optional('COOKIE_SAME_SITE', 'lax') as 'lax' | 'strict' | 'none',
+  adminUsername: optional('ADMIN_USERNAME', 'admin'),
+  adminPassword: optional('ADMIN_PASSWORD', 'admin'),
 } as const
 
 export type Env = typeof env

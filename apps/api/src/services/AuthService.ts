@@ -39,9 +39,9 @@ export class AuthService {
   async ensureSeedUser(): Promise<void> {
     const count = await this.userRepo.count()
     if (count > 0) return
-    const hash = await bcrypt.hash('admin', 10)
-    await this.userRepo.create('admin', hash)
-    console.log('Seed user created: admin/admin (change password immediately)')
+    const hash = await bcrypt.hash(env.adminPassword, 10)
+    await this.userRepo.create(env.adminUsername, hash)
+    console.log(`Seed user created: ${env.adminUsername} (change password after first login)`)
   }
 
   generateSessionToken(session: AuthSession): string {

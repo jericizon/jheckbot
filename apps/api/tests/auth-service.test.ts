@@ -80,6 +80,20 @@ describe('AuthService', () => {
     expect(userRepo.create).toHaveBeenCalledWith('admin', expect.any(String))
   })
 
+  it('seeds with custom credentials from env', async () => {
+    vi.mocked(userRepo.count).mockResolvedValueOnce(0)
+    process.env.ADMIN_USERNAME = 'jeric'
+    process.env.ADMIN_PASSWORD = 'password'
+    // Re-import env to pick up new values
+    vi.resetModules()
+    const { AuthService: FreshAuthService } = await import('../src/services/AuthService.js')
+    const freshService = new FreshAuthService(userRepo)
+    await freshService.ensureSeedUser()
+    expect(userRepo.create).toHaveBeenCalledWith('jeric', expect.any(String))
+    delete process.env.ADMIN_USERNAME
+    delete process.env.ADMIN_PASSWORD
+  })
+
   it('does not seed when users already exist', async () => {
     vi.mocked(userRepo.count).mockResolvedValueOnce(1)
     await service.ensureSeedUser()
