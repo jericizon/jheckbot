@@ -55,18 +55,23 @@
     </div>
 
     <!-- Input -->
-    <div class="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-4 py-3 flex items-center gap-2 z-40">
-      <input
+    <div class="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-4 py-3 flex items-end gap-2 z-40">
+      <textarea
         v-model="input"
-        @keydown.enter="sendMessage"
+        @keydown.enter.exact.prevent="sendMessage"
+        @keydown.enter.shift.exact="input += '\n'"
+        @input="autoResize"
         :disabled="agentRunning"
-        placeholder="Message..."
-        class="flex-1 rounded-full border border-gray-300 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-gray-100"
+        placeholder="Message... (Shift+Enter for new line)"
+        rows="1"
+        ref="inputEl"
+        class="flex-1 rounded-2xl border border-gray-300 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 resize-none max-h-32 overflow-y-auto"
+        style="min-height: 40px;"
       />
       <button
         @click="sendMessage"
         :disabled="!input.trim() || agentRunning"
-        class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50"
+        class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 shrink-0"
       >
         &rarr;
       </button>
@@ -92,7 +97,15 @@ const agentRunning = ref(false)
 const agentStarting = ref(false)
 const startingText = ref('Starting Devin...')
 const messagesContainer = ref<HTMLElement | null>(null)
+const inputEl = ref<HTMLTextAreaElement | null>(null)
 let eventSource: EventSource | null = null
+
+function autoResize() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+}
 let startingTimer: ReturnType<typeof setInterval> | null = null
 
 const startingMessages = [
@@ -177,6 +190,7 @@ async function sendMessage() {
     message_type: 'text',
   })
   input.value = ''
+  autoResize()
   scrollToBottom()
 
   try {
