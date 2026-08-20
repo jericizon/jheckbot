@@ -38,7 +38,7 @@
 definePageMeta({ layout: false })
 
 const { login, fetchUser } = useAuth()
-const username = ref('admin')
+const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)

@@ -1,4 +1,5 @@
 import express from 'express'
+import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { existsSync } from 'node:fs'
@@ -34,6 +35,12 @@ export function createApp(): express.Express {
 
   // Security headers
   app.use(helmet({ contentSecurityPolicy: false }))
+
+  // CORS — allow the Nuxt frontend (port 8800) to call the API (port 8801)
+  app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:8800',
+    credentials: true,
+  }))
 
   app.use(express.json())
   app.use(cookieParser())
