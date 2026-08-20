@@ -14,6 +14,13 @@ export default defineNuxtConfig({
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8801',
     },
   },
+  nitro: {
+    routeRules: {
+      '/api/**': {
+        proxy: `${process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8801'}/api/**`,
+      },
+    },
+  },
   app: {
     head: {
       title: 'JheckBot',
