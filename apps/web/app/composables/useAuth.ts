@@ -5,12 +5,10 @@ interface User {
 
 export function useAuth() {
   const user = useState<User | null>('user', () => null)
-  const config = useRuntimeConfig()
-  const baseURL = config.public.apiBase as string
 
   async function login(username: string, password: string): Promise<boolean> {
     try {
-      const res = await $fetch<User>(`${baseURL}/api/auth/login`, {
+      const res = await $fetch<User>('/api/auth/login', {
         method: 'POST',
         body: { username, password },
         credentials: 'include',
@@ -24,7 +22,7 @@ export function useAuth() {
 
   async function logout(): Promise<void> {
     try {
-      await $fetch(`${baseURL}/api/auth/logout`, {
+      await $fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
       })
@@ -37,7 +35,7 @@ export function useAuth() {
 
   async function fetchUser(): Promise<void> {
     try {
-      const res = await $fetch<User>(`${baseURL}/api/auth/me`, {
+      const res = await $fetch<User>('/api/auth/me', {
         credentials: 'include',
       })
       user.value = res

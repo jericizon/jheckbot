@@ -1,13 +1,11 @@
 export function useSSE() {
-  const config = useRuntimeConfig()
-  const baseURL = config.public.apiBase as string
-
   function connect(
     conversationId: string,
     onEvent: (event: { type: string; data: string }) => void,
     onOpen?: () => void,
   ): EventSource {
-    const url = `${baseURL}/api/conversations/${conversationId}/events`
+    // Relative URL — same origin, proxied by Nuxt in dev
+    const url = `/api/conversations/${conversationId}/events`
     const es = new EventSource(url, { withCredentials: true })
 
     es.onopen = () => onOpen?.()
