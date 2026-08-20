@@ -60,6 +60,8 @@ export function useConversations() {
       api.post<Message>(`/api/conversations/${id}/messages`, { role: 'user', content }),
     startAgent: (id: string, projectId: string, prompt: string, model?: string) =>
       api.post(`/api/conversations/${id}/agent/start`, { projectId, prompt, model }),
+    sendAgentPrompt: (id: string, prompt: string) =>
+      api.post(`/api/conversations/${id}/agent/prompt`, { prompt }),
     stopAgent: (id: string) => api.post(`/api/conversations/${id}/agent/stop`),
     agentStatus: (id: string) => api.get(`/api/conversations/${id}/agent`),
     search: (q: string) => api.get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),

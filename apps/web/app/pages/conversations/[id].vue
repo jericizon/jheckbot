@@ -9,7 +9,7 @@
       <!-- Model selector -->
       <select
         v-model="selectedModel"
-        :disabled="agentRunning || agentStarting"
+        :disabled="agentStarting"
         class="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white text-gray-700 focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:opacity-50 max-w-[140px] truncate"
         title="Devin model"
       >
@@ -74,16 +74,15 @@
         @keydown.enter.exact.prevent="sendMessage"
         @keydown.enter.shift.exact="input += '\n'"
         @input="autoResize"
-        :disabled="agentRunning"
         placeholder="Message... (Shift+Enter for new line)"
         rows="1"
         ref="inputEl"
-        class="flex-1 rounded-2xl border border-gray-300 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 resize-none max-h-32 overflow-y-auto"
+        class="flex-1 rounded-2xl border border-gray-300 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none resize-none max-h-32 overflow-y-auto"
         style="min-height: 40px;"
       />
       <button
         @click="sendMessage"
-        :disabled="!input.trim() || agentRunning"
+        :disabled="!input.trim() || agentStarting"
         class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 shrink-0"
       >
         &rarr;
@@ -217,7 +216,7 @@ function scrollToBottom() {
 
 async function sendMessage() {
   const prompt = input.value.trim()
-  if (!prompt || agentRunning.value) return
+  if (!prompt || agentStarting.value) return
 
   // Optimistically add user message
   messages.value.push({
@@ -234,8 +233,11 @@ async function sendMessage() {
     // Persist the message
     await convApi.sendMessage(id.value, prompt)
 
-    // Start the agent if not running
-    if (conversation.value && !agentRunning.value) {
+    if (agentRunning.value) {
+      // Agent is already running — send follow-up prompt to existing tmux session
+      await convApi.sendAgentPrompt(id.value, prompt)
+    } else if (conversation.value) {
+      // No agent running — start a new one
       agentRunning.value = true
       liveOutput.value = []
       startStartingAnimation()

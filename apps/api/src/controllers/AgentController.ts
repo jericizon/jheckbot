@@ -77,6 +77,22 @@ export class AgentController {
     res.json(run)
   }
 
+  /** Send a follow-up prompt to a running agent session. */
+  async sendPrompt(req: Request, res: Response): Promise<void> {
+    const conversationId = validateIdParam(req, res)
+    if (!conversationId) return
+    try {
+      this.agentManager.sendPrompt(conversationId, req.body.prompt)
+      res.status(202).json({ ok: true })
+    } catch (err) {
+      if (err instanceof AgentManagerError) {
+        res.status(err.statusCode).json({ error: err.message })
+        return
+      }
+      throw err
+    }
+  }
+
   /** SSE endpoint for streaming agent output. */
   async streamEvents(req: Request, res: Response): Promise<void> {
     const conversationId = validateIdParam(req, res)

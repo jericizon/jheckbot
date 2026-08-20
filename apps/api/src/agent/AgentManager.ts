@@ -124,6 +124,18 @@ export class AgentManager {
     return this.runs.get(conversationId) ?? null
   }
 
+  /** Send a follow-up prompt to a running agent's tmux session. */
+  sendPrompt(conversationId: string, prompt: string): void {
+    const run = this.runs.get(conversationId)
+    if (!run) {
+      throw new AgentManagerError('No agent run for this conversation', 404)
+    }
+    if (run.status !== 'running' && run.status !== 'starting') {
+      throw new AgentManagerError('Agent is not running', 409)
+    }
+    this.devin.sendPrompt(run.sessionName, prompt)
+  }
+
   getOutput(conversationId: string, startLine?: number): string[] {
     const run = this.runs.get(conversationId)
     if (!run) return []
