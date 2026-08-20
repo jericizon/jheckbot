@@ -2,6 +2,8 @@ import { createApp } from './app.js'
 import { env } from './config/env.js'
 import { runMigrations } from './db/migrate.js'
 import { closePool } from './db/pool.js'
+import { UserRepository } from './repositories/UserRepository.js'
+import { AuthService } from './services/AuthService.js'
 
 async function main() {
   try {
@@ -11,6 +13,10 @@ async function main() {
     console.error('Migration failed:', err)
     process.exit(1)
   }
+
+  // Seed default admin user if none exists
+  const authService = new AuthService(new UserRepository())
+  await authService.ensureSeedUser()
 
   const app = createApp()
   const server = app.listen(env.apiPort, () => {
