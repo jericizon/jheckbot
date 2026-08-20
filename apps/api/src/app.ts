@@ -33,8 +33,12 @@ import { env } from './config/env.js'
 export function createApp(): express.Express {
   const app = express()
 
-  // Security headers
-  app.use(helmet({ contentSecurityPolicy: false }))
+  // Security headers — relax cross-origin policies for API use from frontend
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
+  }))
 
   // CORS — allow the Nuxt frontend (port 8800) to call the API (port 8801)
   app.use(cors({
