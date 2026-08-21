@@ -39,6 +39,33 @@ describe('TmuxManager', () => {
     )
   })
 
+  it('passes environment variables to the new session before its command starts', () => {
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('has-session')) throw new Error('no session')
+      return Buffer.from('')
+    })
+
+    tmux.createSession('test-session', '/tmp', 'echo hello', { DEVIN_FLAG: "a'b" })
+
+    expect(execFileSync).toHaveBeenCalledWith(
+      '/usr/bin/tmux',
+      [
+        'new-session',
+        '-d',
+        '-s',
+        'test-session',
+        '-c',
+        '/tmp',
+        '-e',
+        "DEVIN_FLAG=a'b",
+        '--',
+        'echo hello',
+      ],
+      { stdio: 'pipe' },
+    )
+    expect(execSync).not.toHaveBeenCalled()
+  })
+
   it('kills a session', () => {
     vi.mocked(execFileSync).mockReturnValue(Buffer.from(''))
     tmux.killSession('test-session')
@@ -88,10 +115,15 @@ describe('TmuxManager', () => {
     )
   })
 
-  it('captures output as lines', () => {
+  it('captures the full pane scrollback as lines', () => {
     vi.mocked(execFileSync).mockReturnValue('line 1\nline 2\nline 3\n')
     const output = tmux.captureOutput('test')
     expect(output).toEqual(['line 1', 'line 2', 'line 3'])
+    expect(execFileSync).toHaveBeenCalledWith(
+      '/usr/bin/tmux',
+      ['capture-pane', '-t', 'test', '-p', '-S', '-'],
+      { stdio: 'pipe', encoding: 'utf-8' },
+    )
   })
 
   it('returns empty array when capture fails', () => {

@@ -21,18 +21,20 @@ export interface StartDevinOptions {
 
 /**
  * Adapter for the Devin CLI.
- * Spawns Devin inside a tmux session for persistence and PTY support.
- *
- * Uses interactive mode (not -p) so the process stays alive for
- * streaming output and follow-up prompts.
+ * Keeps Devin-specific command construction here while TmuxManager owns the
+ * persistent PTY boundary.
  */
 export class DevinAdapter {
   private readonly devinBin: string
   private readonly tmux: TmuxManager
 
-  constructor(devinBin: string, tmux: TmuxManager) {
+  constructor(devinBin: string)
+  constructor(devinBin: string, tmux: TmuxManager)
+  constructor(devinBin: string, tmux?: TmuxManager) {
     this.devinBin = devinBin
-    this.tmux = tmux
+    // The one-argument overload keeps existing callers source-compatible while
+    // still using the configured host tmux boundary when no dependency is injected.
+    this.tmux = tmux ?? new TmuxManager(process.env.TMUX_BIN ?? '/usr/bin/tmux')
   }
 
   /** Verify the Devin binary exists and is executable. */
@@ -40,7 +42,7 @@ export class DevinAdapter {
     return existsSync(this.devinBin)
   }
 
-  /** Start a Devin session inside a tmux session. */
+  /** Start an interactive Devin session inside a detached tmux session. */
   start(opts: StartDevinOptions): DevinSessionInfo {
     if (!this.isAvailable()) {
       throw new DevinAdapterError(`Devin binary not found: ${this.devinBin}`)
@@ -49,18 +51,12 @@ export class DevinAdapter {
       throw new DevinAdapterError('tmux is not available')
     }
 
-    // Build the devin command
-    // Use -- to pass the prompt, and --resume or --continue if recovering
-    let devinCmd = this.devinBin
-    if (opts.model) {
-      devinCmd += ` --model ${opts.model}`
-    }
-    if (opts.devinSessionId) {
-      devinCmd += ` --resume ${opts.devinSessionId}`
-    }
-    devinCmd += ` -- ${this.escapePrompt(opts.prompt)}`
-
-    this.tmux.createSession(opts.sessionName, opts.cwd, devinCmd, opts.env)
+    this.tmux.createSession(
+      opts.sessionName,
+      opts.cwd,
+      this.buildCommand(opts),
+      opts.env,
+    )
 
     return {
       sessionName: opts.sessionName,
@@ -77,12 +73,10 @@ export class DevinAdapter {
     this.tmux.sendKeys(sessionName, prompt)
   }
 
-  /** Gracefully stop a Devin session (Ctrl-C then kill tmux). */
+  /** Gracefully interrupt a Devin session before removing its tmux wrapper. */
   stop(sessionName: string): void {
     if (!this.tmux.sessionExists(sessionName)) return
-    // Send Ctrl-C for graceful shutdown
     this.tmux.sendInterrupt(sessionName)
-    // Give it a moment, then kill the tmux session
     setTimeout(() => {
       this.tmux.killSession(sessionName)
     }, 2000)
@@ -93,8 +87,8 @@ export class DevinAdapter {
     this.tmux.killSession(sessionName)
   }
 
-  /** Capture current output from the session. */
-  captureOutput(sessionName: string, startLine?: number): string[] {
+  /** Capture the full tmux scrollback so reconnects can rebuild output. */
+  captureOutput(sessionName: string, startLine: number | '-' = '-'): string[] {
     return this.tmux.captureOutput(sessionName, startLine)
   }
 
@@ -103,9 +97,18 @@ export class DevinAdapter {
     return this.tmux.sessionExists(sessionName)
   }
 
-  /** Extract Devin session ID from output if present. */
+  /** Extract a Devin session ID from captured output when the CLI prints one. */
+  getDevinSessionId(sessionName: string): string | undefined {
+    return this.extractSessionId(this.captureOutput(sessionName))
+  }
+
+  /** Tmux does not retain an exit code after a pane disappears. */
+  getExitCode(_sessionName: string): number | null {
+    return null
+  }
+
+  /** Extract a session ID from output if the interactive CLI prints one. */
   extractSessionId(output: string[]): string | undefined {
-    // Devin CLI may print session IDs in output; look for patterns
     for (const line of output) {
       const match = line.match(/session[:\s]+([a-f0-9-]{8,})/i)
       if (match) return match[1]
@@ -113,9 +116,16 @@ export class DevinAdapter {
     return undefined
   }
 
-  private escapePrompt(prompt: string): string {
-    // Escape single quotes and shell special chars for tmux send-keys
-    return prompt.replace(/'/g, "'\\''")
+  private buildCommand(opts: StartDevinOptions): string {
+    const args = [this.devinBin]
+    if (opts.model) args.push('--model', opts.model)
+    if (opts.devinSessionId) args.push('--resume', opts.devinSessionId)
+    args.push('--', opts.prompt)
+    return args.map((arg) => this.escapeShellArg(arg)).join(' ')
+  }
+
+  private escapeShellArg(value: string): string {
+    return `'${value.replace(/'/g, "'\\''")}'`
   }
 }
 

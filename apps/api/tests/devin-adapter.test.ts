@@ -1,106 +1,153 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
 import { DevinAdapter } from '../src/agent/DevinAdapter.js'
-import { TmuxManager } from '../src/agent/TmuxManager.js'
+import type { TmuxManager } from '../src/agent/TmuxManager.js'
 
-vi.mock('node:fs')
-vi.mock('node:child_process')
+vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
+vi.mock('node:child_process', () => ({
+  spawn: vi.fn(() => {
+    throw new Error('direct spawn should not be used')
+  }),
+  execSync: vi.fn(),
+}))
+
+function createTmuxMock() {
+  return {
+    isAvailable: vi.fn().mockReturnValue(true),
+    createSession: vi.fn(),
+    sessionExists: vi.fn().mockReturnValue(true),
+    sendKeys: vi.fn(),
+    sendInterrupt: vi.fn(),
+    killSession: vi.fn().mockReturnValue(true),
+    captureOutput: vi.fn().mockReturnValue([]),
+  } as unknown as TmuxManager
+}
 
 describe('DevinAdapter', () => {
-  let tmux: TmuxManager
   let adapter: DevinAdapter
+  let tmux: TmuxManager
 
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(existsSync).mockReturnValue(true)
-    tmux = new TmuxManager('/usr/bin/tmux')
+    tmux = createTmuxMock()
     adapter = new DevinAdapter('/home/jeric/.local/bin/devin', tmux)
   })
 
   it('reports available when binary exists', () => {
-    vi.mocked(existsSync).mockReturnValue(true)
     expect(adapter.isAvailable()).toBe(true)
   })
 
-  it('reports unavailable when binary is missing', () => {
+  it('reports unavailable when the Devin binary is missing', () => {
     vi.mocked(existsSync).mockReturnValue(false)
     expect(adapter.isAvailable()).toBe(false)
   })
 
-  it('starts a session with the correct command', () => {
-    const createSession = vi.spyOn(tmux, 'createSession').mockImplementation(() => {})
+  it('starts an interactive Devin session in the validated project directory', () => {
+    const cwd = '/home/jeric/Workspace/clients/test'
+    const prompt = 'Fix the failing tests; do not delete files'
+
     const info = adapter.start({
       sessionName: 'jheckbot-test-1',
-      cwd: '/home/jeric/Workspace/clients/test',
-      prompt: 'Fix the failing tests',
+      cwd,
+      prompt,
+      model: 'glm-5-2',
+      env: { DEVIN_TEST_FLAG: 'enabled' },
     })
-    expect(createSession).toHaveBeenCalledWith(
+
+    expect(tmux.createSession).toHaveBeenCalledWith(
       'jheckbot-test-1',
-      '/home/jeric/Workspace/clients/test',
-      expect.stringContaining('devin'),
-      undefined,
+      cwd,
+      expect.any(String),
+      { DEVIN_TEST_FLAG: 'enabled' },
     )
+    const command = vi.mocked(tmux.createSession).mock.calls[0][2]
+    expect(command).toContain("'/home/jeric/.local/bin/devin'")
+    expect(command).toContain("'--model' 'glm-5-2'")
+    expect(command).toContain("'--' 'Fix the failing tests; do not delete files'")
+    expect(command).not.toContain('-p')
     expect(info.status).toBe('starting')
     expect(info.sessionName).toBe('jheckbot-test-1')
   })
 
-  it('includes --resume when devinSessionId is provided', () => {
-    const createSession = vi.spyOn(tmux, 'createSession').mockImplementation(() => {})
+  it('includes a safely escaped resume session ID', () => {
     adapter.start({
       sessionName: 'jheckbot-test-1',
-      cwd: '/tmp',
+      cwd: '/home/jeric/Workspace/clients/test',
       prompt: 'Continue work',
-      devinSessionId: 'abc12345',
+      devinSessionId: "session-id'; touch /tmp/should-not-run",
     })
-    expect(createSession).toHaveBeenCalledWith(
-      'jheckbot-test-1',
-      '/tmp',
-      expect.stringContaining('--resume abc12345'),
-      undefined,
+
+    const command = vi.mocked(tmux.createSession).mock.calls[0][2]
+    expect(command).toContain("'--resume' 'session-id'\\''; touch /tmp/should-not-run'")
+  })
+
+  it('fails closed when Devin or tmux is unavailable', () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    expect(() => adapter.start({ sessionName: 'test', cwd: '/tmp', prompt: 'hello' })).toThrow(
+      'Devin binary not found',
+    )
+
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(tmux.isAvailable).mockReturnValue(false)
+    expect(() => adapter.start({ sessionName: 'test', cwd: '/tmp', prompt: 'hello' })).toThrow(
+      'tmux is not available',
     )
   })
 
-  it('throws if Devin binary is not available', () => {
-    vi.mocked(existsSync).mockReturnValue(false)
-    expect(() =>
-      adapter.start({ sessionName: 'test', cwd: '/tmp', prompt: 'hello' }),
-    ).toThrow('Devin binary not found')
+  it('delegates scrollback output capture to tmux', () => {
+    vi.mocked(tmux.captureOutput).mockReturnValue(['line 1', 'line 2'])
+
+    expect(adapter.captureOutput('test-session')).toEqual(['line 1', 'line 2'])
+    expect(tmux.captureOutput).toHaveBeenCalledWith('test-session', '-')
   })
 
-  it('sends a follow-up prompt via sendKeys', () => {
-    const sendKeys = vi.spyOn(tmux, 'sendKeys').mockImplementation(() => {})
-    const sessionExists = vi.spyOn(tmux, 'sessionExists').mockReturnValue(true)
+  it('delegates liveness checks to tmux', () => {
+    vi.mocked(tmux.sessionExists).mockReturnValue(true)
+    expect(adapter.isRunning('test-session')).toBe(true)
+    expect(tmux.sessionExists).toHaveBeenCalledWith('test-session')
+
+    vi.mocked(tmux.sessionExists).mockReturnValue(false)
+    expect(adapter.isRunning('test-session')).toBe(false)
+  })
+
+  it('delegates graceful stop and force-kill to tmux', () => {
+    vi.useFakeTimers()
+    try {
+      adapter.stop('test-session')
+      expect(tmux.sessionExists).toHaveBeenCalledWith('test-session')
+      expect(tmux.sendInterrupt).toHaveBeenCalledWith('test-session')
+
+      vi.advanceTimersByTime(2000)
+      expect(tmux.killSession).toHaveBeenCalledWith('test-session')
+
+      adapter.forceKill('test-session')
+      expect(tmux.killSession).toHaveBeenCalledWith('test-session')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not stop a missing tmux session', () => {
+    vi.mocked(tmux.sessionExists).mockReturnValue(false)
+
+    adapter.stop('missing-session')
+
+    expect(tmux.sendInterrupt).not.toHaveBeenCalled()
+    expect(tmux.killSession).not.toHaveBeenCalled()
+  })
+
+  it('sends a follow-up prompt through tmux', () => {
     adapter.sendPrompt('test-session', 'Follow up prompt')
-    expect(sendKeys).toHaveBeenCalledWith('test-session', 'Follow up prompt')
+
+    expect(tmux.sendKeys).toHaveBeenCalledWith('test-session', 'Follow up prompt')
   })
 
-  it('throws when sending prompt to non-existent session', () => {
-    vi.spyOn(tmux, 'sessionExists').mockReturnValue(false)
-    expect(() => adapter.sendPrompt('nonexistent', 'hello')).toThrow('Session does not exist')
-  })
+  it('throws if a follow-up session does not exist', () => {
+    vi.mocked(tmux.sessionExists).mockReturnValue(false)
 
-  it('sends interrupt then kills on stop', () => {
-    const sendInterrupt = vi.spyOn(tmux, 'sendInterrupt').mockImplementation(() => {})
-    const killSession = vi.spyOn(tmux, 'killSession').mockImplementation(() => {})
-    vi.spyOn(tmux, 'sessionExists').mockReturnValue(true)
-    adapter.stop('test-session')
-    expect(sendInterrupt).toHaveBeenCalledWith('test-session')
-  })
-
-  it('force kills a session', () => {
-    const killSession = vi.spyOn(tmux, 'killSession').mockImplementation(() => {})
-    adapter.forceKill('test-session')
-    expect(killSession).toHaveBeenCalledWith('test-session')
-  })
-
-  it('extracts session ID from output', () => {
-    const output = ['Some text', 'session: abc12345-6789', 'more text']
-    const id = adapter.extractSessionId(output)
-    expect(id).toBe('abc12345-6789')
-  })
-
-  it('returns undefined when no session ID in output', () => {
-    const output = ['no session id here', 'just text']
-    expect(adapter.extractSessionId(output)).toBeUndefined()
+    expect(() => adapter.sendPrompt('missing-session', 'hello')).toThrow(
+      'Session does not exist',
+    )
   })
 })

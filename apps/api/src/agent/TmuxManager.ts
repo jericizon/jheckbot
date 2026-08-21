@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 
 export interface TmuxSession {
@@ -30,26 +30,22 @@ export class TmuxManager {
       throw new TmuxError(`Session already exists: ${name}`)
     }
 
-    const envArgs = Object.entries(env ?? {})
-      .map(([k, v]) => `set-environment -t '${name}' ${k}='${v.replace(/'/g, "'\\''")}'`)
-      .join(' && ')
-
-    // Create session with the command
     const createArgs = [
       'new-session',
       '-d',                    // detached
       '-s', name,
       '-c', cwd,
-      '--',                    // pass command to shell
-      command,
     ]
 
-    execFileSync(this.tmuxBin, createArgs, { stdio: 'pipe' })
-
-    // Set environment variables after creation
-    if (envArgs) {
-      execSync(`${this.tmuxBin} ${envArgs}`, { stdio: 'pipe' })
+    for (const [key, value] of Object.entries(env ?? {})) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        throw new TmuxError(`Invalid environment variable name: ${key}`)
+      }
+      createArgs.push('-e', `${key}=${value}`)
     }
+
+    createArgs.push('--', command)
+    execFileSync(this.tmuxBin, createArgs, { stdio: 'pipe' })
   }
 
   /** Kill a tmux session by name. */
@@ -95,12 +91,9 @@ export class TmuxManager {
     )
   }
 
-  /** Capture recent pane output. Returns lines of text. */
-  captureOutput(name: string, startLine?: number): string[] {
-    const args = ['capture-pane', '-t', name, '-p']
-    if (startLine !== undefined) {
-      args.push('-S', String(startLine))
-    }
+  /** Capture pane output from the beginning of scrollback. Returns text lines. */
+  captureOutput(name: string, startLine: number | '-' = '-'): string[] {
+    const args = ['capture-pane', '-t', name, '-p', '-S', String(startLine)]
     try {
       const output = execFileSync(this.tmuxBin, args, {
         stdio: 'pipe',
