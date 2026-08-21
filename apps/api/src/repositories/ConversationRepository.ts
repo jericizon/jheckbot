@@ -143,6 +143,23 @@ export class ConversationRepository {
     return Number(rows[0].count)
   }
 
+  async findActive(executor: DbExecutor = pool): Promise<ConversationRecord[]> {
+    const { rows } = await executor.query<ConversationRecord>(
+      `SELECT * FROM conversations
+       WHERE agent_status IN ('starting', 'running', 'stopping')
+       ORDER BY updated_at ASC`,
+    )
+    return rows
+  }
+
+  async findActiveAgentConversations(executor: DbExecutor = pool): Promise<ConversationRecord[]> {
+    return this.findActive(executor)
+  }
+
+  async findActiveConversations(executor: DbExecutor = pool): Promise<ConversationRecord[]> {
+    return this.findActive(executor)
+  }
+
   async search(query: string, executor: DbExecutor = pool): Promise<SearchResult[]> {
     const { rows } = await executor.query<SearchResult>(
       `SELECT c.id AS conversation_id, c.project_id, p.name AS project_name,

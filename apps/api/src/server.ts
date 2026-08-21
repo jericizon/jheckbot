@@ -4,6 +4,7 @@ import { runMigrations } from './db/migrate.js'
 import { closePool } from './db/pool.js'
 import { UserRepository } from './repositories/UserRepository.js'
 import { AuthService } from './services/AuthService.js'
+import type { AgentManager } from './agent/AgentManager.js'
 
 async function main() {
   try {
@@ -19,6 +20,15 @@ async function main() {
   await authService.ensureSeedUser()
 
   const app = createApp()
+  try {
+    await (app.locals.agentManager as AgentManager).recoverSessions()
+    console.log('Agent session recovery complete')
+  } catch (err) {
+    console.error('Agent session recovery failed:', err)
+    await closePool()
+    return
+  }
+
   const server = app.listen(env.apiPort, () => {
     console.log(`JheckBot API listening on http://localhost:${env.apiPort}`)
   })

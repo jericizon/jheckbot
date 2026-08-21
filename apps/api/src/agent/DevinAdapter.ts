@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { TmuxManager } from './TmuxManager.js'
+import { TmuxManager, type TmuxSession } from './TmuxManager.js'
 
 export interface DevinSessionInfo {
   sessionName: string
@@ -95,6 +95,11 @@ export class DevinAdapter {
   /** Check if a session is still alive. */
   isRunning(sessionName: string): boolean {
     return this.tmux.sessionExists(sessionName)
+  }
+
+  /** List host sessions for manager startup reconciliation. */
+  listSessions(): TmuxSession[] {
+    return this.tmux.listSessions()
   }
 
   /** Extract a Devin session ID from captured output when the CLI prints one. */

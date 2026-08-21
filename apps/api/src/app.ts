@@ -72,7 +72,17 @@ export function createApp(): express.Express {
 
   const tmux = new TmuxManager(env.tmuxBin)
   const devin = new DevinAdapter(env.devinBin, tmux)
-  const agentManager = new AgentManager(devin, tmux, repo, pathValidatorFactory, conversationRepo)
+  const agentManager = new AgentManager(
+    devin,
+    tmux,
+    repo,
+    pathValidatorFactory,
+    conversationRepo,
+    messageRepo,
+    eventRepo,
+  )
+  // The server performs startup recovery before it begins listening.
+  app.locals.agentManager = agentManager
   const agentController = new AgentController(agentManager, eventRepo)
 
   const authMiddleware = createAuthMiddleware(authService)
