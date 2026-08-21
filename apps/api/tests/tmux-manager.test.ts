@@ -39,13 +39,15 @@ describe('TmuxManager', () => {
     )
   })
 
-  it('passes environment variables to the new session before its command starts', () => {
+  it('shell-quotes environment values before the session command starts', () => {
     vi.mocked(execFileSync).mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('has-session')) throw new Error('no session')
       return Buffer.from('')
     })
 
-    tmux.createSession('test-session', '/tmp', 'echo hello', { DEVIN_FLAG: "a'b" })
+    const value = `literal value "double" 'single' \`backtick\` $HOME; echo should-not-run`
+    const quotedValue = `'${value.replace(/'/g, "'\\''")}'`
+    tmux.createSession('test-session', '/tmp', 'echo hello', { DEVIN_FLAG: value })
 
     expect(execFileSync).toHaveBeenCalledWith(
       '/usr/bin/tmux',
@@ -56,10 +58,8 @@ describe('TmuxManager', () => {
         'test-session',
         '-c',
         '/tmp',
-        '-e',
-        "DEVIN_FLAG=a'b",
         '--',
-        'echo hello',
+        `DEVIN_FLAG=${quotedValue} echo hello`,
       ],
       { stdio: 'pipe' },
     )

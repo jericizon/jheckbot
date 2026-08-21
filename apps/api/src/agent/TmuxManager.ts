@@ -37,14 +37,14 @@ export class TmuxManager {
       '-c', cwd,
     ]
 
-    for (const [key, value] of Object.entries(env ?? {})) {
+    const environmentAssignments = Object.entries(env ?? {}).map(([key, value]) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
         throw new TmuxError(`Invalid environment variable name: ${key}`)
       }
-      createArgs.push('-e', `${key}=${value}`)
-    }
+      return `${key}=${this.escapeShellArg(value)}`
+    })
 
-    createArgs.push('--', command)
+    createArgs.push('--', [...environmentAssignments, command].join(' '))
     execFileSync(this.tmuxBin, createArgs, { stdio: 'pipe' })
   }
 
@@ -136,6 +136,10 @@ export class TmuxManager {
     const sessions = this.listSessions()
     const known = new Set(knownNames)
     return sessions.filter((s) => s.name.startsWith('jheckbot-') && !known.has(s.name))
+  }
+
+  private escapeShellArg(value: string): string {
+    return `'${value.replace(/'/g, "'\\''")}'`
   }
 }
 

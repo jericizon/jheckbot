@@ -3,8 +3,11 @@ import { existsSync } from 'node:fs'
 import { DevinAdapter } from '../src/agent/DevinAdapter.js'
 import type { TmuxManager } from '../src/agent/TmuxManager.js'
 
+const mockExecFileSync = vi.hoisted(() => vi.fn())
+
 vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
 vi.mock('node:child_process', () => ({
+  execFileSync: mockExecFileSync,
   spawn: vi.fn(() => {
     throw new Error('direct spawn should not be used')
   }),
@@ -29,6 +32,7 @@ describe('DevinAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockExecFileSync.mockReset()
     vi.mocked(existsSync).mockReturnValue(true)
     tmux = createTmuxMock()
     adapter = new DevinAdapter('/home/jeric/.local/bin/devin', tmux)
@@ -41,6 +45,22 @@ describe('DevinAdapter', () => {
   it('reports unavailable when the Devin binary is missing', () => {
     vi.mocked(existsSync).mockReturnValue(false)
     expect(adapter.isAvailable()).toBe(false)
+  })
+
+  it('supports existing one-argument construction through the tmux fallback', () => {
+    mockExecFileSync.mockImplementation((_command: string, args: string[]) => {
+      if (args.includes('has-session')) throw new Error('no session')
+      return Buffer.from('')
+    })
+    const legacyAdapter = new DevinAdapter('/home/jeric/.local/bin/devin')
+
+    legacyAdapter.start({ sessionName: 'legacy-session', cwd: '/tmp', prompt: 'hello' })
+
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(['new-session', '-s', 'legacy-session', '-c', '/tmp']),
+      { stdio: 'pipe' },
+    )
   })
 
   it('starts an interactive Devin session in the validated project directory', () => {
@@ -79,6 +99,7 @@ describe('DevinAdapter', () => {
     })
 
     const command = vi.mocked(tmux.createSession).mock.calls[0][2]
+    expect(command).toContain("'--resume'")
     expect(command).toContain("'--resume' 'session-id'\\''; touch /tmp/should-not-run'")
   })
 
@@ -109,6 +130,20 @@ describe('DevinAdapter', () => {
 
     vi.mocked(tmux.sessionExists).mockReturnValue(false)
     expect(adapter.isRunning('test-session')).toBe(false)
+  })
+
+  it('extracts a printed Devin session ID from tmux output', () => {
+    vi.mocked(tmux.captureOutput).mockReturnValue([
+      'working on the project',
+      'session: abc12345-6789',
+    ])
+
+    expect(adapter.getDevinSessionId('test-session')).toBe('abc12345-6789')
+    expect(tmux.captureOutput).toHaveBeenCalledWith('test-session', '-')
+  })
+
+  it('reports no exit code when tmux no longer has a session', () => {
+    expect(adapter.getExitCode('test-session')).toBeNull()
   })
 
   it('delegates graceful stop and force-kill to tmux', () => {

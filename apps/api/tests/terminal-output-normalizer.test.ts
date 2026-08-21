@@ -61,4 +61,13 @@ describe('TerminalOutputNormalizer', () => {
     expect(normalizer.delta(previous, current)).toEqual(['Running pnpm test...'])
     expect(normalizer.delta(current, current)).toEqual([])
   })
+
+  it('deduplicates a repeated normalized snapshot while retaining new content', () => {
+    const normalizer = new TerminalOutputNormalizer()
+    const previous = ['Inspecting package.json...', 'Running pnpm test...']
+    const repeatedWithNewContent = [...previous, ...previous, 'All tests passed']
+
+    expect(normalizer.delta(previous, repeatedWithNewContent)).toEqual(['All tests passed'])
+    expect(normalizer.delta(previous, [...previous, ...previous])).toEqual([])
+  })
 })

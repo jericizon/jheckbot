@@ -22,7 +22,19 @@ export class TerminalOutputNormalizer {
       commonPrefixLength += 1
     }
 
-    return currentNormalized.slice(commonPrefixLength)
+    let deltaStart = commonPrefixLength
+    while (
+      previousNormalized.length > 0 &&
+      deltaStart + previousNormalized.length <= currentNormalized.length &&
+      TerminalOutputNormalizer.sameSnapshot(
+        previousNormalized,
+        currentNormalized.slice(deltaStart, deltaStart + previousNormalized.length),
+      )
+    ) {
+      deltaStart += previousNormalized.length
+    }
+
+    return currentNormalized.slice(deltaStart)
   }
 
   normalize(lines: string[]): string[] {
@@ -31,6 +43,10 @@ export class TerminalOutputNormalizer {
 
   delta(previous: string[], current: string[]): string[] {
     return TerminalOutputNormalizer.delta(previous, current)
+  }
+
+  private static sameSnapshot(left: string[], right: string[]): boolean {
+    return left.length === right.length && left.every((line, index) => line === right[index])
   }
 
   private static normalizeLine(line: string): string[] {
