@@ -14,9 +14,11 @@ export interface AgentRun {
   conversationId: string
   projectSlug: string
   sessionName: string
+  cwd: string
   status: AgentStatus
   devinSessionId?: string
   userMessageId?: string
+  model?: string
   startedAt: string
   endedAt?: string
   error?: string
@@ -220,9 +222,11 @@ export class AgentManager {
       conversationId: options.conversationId,
       projectSlug: options.projectSlug,
       sessionName,
+      cwd: options.cwd,
       status: 'starting',
       devinSessionId: sessionInfo?.devinSessionId,
       userMessageId: options.userMessageId,
+      model: options.model || DEFAULT_DEVIN_MODEL,
       startedAt: sessionInfo?.startedAt || startedAt,
       outputBuffer: '',
       normalizedSnapshot: [],
@@ -493,6 +497,7 @@ export class AgentManager {
           conversationId: conversation.id,
           projectSlug,
           sessionName: session.name,
+          cwd: project?.path ?? '',
           status: 'running',
           devinSessionId: conversation.agent_session_id ?? undefined,
           startedAt: this.sessionStartedAt(session, conversation),
@@ -511,6 +516,7 @@ export class AgentManager {
         conversationId: conversation.id,
         projectSlug,
         sessionName: session.name,
+        cwd: project?.path ?? '',
         status: conversation.agent_status === 'stopping' ? 'stopping' : 'running',
         devinSessionId: conversation.agent_session_id ?? undefined,
         startedAt: this.sessionStartedAt(session, conversation),
@@ -744,6 +750,7 @@ export class AgentManager {
               role: 'assistant',
               content,
               messageType: 'output',
+              model: state.run.model,
             })
             await this.conversationRepo?.touchLastMessage(state.run.conversationId)
           } catch {
@@ -878,7 +885,7 @@ export class AgentManager {
 
   private captureSessionIdWithoutWaiting(state: ManagedAgentRun): void {
     if (state.run.devinSessionId || state.sessionIdPersisted) return
-    const sessionId = this.readSessionId(state.run.sessionName)
+    const sessionId = this.readSessionId(state.run.sessionName) ?? this.discoverSessionId(state)
     if (!sessionId) return
     state.run.devinSessionId = sessionId
     if (!this.conversationRepo?.updateAgentSessionId) return
@@ -896,12 +903,41 @@ export class AgentManager {
   private async persistSessionId(state: ManagedAgentRun): Promise<void> {
     if (state.sessionIdPersisted) return
     const sessionId = state.run.devinSessionId ?? this.readSessionId(state.run.sessionName)
-    if (!sessionId) return
-    state.run.devinSessionId = sessionId
-    if (!this.conversationRepo?.updateAgentSessionId) return
+    if (sessionId) {
+      state.run.devinSessionId = sessionId
+      if (this.conversationRepo?.updateAgentSessionId) {
+        await this.conversationRepo.updateAgentSessionId(state.run.conversationId, sessionId)
+        state.sessionIdPersisted = true
+      }
+      return
+    }
 
-    await this.conversationRepo.updateAgentSessionId(state.run.conversationId, sessionId)
-    state.sessionIdPersisted = true
+    // --print mode does not print the session ID to stdout, so terminal
+    // scraping fails. Fall back to `devin list --format json` to discover
+    // the session ID from the project's working directory.
+    const discovered = this.discoverSessionId(state)
+    if (discovered) {
+      state.run.devinSessionId = discovered
+      if (this.conversationRepo?.updateAgentSessionId) {
+        await this.conversationRepo.updateAgentSessionId(state.run.conversationId, discovered)
+        state.sessionIdPersisted = true
+      }
+    }
+  }
+
+  /**
+   * Discover a Devin session ID via `devin list --format json` when the
+   * terminal output did not contain a parseable session ID.
+   */
+  private discoverSessionId(state: ManagedAgentRun): string | undefined {
+    if (!state.run.cwd) return undefined
+    const startedAtMs = Date.parse(state.run.startedAt)
+    const since = Number.isNaN(startedAtMs) ? undefined : startedAtMs
+    try {
+      return this.devin.getLatestSessionId(state.run.cwd, since)
+    } catch {
+      return undefined
+    }
   }
 
   private readSessionId(sessionName: string): string | undefined {

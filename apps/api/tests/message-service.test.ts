@@ -37,6 +37,7 @@ describe('MessageService', () => {
       role: 'user',
       content: 'Fix the tests',
       message_type: 'text',
+      model: null,
       created_at: new Date().toISOString(),
     }
 

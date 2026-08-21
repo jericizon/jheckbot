@@ -18,6 +18,10 @@ export function useSSE() {
       onEvent({ type: 'output', data: (e as MessageEvent).data })
     })
 
+    es.addEventListener('log', (e) => {
+      onEvent({ type: 'log', data: (e as MessageEvent).data })
+    })
+
     es.onerror = () => {
       // Browser will auto-reconnect
     }

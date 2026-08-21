@@ -64,6 +64,7 @@ describe('AgentManager', () => {
         role: 'assistant',
         content: 'output',
         message_type: 'output',
+        model: null,
         created_at: new Date().toISOString(),
       }),
     } as unknown as MessageRepository
@@ -91,6 +92,7 @@ describe('AgentManager', () => {
     // genuinely running. Tests that simulate the process dying override this.
     vi.spyOn(devin, 'isRunning').mockReturnValue(true)
     vi.spyOn(devin, 'getDevinSessionId').mockReturnValue(undefined)
+    vi.spyOn(devin, 'getLatestSessionId').mockReturnValue(undefined)
     vi.spyOn(devin, 'getExitCode').mockReturnValue(null)
     vi.spyOn(devin, 'captureOutput').mockReturnValue([])
     vi.spyOn(devin, 'listSessions').mockReturnValue([])
@@ -181,6 +183,22 @@ describe('AgentManager', () => {
     expect(run?.devinSessionId).toBe('devin-session-xyz')
     expect(manager.isConversationActive('conv-1')).toBe(false)
     expect(conversationRepo.updateAgentSessionId).toHaveBeenCalledWith('conv-1', 'devin-session-xyz')
+  })
+
+  it('discovers session ID via devin list when terminal scraping fails', async () => {
+    await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'Q1' })
+    expect(manager.isConversationActive('conv-1')).toBe(true)
+
+    // Terminal scraping returns nothing (as in --print mode)
+    vi.mocked(devin.isRunning).mockReturnValue(false)
+    vi.mocked(devin.getDevinSessionId).mockReturnValue(undefined)
+    vi.mocked(devin.getLatestSessionId).mockReturnValue('healthy-dollar')
+    vi.mocked(devin.getExitCode).mockReturnValue(0)
+    const run = manager.syncRunState('conv-1')
+
+    expect(run?.status).toBe('completed')
+    expect(run?.devinSessionId).toBe('healthy-dollar')
+    expect(conversationRepo.updateAgentSessionId).toHaveBeenCalledWith('conv-1', 'healthy-dollar')
   })
 
   it('syncRunState marks a run as failed on non-zero exit code', async () => {
@@ -348,6 +366,7 @@ describe('AgentManager', () => {
         role: 'assistant',
         content: 'Inspecting package.json...',
         messageType: 'output',
+        model: 'glm-5-2',
       })
       expect(eventRepo.create).toHaveBeenCalledWith(expect.objectContaining({
         conversationId: 'conv-1',

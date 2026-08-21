@@ -42,7 +42,7 @@ describe('ConversationController.createMessage (atomic path)', () => {
 
   it('returns 202 with { message, run } on a successful atomic send', async () => {
     vi.mocked(promptExecutionService.send).mockResolvedValue({
-      message: { id: 'msg-1', conversation_id: 'conv-1', role: 'user', content: 'Fix tests', message_type: 'prompt', created_at: new Date().toISOString() },
+      message: { id: 'msg-1', conversation_id: 'conv-1', role: 'user', content: 'Fix tests', message_type: 'prompt', model: null, created_at: new Date().toISOString() },
       run: { conversationId: 'conv-1', projectSlug: 'test', sessionName: 'jheckbot-test-conv-1', status: 'running', startedAt: new Date().toISOString(), outputBuffer: '', normalizedSnapshot: [] },
     })
 

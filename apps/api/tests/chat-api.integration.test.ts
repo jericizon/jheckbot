@@ -62,6 +62,7 @@ describe('Chat API integration', () => {
         role: 'user',
         content: 'Fix tests',
         message_type: 'prompt',
+        model: null,
         created_at: new Date().toISOString(),
       },
       run: {
@@ -146,8 +147,8 @@ describe('Chat API integration', () => {
 
   it('returns persisted messages from GET /messages', async () => {
     const messages = [
-      { id: 'msg-1', conversation_id: 'conv-1', role: 'user', content: 'Hello', message_type: 'prompt', created_at: new Date().toISOString() },
-      { id: 'msg-2', conversation_id: 'conv-1', role: 'assistant', content: 'Hi there', message_type: 'output', created_at: new Date().toISOString() },
+      { id: 'msg-1', conversation_id: 'conv-1', role: 'user', content: 'Hello', message_type: 'prompt', model: null, created_at: new Date().toISOString() },
+      { id: 'msg-2', conversation_id: 'conv-1', role: 'assistant', content: 'Hi there', message_type: 'output', model: 'glm-5-2', created_at: new Date().toISOString() },
     ]
     vi.mocked(conversationController['messageService'].listByConversation).mockResolvedValue(messages)
 
@@ -174,7 +175,7 @@ describe('Chat API integration', () => {
 
   it('rejects client-supplied role — only content and model are passed to the service', async () => {
     vi.mocked(promptExecutionService.send).mockResolvedValue({
-      message: { id: 'msg-1', conversation_id: 'conv-1', role: 'user', content: 'test', message_type: 'prompt', created_at: new Date().toISOString() },
+      message: { id: 'msg-1', conversation_id: 'conv-1', role: 'user', content: 'test', message_type: 'prompt', model: null, created_at: new Date().toISOString() },
       run: { conversationId: 'conv-1', projectSlug: 'test', sessionName: 's', status: 'running', startedAt: '', outputBuffer: '', normalizedSnapshot: [] },
     })
 

@@ -72,6 +72,7 @@ describe('PromptExecutionService', () => {
       role: 'user',
       content: 'Fix the tests',
       message_type: 'prompt',
+      model: null,
       created_at: new Date().toISOString(),
     }
 
@@ -80,6 +81,7 @@ describe('PromptExecutionService', () => {
       conversationId: 'conv-1',
       projectSlug: 'test-project',
       sessionName: 'jheckbot-test-project-conv-1',
+      cwd: '/tmp/test-project',
       status: 'running',
       startedAt: new Date().toISOString(),
       outputBuffer: '',
@@ -249,5 +251,39 @@ describe('PromptExecutionService', () => {
 
     expect(preparedRollback).toHaveBeenCalledOnce()
     expect(preparedCommit).not.toHaveBeenCalled()
+  })
+
+  it('auto-generates title from the prompt when title is still default', async () => {
+    await service.send({ conversationId: 'conv-1', prompt: 'Fix the failing tests' })
+
+    expect(conversationRepo.update).toHaveBeenCalledWith(
+      'conv-1',
+      { title: 'Fix the failing tests' },
+      client,
+    )
+  })
+
+  it('does not overwrite a custom title', async () => {
+    mockConversation.title = 'My Custom Title'
+    vi.mocked(conversationRepo.findByIdForUpdate).mockResolvedValue(mockConversation)
+
+    await service.send({ conversationId: 'conv-1', prompt: 'Fix the tests' })
+
+    expect(conversationRepo.update).not.toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ title: expect.any(String) }),
+      expect.anything(),
+    )
+  })
+
+  it('truncates long prompts when generating a title', async () => {
+    const longPrompt = 'x'.repeat(100)
+    await service.send({ conversationId: 'conv-1', prompt: longPrompt })
+
+    expect(conversationRepo.update).toHaveBeenCalledWith(
+      'conv-1',
+      { title: 'x'.repeat(57) + '...' },
+      client,
+    )
   })
 })

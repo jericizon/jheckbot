@@ -11,6 +11,8 @@ export function createProjectRouter(controller: ProjectController): Router {
   router.delete('/:id', (req, res) => controller.delete(req, res))
   router.post('/:id/validate', (req, res) => controller.validate(req, res))
   router.post('/:id/health', (req, res) => controller.health(req, res))
+  router.get('/:id/branch', (req, res) => controller.branch(req, res))
+  router.get('/:id/changes', (req, res) => controller.changes(req, res))
 
   return router
 }

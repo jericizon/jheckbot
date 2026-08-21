@@ -118,18 +118,59 @@ export class DevinAdapter {
     return null
   }
 
-  /** Extract a session ID from output if the interactive CLI prints one. */
+  /** Extract a session ID from output if the CLI prints one. */
   extractSessionId(output: string[]): string | undefined {
     for (const line of output) {
-      const match = line.match(/session[:\s]+([a-f0-9-]{8,})/i)
-      if (match) return match[1]
+      // Devin session IDs are human-readable slugs like "brisk-otter", not
+      // hex UUIDs. Match slug-style IDs (lowercase letters + hyphens) that
+      // appear after "session:" or "session " labels.
+      const slugMatch = line.match(/session[:\s]+([a-z][a-z]*(?:-[a-z]+)+)/i)
+      if (slugMatch) return slugMatch[1]
+      // Fallback: UUID-style IDs printed by some integrations.
+      const uuidMatch = line.match(/session[:\s]+([a-f0-9-]{8,})/i)
+      if (uuidMatch) return uuidMatch[1]
     }
     return undefined
   }
 
+  /**
+   * Discover the most recently active Devin session ID for a working
+   * directory by parsing `devin list --format json`. This is the reliable
+   * way to obtain a session ID after a --print run, since --print mode
+   * does not print the session ID to stdout.
+   */
+  getLatestSessionId(cwd: string, sinceMs?: number): string | undefined {
+    try {
+      const output = execFileSync(this.devinBin, ['list', '--format', 'json'], {
+        cwd,
+        stdio: 'pipe',
+        timeout: 5000,
+      })
+      const sessions = JSON.parse(output.toString()) as Array<{
+        id: string
+        working_directory: string
+        last_activity_at: number
+      }>
+      if (!Array.isArray(sessions) || sessions.length === 0) return undefined
+
+      const sinceSeconds = sinceMs ? Math.floor(sinceMs / 1000) : 0
+      const candidates = sinceSeconds
+        ? sessions.filter((s) => (s.last_activity_at ?? 0) >= sinceSeconds - 120)
+        : sessions
+
+      const pool = candidates.length > 0 ? candidates : sessions
+      pool.sort((a, b) => (b.last_activity_at ?? 0) - (a.last_activity_at ?? 0))
+      return pool[0]?.id
+    } catch {
+      return undefined
+    }
+  }
+
   private buildCommand(opts: StartDevinOptions): string {
     const args = [this.devinBin]
-    if (opts.model) args.push('--model', opts.model)
+    // --model is ignored when resuming (the session's saved model is used),
+    // and passing it produces a warning. Omit it on resume.
+    if (opts.model && !opts.devinSessionId) args.push('--model', opts.model)
     if (opts.devinSessionId) args.push('--resume', opts.devinSessionId)
     // --print: non-interactive mode, Devin processes the prompt and exits so
     // the watcher can detect the dead tmux session and transition the run.

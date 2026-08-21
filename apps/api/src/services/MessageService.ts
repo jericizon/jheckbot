@@ -6,6 +6,7 @@ export interface CreateMessageInput {
   role: 'user' | 'assistant' | 'system'
   content: string
   messageType?: string
+  model?: string | null
 }
 
 export class MessageService {
@@ -40,6 +41,7 @@ export class MessageService {
       role: input.role,
       content: input.content,
       messageType: input.messageType,
+      model: input.model,
     })
 
     await this.conversationRepo.touchLastMessage(input.conversationId)

@@ -1,65 +1,12 @@
 <template>
   <div class="flex h-[100dvh] overflow-hidden bg-surface text-content">
-    <!-- Sidebar overlay (mobile) -->
-    <Transition
-      enter-active-class="transition-opacity duration-200"
-      leave-active-class="transition-opacity duration-200"
-      enter-from-class="opacity-0"
-      leave-to-class="opacity-0"
-    >
-      <div v-if="sidebarOpen" class="fixed inset-0 bg-black/40 z-30 md:hidden" @click="closeSidebar" />
-    </Transition>
-
-    <!-- Sidebar -->
-    <Transition
-      enter-active-class="transition-transform duration-300 ease-out"
-      leave-active-class="transition-transform duration-200 ease-in"
-      enter-from-class="-translate-x-full"
-      leave-to-class="-translate-x-full"
-    >
-      <aside
-        v-if="sidebarOpen"
-        class="fixed md:relative z-40 w-64 shrink-0 h-full bg-surface-elevated border-r border-border flex flex-col"
-      >
-        <!-- New chat -->
-        <div class="p-3">
-          <button
-            @click="newConversation"
-            class="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-content bg-accent-muted hover:bg-border-subtle transition-colors"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-            New Conversation
-          </button>
-        </div>
-
-        <!-- Conversation list -->
-        <div class="flex-1 overflow-y-auto px-2 pb-2">
-          <p class="px-3 py-2 text-[11px] font-medium text-content-subtle uppercase tracking-wide">Conversations</p>
-          <div v-if="convLoading" class="px-3 py-2 text-sm text-content-subtle">Loading...</div>
-          <div v-else-if="conversations.length === 0" class="px-3 py-2 text-sm text-content-subtle">No conversations yet.</div>
-          <NuxtLink
-            v-for="conv in conversations"
-            :key="conv.id"
-            :to="`/conversations/${conv.id}`"
-            class="block rounded-lg px-3 py-2 text-sm truncate mb-0.5 transition-colors"
-            :class="conv.agent_status === 'running' ? 'text-content' : 'text-content-muted hover:bg-surface-subtle hover:text-content'"
-          >
-            <div class="flex items-center gap-2">
-              <span class="h-1.5 w-1.5 rounded-full shrink-0" :class="conv.agent_status === 'running' ? 'bg-emerald-500' : 'bg-content-subtle'" />
-              <span class="truncate">{{ conv.title }}</span>
-            </div>
-          </NuxtLink>
-        </div>
-
-        <!-- Footer -->
-        <div class="p-3 border-t border-border">
-          <NuxtLink to="/" class="flex items-center gap-2 text-sm text-content-muted hover:text-content transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-            Home
-          </NuxtLink>
-        </div>
-      </aside>
-    </Transition>
+    <ConversationSidebar
+      :conversations="conversations"
+      :loading="convLoading"
+      @new="newConversation"
+      @delete="deleteConversation"
+      @rename="handleSidebarRename"
+    />
 
     <!-- Main content area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
@@ -79,6 +26,22 @@
         </button>
         <h1 class="flex-1 text-sm font-semibold truncate">{{ project?.name || 'Project' }}</h1>
         <button
+          v-if="project && !editing && !confirmingDelete"
+          @click="startEdit"
+          class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
+          title="Edit project"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+        </button>
+        <button
+          v-if="project && !editing && !confirmingDelete"
+          @click="confirmingDelete = true"
+          class="text-content-muted hover:text-red-500 transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
+          title="Delete project"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+        </button>
+        <button
           @click="toggleTheme"
           class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
           :title="theme === 'dark' ? 'Switch to light' : 'Switch to dark'"
@@ -91,13 +54,116 @@
       <!-- Content -->
       <div class="flex-1 overflow-y-auto">
         <div class="max-w-2xl mx-auto px-4 py-8 space-y-6">
-          <!-- Project info -->
-          <div v-if="project" class="rounded-lg border border-border bg-surface-elevated p-4">
-            <p class="text-xs text-content-subtle font-mono break-all">{{ project.path }}</p>
-            <button @click="checkHealth" :disabled="healthLoading" class="mt-3 text-xs text-content-muted hover:text-content transition-colors">
-              {{ healthLoading ? 'Checking...' : 'Run health check' }}
-            </button>
-            <div v-if="health" class="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <!-- Edit form -->
+          <div v-if="project && editing" class="rounded-lg border border-border bg-surface-elevated p-4 space-y-3 animate-slide-up">
+            <div class="text-sm font-semibold">Edit Project</div>
+            <input v-model="editForm.name" placeholder="Project name" class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors" />
+            <input v-model="editForm.description" placeholder="Description (optional)" class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors" />
+            <p class="text-xs text-content-subtle">Path cannot be changed after creation: <span class="font-mono break-all">{{ project.path }}</span></p>
+            <div class="flex gap-2">
+              <button @click="cancelEdit" :disabled="saving" class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button @click="saveEdit" :disabled="saving" class="flex-1 rounded-lg bg-content text-surface py-2 text-sm font-medium hover:opacity-80 disabled:opacity-50 transition-opacity active:scale-[0.98]">
+                {{ saving ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
+            <p v-if="editError" class="text-sm text-red-500">{{ editError }}</p>
+          </div>
+
+          <!-- Delete confirmation -->
+          <div v-else-if="project && confirmingDelete" class="rounded-lg border border-red-500/30 bg-surface-elevated p-4 space-y-3">
+            <div class="text-sm font-semibold text-red-500">Delete Project</div>
+            <div class="text-xs text-content-subtle">
+              Delete <span class="font-medium text-content">{{ project.name }}</span> and all its conversations. This cannot be undone.
+            </div>
+            <div class="flex gap-2">
+              <button @click="confirmingDelete = false" :disabled="deleting" class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button @click="handleDelete" :disabled="deleting" class="flex-1 rounded-lg bg-red-500 text-white py-2 text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">
+                {{ deleting ? 'Deleting...' : 'Yes, delete' }}
+              </button>
+            </div>
+            <p v-if="deleteError" class="text-sm text-red-500">{{ deleteError }}</p>
+          </div>
+
+          <!-- Conversation box -->
+          <div v-else-if="project" class="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+            <div class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4">
+              <svg class="w-6 h-6 text-content-subtle" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z" /></svg>
+            </div>
+            <p class="text-content text-sm font-medium mb-1">{{ project.name }}</p>
+            <p v-if="project.description" class="text-content-muted text-xs mb-1">{{ project.description }}</p>
+            <p class="text-content-subtle text-xs font-mono break-all mb-6">{{ project.path }}</p>
+
+            <!-- Input box -->
+            <div class="w-full relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle transition-colors">
+              <textarea
+                v-model="input"
+                @keydown.enter.exact.prevent="sendMessage"
+                @keydown.enter.shift.exact="input += '\n'"
+                @input="autoResize"
+                placeholder="Message Devin..."
+                rows="1"
+                ref="inputEl"
+                :disabled="sending"
+                class="w-full rounded-2xl px-4 py-3.5 pr-12 text-sm text-content placeholder-content-subtle focus:outline-none resize-none max-h-32 overflow-y-auto disabled:opacity-50"
+                style="min-height: 52px;"
+              />
+              <button
+                @click="sendMessage"
+                :disabled="!input.trim() || sending"
+                class="absolute right-2 bottom-2 rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
+                :class="input.trim() && !sending ? 'bg-content text-surface hover:opacity-80' : 'bg-surface-subtle text-content-subtle'"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+              </button>
+            </div>
+
+            <!-- Model selector + bypass toggle + hint -->
+            <div class="w-full flex items-center justify-between mt-2 px-1 gap-2">
+              <div class="flex items-center gap-3">
+                <select
+                  v-model="selectedModel"
+                  :disabled="sending"
+                  class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50"
+                >
+                  <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
+                    <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
+                      {{ m.label }}{{ m.free ? ' (Free)' : '' }}
+                    </option>
+                  </optgroup>
+                </select>
+                <button
+                  @click="toggleBypass"
+                  :disabled="sending"
+                  class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  :class="bypassMode
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
+                    : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
+                  :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
+                  :aria-pressed="bypassMode"
+                >
+                  <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                  <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
+                </button>
+                <button
+                  @click="checkHealth"
+                  :disabled="healthLoading"
+                  class="text-xs text-content-muted hover:text-content transition-colors disabled:opacity-50"
+                >
+                  {{ healthLoading ? 'Checking...' : 'Health' }}
+                </button>
+              </div>
+              <p class="text-xs text-content-subtle shrink-0">Enter to send, Shift+Enter for new line</p>
+            </div>
+
+            <p v-if="sendError" class="mt-3 text-sm text-red-500">{{ sendError }}</p>
+
+            <!-- Health details -->
+            <div v-if="health" class="w-full mt-4 grid grid-cols-2 gap-2 text-xs">
               <div class="flex items-center gap-2" :class="health.directory ? 'text-emerald-500' : 'text-content-subtle'">
                 <span>{{ health.directory ? '✓' : '○' }}</span> Directory
               </div>
@@ -124,6 +190,21 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete conversation modal -->
+    <ConfirmModal
+      :open="convDeleteModalOpen"
+      title="Delete Conversation"
+      :message="convDeleteTarget
+        ? `Delete \u201C${convDeleteTargetTitle}\u201D? This cannot be undone.`
+        : 'Delete this conversation? This cannot be undone.'"
+      confirm-label="Yes, delete"
+      loading-label="Deleting..."
+      :loading="deletingConv"
+      :error="convDeleteError"
+      @confirm="confirmDeleteConversation"
+      @cancel="closeConvDeleteModal"
+    />
   </div>
 </template>
 
@@ -132,7 +213,7 @@ const route = useRoute()
 const projectsApi = useProjects()
 const convApi = useConversations()
 const { theme, toggle: toggleTheme } = useTheme()
-const { sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebar()
+const { sidebarOpen, toggle: toggleSidebar } = useSidebar()
 
 const id = computed(() => route.params.id as string)
 
@@ -146,10 +227,66 @@ const convLoading = ref(true)
 const health = ref<HealthResult | null>(null)
 const healthLoading = ref(false)
 
+// Refresh sidebar statuses periodically so background agent runs in any
+// conversation of this project surface without a manual reload.
+useConversationPolling(
+  () => project.value?.id,
+  (convs) => { conversations.value = convs },
+)
+
+const editing = ref(false)
+const saving = ref(false)
+const editError = ref('')
+const editForm = reactive({ name: '', description: '' })
+
+const confirmingDelete = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
+
+const input = ref('')
+const inputEl = ref<HTMLTextAreaElement | null>(null)
+const sending = ref(false)
+const sendError = ref('')
+const { bypassMode, toggle: toggleBypass } = useBypassMode()
+
+interface ModelOption { id: string; label: string; family: string; context: string; pricing: string; free: boolean }
+const availableModels = ref<ModelOption[]>([])
+const selectedModel = ref('glm-5-2')
+
+const modelGroups = computed(() => {
+  const groups: { label: string; models: ModelOption[] }[] = [
+    { label: 'Free', models: [] },
+    { label: 'Budget', models: [] },
+    { label: 'Mid-range', models: [] },
+    { label: 'Premium', models: [] },
+  ]
+  for (const m of availableModels.value) {
+    if (m.free) groups[0].models.push(m)
+    else if (m.pricing.includes('$0.') || m.pricing.includes('$1.')) groups[1].models.push(m)
+    else if (m.pricing.includes('$2.') || m.pricing.includes('$3.')) groups[2].models.push(m)
+    else groups[3].models.push(m)
+  }
+  return groups.filter((g) => g.models.length > 0)
+})
+
+function autoResize() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+}
+
 async function load() {
   try {
-    project.value = await projectsApi.get(id.value)
-    conversations.value = await convApi.listByProject(id.value)
+    const [proj, convs, modelsRes] = await Promise.all([
+      projectsApi.get(id.value),
+      convApi.listByProject(id.value),
+      convApi.models(),
+    ])
+    project.value = proj
+    conversations.value = convs
+    availableModels.value = modelsRes.models
+    selectedModel.value = modelsRes.default
   } catch {
     // ignore
   } finally {
@@ -168,12 +305,127 @@ async function checkHealth() {
   }
 }
 
-async function newConversation() {
+function startEdit() {
+  if (!project.value) return
+  editForm.name = project.value.name
+  editForm.description = project.value.description ?? ''
+  editError.value = ''
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+  editError.value = ''
+}
+
+async function saveEdit() {
+  if (!project.value) return
+  saving.value = true
+  editError.value = ''
+  try {
+    const updated = await projectsApi.update(project.value.id, {
+      name: editForm.name,
+      description: editForm.description || undefined,
+    })
+    project.value = updated
+    editing.value = false
+  } catch (err: unknown) {
+    editError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to save project'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function handleDelete() {
+  if (!project.value) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await projectsApi.delete(project.value.id)
+    await navigateTo('/projects')
+  } catch (err: unknown) {
+    deleteError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to delete project'
+  } finally {
+    deleting.value = false
+  }
+}
+
+function newConversation() {
+  // Focus the create-conversation input box instead of creating an empty conversation via API.
+  input.value = ''
+  sendError.value = ''
+  nextTick(() => {
+    inputEl.value?.focus()
+    inputEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+async function handleSidebarRename(convId: string, newTitle: string) {
+  try {
+    const updated = await convApi.update(convId, { title: newTitle })
+    const conv = conversations.value.find((c) => c.id === convId)
+    if (conv) conv.title = updated.title
+  } catch {
+    // Keep old title on failure
+  }
+}
+
+const convDeleteModalOpen = ref(false)
+const convDeleteTarget = ref<string | null>(null)
+const deletingConv = ref(false)
+const convDeleteError = ref('')
+
+const convDeleteTargetTitle = computed(() =>
+  conversations.value.find((c) => c.id === convDeleteTarget.value)?.title
+  ?? 'this conversation',
+)
+
+function deleteConversation(convId: string) {
+  convDeleteTarget.value = convId
+  convDeleteError.value = ''
+  convDeleteModalOpen.value = true
+}
+
+function closeConvDeleteModal() {
+  if (deletingConv.value) return
+  convDeleteModalOpen.value = false
+  convDeleteTarget.value = null
+  convDeleteError.value = ''
+}
+
+async function confirmDeleteConversation() {
+  const convId = convDeleteTarget.value
+  if (!convId) return
+  deletingConv.value = true
+  convDeleteError.value = ''
+  try {
+    await convApi.delete(convId)
+    conversations.value = conversations.value.filter((c) => c.id !== convId)
+    convDeleteModalOpen.value = false
+    convDeleteTarget.value = null
+  } catch (err: unknown) {
+    convDeleteError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to delete conversation'
+  } finally {
+    deletingConv.value = false
+  }
+}
+
+async function sendMessage() {
+  const prompt = input.value.trim()
+  if (!prompt || sending.value) return
+
+  sending.value = true
+  sendError.value = ''
   try {
     const conv = await convApi.create(id.value)
+    await convApi.sendMessage(conv.id, prompt, selectedModel.value, bypassMode.value)
     await navigateTo(`/conversations/${conv.id}`)
-  } catch {
-    // ignore
+  } catch (err: unknown) {
+    const message = err && typeof err === 'object' && 'data' in err
+      ? (err as { data?: { error?: string } }).data?.error
+      : err instanceof Error ? err.message : 'Failed to start conversation'
+    sendError.value = message ?? 'Failed to start conversation'
+    sending.value = false
   }
 }
 

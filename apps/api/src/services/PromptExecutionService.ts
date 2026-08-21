@@ -104,6 +104,16 @@ export class PromptExecutionService {
         client as DbExecutor,
       )
 
+      // Auto-generate title from the first prompt if title is still default
+      if (conversation.title === 'New Conversation') {
+        const title = this.generateTitle(input.prompt)
+        await this.conversationRepo.update(
+          input.conversationId,
+          { title },
+          client as DbExecutor,
+        )
+      }
+
       await this.conversationRepo.setAgentStatus(
         input.conversationId,
         'starting',
@@ -149,6 +159,12 @@ export class PromptExecutionService {
       const run = preparedRun.commit()
       return { message, run }
     })
+  }
+
+  private generateTitle(prompt: string): string {
+    const trimmed = prompt.trim()
+    if (trimmed.length <= 60) return trimmed
+    return trimmed.slice(0, 57).trimEnd() + '...'
   }
 }
 

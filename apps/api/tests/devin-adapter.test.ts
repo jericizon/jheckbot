@@ -110,6 +110,20 @@ describe('DevinAdapter', () => {
     expect(command).toContain("'--resume' 'session-id'\\''; touch /tmp/should-not-run'")
   })
 
+  it('omits --model when resuming a session (Devin ignores it and warns)', () => {
+    adapter.start({
+      sessionName: 'jheckbot-test-1',
+      cwd: '/tmp/jheckbot-test-project',
+      prompt: 'Continue work',
+      devinSessionId: 'prior-session',
+      model: 'glm-5-2',
+    })
+
+    const command = vi.mocked(tmux.createSession).mock.calls[0][2]
+    expect(command).toContain("'--resume' 'prior-session'")
+    expect(command).not.toContain('--model')
+  })
+
   it('adds --permission-mode dangerous when bypass is true', () => {
     adapter.start({
       sessionName: 'jheckbot-test-1',
@@ -172,6 +186,48 @@ describe('DevinAdapter', () => {
 
     expect(adapter.getDevinSessionId('test-session')).toBe('abc12345-6789')
     expect(tmux.captureOutput).toHaveBeenCalledWith('test-session', '-')
+  })
+
+  it('extracts slug-style Devin session IDs (e.g. brisk-otter)', () => {
+    vi.mocked(tmux.captureOutput).mockReturnValue([
+      'starting work',
+      'session: healthy-dollar',
+    ])
+
+    expect(adapter.getDevinSessionId('test-session')).toBe('healthy-dollar')
+  })
+
+  it('discovers the latest session ID via devin list --format json', () => {
+    const sessions = [
+      { id: 'old-session', working_directory: '/tmp', last_activity_at: 1000 },
+      { id: 'healthy-dollar', working_directory: '/tmp', last_activity_at: 2000 },
+    ]
+    mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('list')) return Buffer.from(JSON.stringify(sessions))
+      return Buffer.from('')
+    })
+
+    expect(adapter.getLatestSessionId('/tmp')).toBe('healthy-dollar')
+  })
+
+  it('filters devin list sessions by start time when provided', () => {
+    const sessions = [
+      { id: 'old-session', working_directory: '/tmp', last_activity_at: 1000 },
+      { id: 'recent-session', working_directory: '/tmp', last_activity_at: 5000 },
+    ]
+    mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('list')) return Buffer.from(JSON.stringify(sessions))
+      return Buffer.from('')
+    })
+
+    // sinceMs = 4000 → 4000 - 120 = 3880 seconds threshold
+    expect(adapter.getLatestSessionId('/tmp', 4_000_000)).toBe('recent-session')
+  })
+
+  it('returns undefined when devin list fails', () => {
+    mockExecFileSync.mockImplementation(() => { throw new Error('failed') })
+
+    expect(adapter.getLatestSessionId('/tmp')).toBeUndefined()
   })
 
   it('reports no exit code when tmux no longer has a session', () => {

@@ -24,6 +24,7 @@ interface AgentRun {
   conversationId: string
   projectSlug: string
   sessionName: string
+  cwd: string
   status: string
   startedAt: string
   outputBuffer: string

@@ -113,4 +113,28 @@ export class ProjectController {
     const result = await this.healthService.checkHealth(project)
     res.json(result)
   }
+
+  async branch(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    const result = await this.healthService.getBranch(project)
+    res.json(result)
+  }
+
+  async changes(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    const result = await this.healthService.getChanges(project)
+    res.json(result)
+  }
 }

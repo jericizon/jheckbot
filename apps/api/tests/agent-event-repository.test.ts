@@ -153,6 +153,7 @@ describe('transaction-aware repositories', () => {
       role: 'user',
       content: 'prompt',
       message_type: 'prompt',
+      model: null,
       created_at: new Date().toISOString(),
     }
     executor.query.mockResolvedValue({ rows: [message] })
@@ -174,6 +175,7 @@ describe('transaction-aware repositories', () => {
       'user',
       'prompt',
       'prompt',
+      null,
     ])
     expect(pool.query).not.toHaveBeenCalled()
   })

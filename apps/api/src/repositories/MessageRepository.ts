@@ -6,6 +6,7 @@ export interface MessageRecord {
   role: string
   content: string
   message_type: string
+  model: string | null
   created_at: string
 }
 
@@ -32,16 +33,17 @@ export class MessageRepository {
       role: string
       content: string
       messageType?: string
+      model?: string | null
     },
     executor: DbExecutor = pool,
   ): Promise<MessageRecord> {
     const defaultMessageType =
       data.role === 'user' ? 'prompt' : data.role === 'assistant' ? 'output' : 'status'
     const { rows } = await executor.query<MessageRecord>(
-      `INSERT INTO messages (conversation_id, role, content, message_type)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO messages (conversation_id, role, content, message_type, model)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [data.conversationId, data.role, data.content, data.messageType ?? defaultMessageType],
+      [data.conversationId, data.role, data.content, data.messageType ?? defaultMessageType, data.model ?? null],
     )
     return rows[0]
   }

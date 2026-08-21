@@ -23,8 +23,12 @@
           class="block rounded-lg border border-border bg-surface-elevated p-3 hover:border-content-subtle transition-colors"
         >
           <div class="flex items-center gap-2">
-            <span class="h-1.5 w-1.5 rounded-full" :class="conv.agent_status === 'running' ? 'bg-emerald-500' : 'bg-content-subtle'" />
-            <span class="font-medium text-sm truncate">{{ conv.title }}</span>
+            <span class="relative flex h-2 w-2 items-center justify-center" :title="isAgentActive(conv) ? 'Agent running' : 'Idle'">
+              <span v-if="isAgentActive(conv)" class="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />
+              <span class="relative inline-flex rounded-full h-1.5 w-1.5" :class="isAgentActive(conv) ? 'bg-emerald-500' : 'bg-content-subtle'" />
+            </span>
+            <span class="font-medium text-sm truncate flex-1">{{ conv.title }}</span>
+            <span v-if="isAgentActive(conv)" class="text-[10px] font-medium text-emerald-500 shrink-0">Active</span>
           </div>
           <p class="text-xs text-content-subtle mt-1">{{ formatTime(conv.last_message_at || conv.created_at) }}</p>
         </NuxtLink>
@@ -46,6 +50,11 @@ interface Conversation {
 
 const recent = ref<Conversation[]>([])
 const loading = ref(true)
+
+const ACTIVE_STATUSES = ['starting', 'running', 'stopping']
+function isAgentActive(conv: Conversation) {
+  return ACTIVE_STATUSES.includes(conv.agent_status)
+}
 
 function formatTime(iso: string): string {
   const d = new Date(iso)

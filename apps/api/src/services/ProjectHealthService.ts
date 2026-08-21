@@ -17,6 +17,25 @@ export interface ProjectHealthResult {
   checkedAt: string
 }
 
+export interface ProjectBranchResult {
+  projectId: string
+  branch: string | null
+  checkedAt: string
+}
+
+export interface FileChange {
+  path: string
+  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'ignored'
+  staged: boolean
+}
+
+export interface ProjectChangesResult {
+  projectId: string
+  branch: string | null
+  changes: FileChange[]
+  checkedAt: string
+}
+
 export interface PathValidationResult {
   projectId: string
   valid: boolean
@@ -62,6 +81,80 @@ export class ProjectHealthService {
       dockerProject,
       devinCli,
       checkedAt: new Date().toISOString(),
+    }
+  }
+
+  async getBranch(project: ProjectRecord): Promise<ProjectBranchResult> {
+    const branch = this.readGitBranch(project.path)
+    return {
+      projectId: project.id,
+      branch,
+      checkedAt: new Date().toISOString(),
+    }
+  }
+
+  async getChanges(project: ProjectRecord): Promise<ProjectChangesResult> {
+    const branch = this.readGitBranch(project.path)
+    const changes = this.readGitStatus(project.path)
+    return {
+      projectId: project.id,
+      branch,
+      changes,
+      checkedAt: new Date().toISOString(),
+    }
+  }
+
+  private readGitStatus(path: string): FileChange[] {
+    if (!this.checkGitRepo(path)) return []
+    try {
+      const output = execSync(`git -C ${JSON.stringify(path)} status --porcelain --untracked-files=all`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        maxBuffer: 4 * 1024 * 1024,
+      })
+      return output
+        .split('\n')
+        .map((line) => line.trimEnd())
+        .filter((line) => line.length > 0)
+        .map((line) => this.parsePorcelainLine(line))
+    } catch {
+      return []
+    }
+  }
+
+  private parsePorcelainLine(line: string): FileChange {
+    // Porcelain v1 format: XY <path>[\t-> <origPath>]
+    const x = line[0]
+    const y = line[1]
+    const rest = line.slice(3)
+    // Renamed files: "newPath\toldPath"
+    const [filePath, origPath] = rest.split('\t')
+    const displayPath = origPath ? `${origPath} -> ${filePath}` : filePath
+
+    const staged = x !== ' ' && x !== '?'
+    let status: FileChange['status']
+    const code = staged ? x : y
+    switch (code) {
+      case 'M': status = 'modified'; break
+      case 'A': status = 'added'; break
+      case 'D': status = 'deleted'; break
+      case 'R': status = 'renamed'; break
+      case '?': status = 'untracked'; break
+      case '!': status = 'ignored'; break
+      default: status = 'modified'
+    }
+    return { path: displayPath, status, staged }
+  }
+
+  private readGitBranch(path: string): string | null {
+    if (!this.checkGitRepo(path)) return null
+    try {
+      return execSync(`git -C ${JSON.stringify(path)} rev-parse --abbrev-ref HEAD`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      }).trim()
+    } catch {
+      return null
     }
   }
 

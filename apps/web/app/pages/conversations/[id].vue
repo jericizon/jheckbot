@@ -1,60 +1,12 @@
 <template>
   <div class="flex h-[100dvh] overflow-hidden bg-surface text-content">
-    <!-- Sidebar overlay (mobile) -->
-    <Transition
-      enter-active-class="transition-opacity duration-200"
-      leave-active-class="transition-opacity duration-200"
-      enter-from-class="opacity-0"
-      leave-to-class="opacity-0"
-    >
-      <div v-if="sidebarOpen" class="fixed inset-0 bg-black/40 z-30 md:hidden" @click="closeSidebar" />
-    </Transition>
-
-    <!-- Sidebar -->
-    <Transition
-      enter-active-class="transition-transform duration-300 ease-out"
-      leave-active-class="transition-transform duration-200 ease-in"
-      enter-from-class="-translate-x-full"
-      leave-to-class="-translate-x-full"
-    >
-      <aside
-        v-if="sidebarOpen"
-        class="fixed md:relative z-40 w-64 shrink-0 h-full bg-surface-elevated border-r border-border flex flex-col"
-      >
-        <!-- New chat -->
-        <div class="p-3">
-          <button
-            @click="navigateTo('/projects/' + conversation?.project_id)"
-            class="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-content bg-accent-muted hover:bg-border-subtle transition-colors"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-            New Conversation
-          </button>
-        </div>
-
-        <!-- Conversation list -->
-        <div class="flex-1 overflow-y-auto px-2 pb-2">
-          <p class="px-3 py-2 text-[11px] font-medium text-content-subtle uppercase tracking-wide">Recent</p>
-          <NuxtLink
-            v-for="conv in sidebarConversations"
-            :key="conv.id"
-            :to="`/conversations/${conv.id}`"
-            class="block rounded-lg px-3 py-2 text-sm truncate mb-0.5 transition-colors"
-            :class="conv.id === id ? 'bg-accent-muted text-content' : 'text-content-muted hover:bg-surface-subtle hover:text-content'"
-          >
-            {{ conv.title }}
-          </NuxtLink>
-        </div>
-
-        <!-- Footer -->
-        <div class="p-3 border-t border-border">
-          <NuxtLink to="/" class="flex items-center gap-2 text-sm text-content-muted hover:text-content transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-            Home
-          </NuxtLink>
-        </div>
-      </aside>
-    </Transition>
+    <ConversationSidebar
+      :conversations="sidebarConversations"
+      :active-id="id"
+      @new="navigateTo('/projects/' + conversation?.project_id)"
+      @delete="deleteConversation"
+      @rename="handleSidebarRename"
+    />
 
     <!-- Main chat area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
@@ -72,6 +24,19 @@
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
         </button>
+        <!-- Project + branch badges -->
+        <div v-if="projectName" class="flex items-center gap-1.5 shrink-0">
+          <button
+            @click="navigateTo('/projects/' + conversation?.project_id)"
+            class="text-xs font-medium text-content-muted hover:text-content transition-colors"
+          >
+            {{ projectName }}
+          </button>
+          <span v-if="projectBranch" class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">
+            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
+            <span class="font-mono">{{ projectBranch }}</span>
+          </span>
+        </div>
         <!-- Editable title -->
         <div class="flex-1 min-w-0 flex items-center gap-1">
           <input
@@ -132,8 +97,13 @@
               <div class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5">
                 <svg class="w-3.5 h-3.5 text-surface" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               </div>
-              <div class="flex-1 text-sm text-content whitespace-pre-wrap break-words leading-relaxed pt-1">
-                {{ msg.content }}
+              <div class="flex-1 min-w-0 pt-1">
+                <div v-if="msg.model" class="flex items-center gap-1 mb-1">
+                  <span class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">{{ msg.model }}</span>
+                </div>
+                <div class="text-sm text-content leading-relaxed min-w-0">
+                  <Markdown :content="msg.content" />
+                </div>
               </div>
             </div>
 
@@ -153,8 +123,18 @@
             <div class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5">
               <svg class="w-3.5 h-3.5 text-surface" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
             </div>
-            <div class="flex-1 text-sm text-content whitespace-pre-wrap break-words leading-relaxed pt-1">
-              {{ liveOutput }}
+            <div class="flex-1 min-w-0 pt-1">
+              <div class="flex items-center gap-1 mb-1">
+                <span class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">{{ selectedModel }}</span>
+              </div>
+              <div class="text-sm text-content leading-relaxed min-w-0">
+                <Markdown :content="liveOutput" />
+              </div>
+              <!-- Background processing indicator -->
+              <div v-if="agentRunning" class="flex items-center gap-1.5 mt-2 text-xs text-content-subtle animate-fade-in">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Processing...</span>
+              </div>
             </div>
           </div>
 
@@ -183,6 +163,7 @@
       </div>
 
       <!-- Activity log panel -->
+      <ChangedFilesPanel ref="changedFilesPanel" :project-id="conversation?.project_id" />
       <div v-if="agentRunning || agentStarting || activityLog" class="shrink-0 border-t border-border">
         <button
           @click="activityOpen = !activityOpen"
@@ -256,14 +237,18 @@
                 </optgroup>
               </select>
               <button
-                @click="bypassMode = !bypassMode"
+                @click="toggleBypass"
                 :disabled="agentStarting || agentRunning"
-                class="flex items-center gap-1 text-xs transition-colors disabled:opacity-50"
-                :class="bypassMode ? 'text-amber-500' : 'text-content-subtle hover:text-content-muted'"
+                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="bypassMode
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
+                  : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
                 :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
+                :aria-pressed="bypassMode"
               >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                <span>Bypass</span>
+                <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
               </button>
             </div>
             <p class="text-xs text-content-subtle shrink-0">Enter to send, Shift+Enter for new line</p>
@@ -271,19 +256,35 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete conversation modal -->
+    <ConfirmModal
+      :open="deleteModalOpen"
+      title="Delete Conversation"
+      :message="deleteTarget
+        ? `Delete \u201C${deleteTargetTitle}\u201D? This cannot be undone.`
+        : 'Delete this conversation? This cannot be undone.'"
+      confirm-label="Yes, delete"
+      loading-label="Deleting..."
+      :loading="deletingConv"
+      :error="deleteConvError"
+      @confirm="confirmDeleteConversation"
+      @cancel="closeDeleteModal"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 const route = useRoute()
 const convApi = useConversations()
+const projectApi = useProjects()
 const sse = useSSE()
 const { theme, toggle: toggleTheme } = useTheme()
 
 const id = computed(() => route.params.id as string)
 
 interface Conversation { id: string; project_id: string; title: string; agent_status: string }
-interface Message { id: string; role: string; content: string; message_type: string }
+interface Message { id: string; role: string; content: string; message_type: string; model?: string | null }
 interface ModelOption { id: string; label: string; family: string; context: string; pricing: string; free: boolean }
 
 const conversation = ref<Conversation | null>(null)
@@ -295,15 +296,38 @@ const agentStarting = ref(false)
 const sendError = ref('')
 const activityLog = ref('')
 const activityOpen = ref(false)
-const bypassMode = ref(false)
+const { bypassMode, toggle: toggleBypass } = useBypassMode()
 const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
-const { sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebar()
+const changedFilesPanel = ref<{ refresh: () => void } | null>(null)
+const projectName = ref('')
+const projectBranch = ref<string | null>(null)
+const { sidebarOpen, toggle: toggleSidebar } = useSidebar()
 const sidebarConversations = ref<Conversation[]>([])
 let eventSource: EventSource | null = null
+
+// Refresh sidebar statuses periodically so background runs in other
+// conversations surface without a manual reload. While the active
+// conversation's agent is running, SSE owns its status and we skip
+// clobbering it from the (possibly stale) poll result.
+useConversationPolling(
+  () => conversation.value?.project_id,
+  (convs) => {
+    if (agentRunning.value) {
+      const activeId = id.value
+      sidebarConversations.value = convs.map((c) =>
+        c.id === activeId
+          ? { ...c, agent_status: sidebarConversations.value.find((s) => s.id === activeId)?.agent_status ?? c.agent_status }
+          : c,
+      )
+    } else {
+      sidebarConversations.value = convs
+    }
+  },
+)
 
 const availableModels = ref<ModelOption[]>([])
 const selectedModel = ref('glm-5-2')
@@ -340,6 +364,13 @@ async function loadSidebarConversations() {
   }
 }
 
+// Keep the active conversation's sidebar entry in sync with SSE status
+// events so the background-process indicator updates live.
+function setSidebarStatus(convId: string, status: string) {
+  const idx = sidebarConversations.value.findIndex((c) => c.id === convId)
+  if (idx >= 0) sidebarConversations.value[idx].agent_status = status
+}
+
 async function load() {
   try {
     const [conv, msgs, modelsRes] = await Promise.all([
@@ -353,6 +384,7 @@ async function load() {
     selectedModel.value = modelsRes.default
 
     loadSidebarConversations()
+    loadProjectInfo(conv.project_id)
 
     try {
       const agentStatus = await convApi.agentStatus(id.value)
@@ -371,6 +403,21 @@ async function load() {
   }
 }
 
+async function loadProjectInfo(projectId: string) {
+  try {
+    const project = await projectApi.get(projectId)
+    projectName.value = project.name
+  } catch {
+    // ignore — header just won't show project name
+  }
+  try {
+    const result = await projectApi.branch(projectId)
+    projectBranch.value = result.branch
+  } catch {
+    projectBranch.value = null
+  }
+}
+
 function connectSSE() {
   eventSource = sse.connect(id.value, async (event) => {
     if (event.type === 'status') {
@@ -381,8 +428,12 @@ function connectSSE() {
       if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed' || data.status === 'idle') {
         agentRunning.value = false
         agentStarting.value = false
+        setSidebarStatus(id.value, 'idle')
         eventSource?.close()
         await reloadMessages()
+        changedFilesPanel.value?.refresh()
+      } else {
+        setSidebarStatus(id.value, data.status)
       }
     } else if (event.type === 'output') {
       agentStarting.value = false
@@ -395,6 +446,17 @@ function connectSSE() {
       activityLog.value = data.content
     }
   })
+}
+
+async function refreshConversation() {
+  try {
+    const conv = await convApi.get(id.value)
+    conversation.value = conv
+    const idx = sidebarConversations.value.findIndex((c) => c.id === id.value)
+    if (idx >= 0) sidebarConversations.value[idx].title = conv.title
+  } catch {
+    // keep existing title on failure
+  }
 }
 
 async function reloadMessages() {
@@ -447,6 +509,66 @@ async function saveTitle() {
   titleDraft.value = ''
 }
 
+async function handleSidebarRename(convId: string, newTitle: string) {
+  try {
+    const updated = await convApi.update(convId, { title: newTitle })
+    const conv = sidebarConversations.value.find((c) => c.id === convId)
+    if (conv) conv.title = updated.title
+    if (conversation.value?.id === convId) {
+      conversation.value = { ...conversation.value, title: updated.title }
+    }
+  } catch {
+    // Keep old title on failure
+  }
+}
+
+const deleteModalOpen = ref(false)
+const deleteTarget = ref<string | null>(null)
+const deletingConv = ref(false)
+const deleteConvError = ref('')
+
+const deleteTargetTitle = computed(() =>
+  sidebarConversations.value.find((c) => c.id === deleteTarget.value)?.title
+  ?? conversation.value?.title
+  ?? 'this conversation',
+)
+
+function deleteConversation(convId: string) {
+  deleteTarget.value = convId
+  deleteConvError.value = ''
+  deleteModalOpen.value = true
+}
+
+function closeDeleteModal() {
+  if (deletingConv.value) return
+  deleteModalOpen.value = false
+  deleteTarget.value = null
+  deleteConvError.value = ''
+}
+
+async function confirmDeleteConversation() {
+  const convId = deleteTarget.value
+  if (!convId) return
+  deletingConv.value = true
+  deleteConvError.value = ''
+  try {
+    await convApi.delete(convId)
+    sidebarConversations.value = sidebarConversations.value.filter((c) => c.id !== convId)
+    deleteModalOpen.value = false
+    deleteTarget.value = null
+    if (convId === id.value) {
+      // Send the user back to the project page (which hosts the "New Conversation" action)
+      // rather than the root index. Fall back to /projects if project_id is missing.
+      const projectId = conversation.value?.project_id
+      await navigateTo(projectId ? `/projects/${projectId}` : '/projects')
+    }
+  } catch (err: unknown) {
+    deleteConvError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to delete conversation'
+  } finally {
+    deletingConv.value = false
+  }
+}
+
 async function sendMessage() {
   const prompt = input.value.trim()
   if (!prompt || agentStarting.value || agentRunning.value) return
@@ -473,11 +595,18 @@ async function sendMessage() {
       messages.value[idx] = result.message
     }
 
+    // Backend auto-generates a title from the first prompt; refresh the
+    // header + sidebar so the new title shows without a full page reload.
+    if (conversation.value?.title === 'New Conversation') {
+      refreshConversation()
+    }
+
     agentRunning.value = true
     liveOutput.value = ''
     activityLog.value = ''
     activityOpen.value = true
     agentStarting.value = true
+    setSidebarStatus(id.value, 'starting')
     connectSSE()
   } catch (err: unknown) {
     const idx = messages.value.findIndex((m) => m.id === tempId)
@@ -490,6 +619,7 @@ async function sendMessage() {
 
     agentRunning.value = false
     agentStarting.value = false
+    setSidebarStatus(id.value, 'idle')
   }
 }
 
@@ -498,6 +628,7 @@ async function stopAgent() {
     await convApi.stopAgent(id.value)
     agentRunning.value = false
     agentStarting.value = false
+    setSidebarStatus(id.value, 'idle')
     eventSource?.close()
   } catch {
     // ignore
