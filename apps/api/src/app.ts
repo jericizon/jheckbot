@@ -150,8 +150,12 @@ export function createApp(): express.Express {
   app.use('/api/projects', projectRouter)
 
   // Direct conversation routes
+  // Rate limit only POST to messages, not GET (read polling should not exhaust the limit)
+  app.use('/api/conversations/:id/messages', (req, res, next) => {
+    if (req.method === 'POST') return messageLimiter(req, res, next)
+    next()
+  })
   const conversationRouter = createConversationRouter(conversationController, agentController)
-  conversationRouter.use('/:id/messages', messageLimiter)
   app.use('/api/conversations', conversationRouter)
 
   // Error handling

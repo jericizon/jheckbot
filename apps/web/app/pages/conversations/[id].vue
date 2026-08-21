@@ -234,11 +234,12 @@ async function reloadMessages() {
   try {
     const msgs = await convApi.messages(id.value)
     messages.value = msgs
+    // Only clear live output after successful reload
     liveOutput.value = []
     await nextTick()
     scrollToBottom()
   } catch {
-    // Keep existing messages if reload fails
+    // Keep existing messages and live output if reload fails
   }
 }
 
