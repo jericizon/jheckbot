@@ -55,6 +55,15 @@
         </div>
       </div>
 
+      <!-- Error display -->
+      <div v-if="sendError" class="space-y-1">
+        <div class="text-xs text-red-600">Error</div>
+        <div class="rounded-lg p-3 text-sm bg-red-50 border border-red-200 text-red-700">
+          {{ sendError }}
+          <button @click="sendError = ''" class="ml-2 text-red-400 hover:text-red-600">&times;</button>
+        </div>
+      </div>
+
       <div v-if="messages.length === 0 && liveOutput.length === 0 && !agentStarting" class="text-center text-gray-500 text-sm mt-8">
         Send a message to start working with Devin.
       </div>
@@ -82,7 +91,7 @@
       />
       <button
         @click="sendMessage"
-        :disabled="!input.trim() || agentStarting"
+        :disabled="!input.trim() || agentStarting || agentRunning"
         class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 shrink-0"
       >
         &rarr;
@@ -109,6 +118,7 @@ const input = ref('')
 const agentRunning = ref(false)
 const agentStarting = ref(false)
 const startingText = ref('Starting Devin...')
+const sendError = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 let eventSource: EventSource | null = null
@@ -204,10 +214,12 @@ function connectSSE() {
       if (data.status === 'running') {
         agentRunning.value = true
       }
-      if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
+      if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed' || data.status === 'idle') {
         agentRunning.value = false
         stopStartingAnimation()
         eventSource?.close()
+        // Reload persisted messages to get the assistant's final output
+        reloadMessages()
       }
     } else if (event.type === 'output') {
       stopStartingAnimation()
@@ -218,6 +230,18 @@ function connectSSE() {
   })
 }
 
+async function reloadMessages() {
+  try {
+    const msgs = await convApi.messages(id.value)
+    messages.value = msgs
+    liveOutput.value = []
+    await nextTick()
+    scrollToBottom()
+  } catch {
+    // Keep existing messages if reload fails
+  }
+}
+
 function scrollToBottom() {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -226,35 +250,46 @@ function scrollToBottom() {
 
 async function sendMessage() {
   const prompt = input.value.trim()
-  if (!prompt || agentStarting.value) return
+  if (!prompt || agentStarting.value || agentRunning.value) return
 
-  // Optimistically add user message
+  sendError.value = ''
+
+  // Optimistically add user message with temp ID
+  const tempId = `temp-${Date.now()}`
   messages.value.push({
-    id: `temp-${Date.now()}`,
+    id: tempId,
     role: 'user',
     content: prompt,
-    message_type: 'text',
+    message_type: 'prompt',
   })
   input.value = ''
   autoResize()
   scrollToBottom()
 
   try {
-    // Persist the message
-    await convApi.sendMessage(id.value, prompt)
+    // One atomic request: persists the user message AND starts the agent
+    const result = await convApi.sendMessage(id.value, prompt, selectedModel.value)
 
-    if (agentRunning.value) {
-      // Agent is already running — send follow-up prompt to existing tmux session
-      await convApi.sendAgentPrompt(id.value, prompt)
-    } else if (conversation.value) {
-      // No agent running — start a new one
-      agentRunning.value = true
-      liveOutput.value = []
-      startStartingAnimation()
-      await convApi.startAgent(id.value, conversation.value.project_id, prompt, selectedModel.value)
-      connectSSE()
+    // Reconcile: replace temp message with server message
+    const idx = messages.value.findIndex((m) => m.id === tempId)
+    if (idx >= 0) {
+      messages.value[idx] = result.message
     }
-  } catch {
+
+    agentRunning.value = true
+    liveOutput.value = []
+    startStartingAnimation()
+    connectSSE()
+  } catch (err: unknown) {
+    // Remove the optimistic message on failure
+    const idx = messages.value.findIndex((m) => m.id === tempId)
+    if (idx >= 0) messages.value.splice(idx, 1)
+
+    const message = err && typeof err === 'object' && 'data' in err
+      ? (err as { data?: { error?: string } }).data?.error
+      : err instanceof Error ? err.message : 'Failed to send message'
+    sendError.value = message ?? 'Failed to send message'
+
     agentRunning.value = false
     stopStartingAnimation()
   }

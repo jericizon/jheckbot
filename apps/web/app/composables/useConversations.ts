@@ -20,6 +20,21 @@ interface Message {
   created_at: string
 }
 
+interface AgentRun {
+  conversationId: string
+  projectSlug: string
+  sessionName: string
+  status: string
+  startedAt: string
+  outputBuffer: string
+  normalizedSnapshot: string[]
+}
+
+interface SendMessageResponse {
+  message: Message
+  run: AgentRun
+}
+
 interface SearchResult {
   conversation_id: string
   project_id: string
@@ -56,12 +71,8 @@ export function useConversations() {
     archive: (id: string) => api.post<Conversation>(`/api/conversations/${id}/archive`),
     delete: (id: string) => api.delete<void>(`/api/conversations/${id}`),
     messages: (id: string) => api.get<Message[]>(`/api/conversations/${id}/messages`),
-    sendMessage: (id: string, content: string) =>
-      api.post<Message>(`/api/conversations/${id}/messages`, { role: 'user', content }),
-    startAgent: (id: string, projectId: string, prompt: string, model?: string) =>
-      api.post(`/api/conversations/${id}/agent/start`, { projectId, prompt, model }),
-    sendAgentPrompt: (id: string, prompt: string) =>
-      api.post(`/api/conversations/${id}/agent/prompt`, { prompt }),
+    sendMessage: (id: string, content: string, model?: string) =>
+      api.post<SendMessageResponse>(`/api/conversations/${id}/messages`, { content, model }),
     stopAgent: (id: string) => api.post(`/api/conversations/${id}/agent/stop`),
     agentStatus: (id: string) => api.get(`/api/conversations/${id}/agent`),
     search: (q: string) => api.get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),

@@ -35,8 +35,14 @@ export function useAuth() {
 
   async function fetchUser(): Promise<void> {
     try {
+      // Forward the incoming request cookie during SSR so the API
+      // can authenticate the server-side render.
+      const headers = import.meta.server
+        ? useRequestHeaders(['cookie'])
+        : undefined
       const res = await $fetch<User>('/api/auth/me', {
         credentials: 'include',
+        headers,
       })
       user.value = res
     } catch {
