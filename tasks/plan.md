@@ -75,8 +75,8 @@ Create the pnpm monorepo scaffold with Nuxt 4 web app, Express API app, shared p
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Nuxt 4 latest API changes | Medium | Verify against current Nuxt docs before scaffolding |
-| Port conflicts at runtime | Low | Ports 8800–8802 verified free; documented recheck requirement |
-| Disk space (14 GB free) | Medium | Scaffold is lightweight; no heavy Docker images beyond postgres |
+| Port conflicts at runtime | Low | Ports 8800–8802 are reserved; recheck before startup |
+| Disk space | Medium | Scaffold is lightweight; no heavy Docker images beyond postgres |
 | `pnpm dev` cannot be run by agent | Low | Agent verifies via build/typecheck/test; user runs dev manually |
 
 ## Open Questions

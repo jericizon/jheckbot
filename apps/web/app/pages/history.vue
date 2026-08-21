@@ -1,32 +1,30 @@
 <template>
   <div class="pb-20">
-    <header class="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-40">
-      <h1 class="text-lg font-bold">History</h1>
-      <div class="mt-2">
-        <input
-          v-model="query"
-          @input="search"
-          placeholder="Search conversations..."
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-        />
-      </div>
+    <header class="sticky top-0 bg-surface-elevated border-b border-border px-4 py-3 z-40 space-y-2">
+      <h1 class="text-lg font-semibold">History</h1>
+      <input
+        v-model="query"
+        @input="search"
+        placeholder="Search conversations..."
+        class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
+      />
     </header>
 
-    <div class="px-4 py-4">
-      <div v-if="loading" class="text-gray-500 text-sm">Searching...</div>
-      <div v-else-if="results.length === 0" class="text-gray-500 text-sm">
+    <div class="px-4 py-4 max-w-2xl mx-auto">
+      <div v-if="loading" class="text-content-subtle text-sm">Searching...</div>
+      <div v-else-if="results.length === 0" class="text-content-subtle text-sm">
         {{ query ? 'No results found.' : 'Start typing to search.' }}
       </div>
-      <div v-else class="space-y-3">
+      <div v-else class="space-y-2">
         <NuxtLink
           v-for="result in results"
           :key="result.conversation_id"
           :to="`/conversations/${result.conversation_id}`"
-          class="block rounded-lg border border-gray-200 bg-white p-3 hover:border-indigo-300"
+          class="block rounded-lg border border-border bg-surface-elevated p-3 hover:border-content-subtle transition-colors"
         >
-          <div class="text-xs text-gray-500">{{ result.project_name }}</div>
+          <div class="text-xs text-content-subtle">{{ result.project_name }}</div>
           <div class="font-medium text-sm mt-1">{{ result.conversation_title }}</div>
-          <div class="text-xs text-gray-500 mt-1">{{ new Date(result.created_at).toLocaleDateString() }}</div>
+          <div class="text-xs text-content-subtle mt-1">{{ new Date(result.created_at).toLocaleDateString() }}</div>
         </NuxtLink>
       </div>
     </div>
@@ -66,8 +64,4 @@ async function search() {
     }
   }, 300)
 }
-
-onMounted(() => {
-  // Focus search on mount
-})
 </script>

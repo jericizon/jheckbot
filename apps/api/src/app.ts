@@ -17,12 +17,15 @@ import { ConversationService } from './services/ConversationService.js'
 import { MessageService } from './services/MessageService.js'
 import { PromptExecutionService } from './services/PromptExecutionService.js'
 import { AuthService } from './services/AuthService.js'
+import { DataService } from './services/DataService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
+import { DataController } from './controllers/DataController.js'
 import { createProjectRouter } from './routes/project.routes.js'
 import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
 import { createAuthRouter } from './routes/auth.routes.js'
+import { createDataRouter } from './routes/data.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
@@ -36,6 +39,11 @@ import { env } from './config/env.js'
 export function createApp(): express.Express {
   const app = express()
 
+  // The API sits behind a proxy (Nuxt dev proxy / Cloudflare Tunnel) which sets
+  // X-Forwarded-For. Express must trust the proxy so express-rate-limit can
+  // identify clients and so req.ip reflects the real origin.
+  app.set('trust proxy', env.trustProxy)
+
   // Security headers — relax cross-origin policies for API use from frontend
   app.use(helmet({
     contentSecurityPolicy: false,
@@ -45,7 +53,7 @@ export function createApp(): express.Express {
 
   // CORS — allow the Nuxt frontend (port 8800) to call the API (port 8801)
   app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:8800',
+    origin: env.corsOrigin,
     credentials: true,
   }))
 
@@ -103,6 +111,9 @@ export function createApp(): express.Express {
   const authMiddleware = createAuthMiddleware(authService)
   const authController = new AuthController(authService, authMiddleware)
 
+  const dataService = new DataService(repo, agentManager)
+  const dataController = new DataController(dataService)
+
   // Health (no auth required)
   app.get('/health', async (_req, res) => {
     let dbStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown'
@@ -157,6 +168,9 @@ export function createApp(): express.Express {
   })
   const conversationRouter = createConversationRouter(conversationController, agentController)
   app.use('/api/conversations', conversationRouter)
+
+  // Bulk data management (destructive — requires confirmation token)
+  app.use('/api/data', createDataRouter(dataController))
 
   // Error handling
   app.use(notFoundHandler)

@@ -41,6 +41,26 @@ export class TerminalOutputNormalizer {
     return TerminalOutputNormalizer.normalize(lines)
   }
 
+  /** Strip ANSI/control chars but keep all progress/chrome lines for log display. */
+  static stripAnsi(lines: string[]): string[] {
+    return lines.flatMap((line) => {
+      const cleaned = line
+        .replace(/\r\n/g, '\n')
+        .replace(ANSI_OSC, '')
+        .replace(ANSI_CSI, '')
+        .replace(ANSI_ESCAPE, '')
+        .replace(TERMINAL_CONTROLS, '')
+      return cleaned
+        .split('\n')
+        .map((part) => TerminalOutputNormalizer.lastCarriageReturnValue(part).replace(/\s+$/u, ''))
+        .filter((part) => part.length > 0)
+    })
+  }
+
+  stripAnsi(lines: string[]): string[] {
+    return TerminalOutputNormalizer.stripAnsi(lines)
+  }
+
   delta(previous: string[], current: string[]): string[] {
     return TerminalOutputNormalizer.delta(previous, current)
   }
@@ -79,13 +99,27 @@ export class TerminalOutputNormalizer {
 
     if (trimmed === 'Devin CLI' || trimmed === '⠀⣴⣾⣶⡄') return true
     if (/^[❭❯](?:\s|$)/u.test(trimmed)) return true
-    if (/^GLM-5\.2 High\s+Use \/help to see all available slash commands$/u.test(trimmed)) {
+
+    // Spinner + thinking indicator — braille spinner chars (U+2800–U+28FF)
+    // followed by "Thinking · Ns (esc twice to interrupt)"
+    if (/^[\u2800-\u28ff]*\s*Thinking · \d+s \(esc twice to interrupt\)$/u.test(trimmed)) {
       return true
     }
-    if (/^GLM-5\.2 High\s+Context:\s+\d+[kKmM]?\s*\/\s*\d+[kKmM]?\s+tokens\s+\(\d+%\)$/u.test(trimmed)) {
+
+    // Help text shown while the agent is working (model name may wrap across lines)
+    if (/Type while the agent works to queue messages/u.test(trimmed)) return true
+    if (/input to send them now$/u.test(trimmed)) return true
+
+    // Model name + help/context line — generalized for any Devin CLI model
+    if (/Use \/help to see all available slash commands$/u.test(trimmed)) return true
+    if (/Context:\s+\d+[kKmM]?\s*\/\s*\d+[kKmM]?\s+tokens\s+\(\d+%\)$/u.test(trimmed)) {
       return true
     }
+
     if (/^[─━═]+$/u.test(trimmed)) return true
+
+    // tmux remain-on-exit notice printed when the pane process exits
+    if (/^Pane is dead\b/u.test(trimmed)) return true
 
     return false
   }

@@ -70,4 +70,40 @@ describe('TerminalOutputNormalizer', () => {
     expect(normalizer.delta(previous, repeatedWithNewContent)).toEqual(['All tests passed'])
     expect(normalizer.delta(previous, [...previous, ...previous])).toEqual([])
   })
+
+  it('filters SWE-1.7 CLI chrome (spinner, help text, model header)', () => {
+    const sweOutput = [
+      '⠇⠀ Thinking · 0s (esc twice to interrupt)',
+      'SWE-1.7  Type while the agent works to queue messages; press Enter on an empty',
+      'Max      input to send them now',
+      'SWE-1.7 Max                       Use /help to see all available slash commands',
+      'SWE-1.7 Max                                    Context: 10k / 262k tokens (4%)',
+      '────────────────────────────────────────────────────────────────',
+      'Analyzing the codebase...',
+      '⠋⠀ Thinking · 3s (esc twice to interrupt)',
+      'Found the issue in src/index.ts',
+    ]
+
+    const normalized = new TerminalOutputNormalizer().normalize(sweOutput)
+
+    expect(normalized).toContain('Analyzing the codebase...')
+    expect(normalized).toContain('Found the issue in src/index.ts')
+    expect(normalized).not.toContain('Thinking')
+    expect(normalized).not.toContain('Type while the agent works')
+    expect(normalized).not.toContain('input to send them now')
+    expect(normalized).not.toContain('Use /help')
+    expect(normalized).not.toContain('Context:')
+  })
+
+  it('filters tmux remain-on-exit pane-dead notices', () => {
+    const output = [
+      'pong',
+      'Pane is dead (status 0, Fri Aug 21 22:06:29 2026)',
+    ]
+
+    const normalized = new TerminalOutputNormalizer().normalize(output)
+
+    expect(normalized).toEqual(['pong'])
+    expect(normalized).not.toContain('Pane is dead')
+  })
 })

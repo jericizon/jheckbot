@@ -77,28 +77,29 @@ describe('AuthService', () => {
   it('seeds a default admin user when none exist', async () => {
     vi.mocked(userRepo.count).mockResolvedValueOnce(0)
     process.env.ADMIN_USERNAME = 'admin'
-    process.env.ADMIN_PASSWORD = 'admin'
+    process.env.ADMIN_PASSWORD = 'test-admin-password-12'
     vi.resetModules()
     const { AuthService: FreshAuthService } = await import('../src/services/AuthService.js')
     const freshService = new FreshAuthService(userRepo)
     await freshService.ensureSeedUser()
     expect(userRepo.create).toHaveBeenCalledWith('admin', expect.any(String))
-    delete process.env.ADMIN_USERNAME
-    delete process.env.ADMIN_PASSWORD
+    process.env.ADMIN_USERNAME = 'admin'
+    process.env.ADMIN_PASSWORD = 'test-admin-password-12'
   })
 
   it('seeds with custom credentials from env', async () => {
     vi.mocked(userRepo.count).mockResolvedValueOnce(0)
-    process.env.ADMIN_USERNAME = 'jeric'
-    process.env.ADMIN_PASSWORD = 'password'
+    process.env.ADMIN_USERNAME = 'test-admin'
+    process.env.ADMIN_PASSWORD = 'test-admin-password-12'
     // Re-import env to pick up new values
     vi.resetModules()
     const { AuthService: FreshAuthService } = await import('../src/services/AuthService.js')
     const freshService = new FreshAuthService(userRepo)
     await freshService.ensureSeedUser()
-    expect(userRepo.create).toHaveBeenCalledWith('jeric', expect.any(String))
-    delete process.env.ADMIN_USERNAME
-    delete process.env.ADMIN_PASSWORD
+    expect(userRepo.create).toHaveBeenCalledWith('test-admin', expect.any(String))
+    // Restore fixture values so later re-imports still see valid config.
+    process.env.ADMIN_USERNAME = 'admin'
+    process.env.ADMIN_PASSWORD = 'test-admin-password-12'
   })
 
   it('does not seed when users already exist', async () => {

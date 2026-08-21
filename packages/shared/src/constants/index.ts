@@ -5,8 +5,6 @@ export const PORTS = {
   POSTGRES_CONTAINER: 5432,
 } as const
 
-export const DEFAULT_ALLOWED_ROOT = '/home/jeric/Workspace'
-
 export const AGENT_LIMITS = {
   MAX_RUNTIME_MS: 3600000,
   MAX_CONCURRENT_SESSIONS: 3,
@@ -45,6 +43,8 @@ export const DEVIN_MODELS: ModelOption[] = [
   { id: 'gpt-5-6-luna-high', label: 'GPT-5.6 Luna High', family: 'GPT-5.6 Luna', context: '1M', pricing: '$0.20/$1.20 per MTok', free: false },
   { id: 'swe-1-6', label: 'SWE-1.6', family: 'SWE-1.6', context: '200K', pricing: '$0.50/$2.50 per MTok', free: false },
   { id: 'swe-1-6-fast', label: 'SWE-1.6 Fast', family: 'SWE-1.6 Fast', context: '200K', pricing: '$0.50/$2.50 per MTok', free: false },
+  { id: 'swe-1-7', label: 'SWE-1.7 Max', family: 'SWE-1.7', context: '262K', pricing: 'Free', free: true },
+  { id: 'swe-1-7-medium', label: 'SWE-1.7 Medium', family: 'SWE-1.7', context: '262K', pricing: 'Free', free: true },
   { id: 'nemotron-3-ultra-high', label: 'Nemotron 3 Ultra High', family: 'Nemotron 3 Ultra', context: '1M', pricing: '$0.60/$2.40 per MTok', free: false },
   { id: 'kimi-k2-7', label: 'Kimi K2.7', family: 'Kimi K2.7', context: '262K', pricing: '$0.95/$4.00 per MTok', free: false },
 

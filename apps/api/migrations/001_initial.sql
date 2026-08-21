@@ -22,8 +22,3 @@ CREATE TABLE projects (
 
 CREATE INDEX idx_projects_slug ON projects (slug);
 CREATE INDEX idx_projects_enabled ON projects (enabled);
-
--- Seed the default allowed root
-INSERT INTO allowed_roots (name, path)
-VALUES ('Workspace', '/home/jeric/Workspace')
-ON CONFLICT (path) DO NOTHING;

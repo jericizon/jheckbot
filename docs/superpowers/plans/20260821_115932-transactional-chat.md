@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Preserve the MVP’s interactive PTY/tmux requirement; do not fall back to unmanaged direct child processes.
-- Use `/usr/bin/tmux` and `/home/jeric/.local/bin/devin` from validated configuration.
+- Use configured `TMUX_BIN` and `DEVIN_BIN` from validated configuration.
 - Keep project paths inside enabled allowed roots and verify conversation/project ownership before process creation.
 - Treat PostgreSQL and the OS process as separate systems; use transaction rollback, tmux compensation, and startup reconciliation rather than claiming distributed atomicity.
 - Do not expose prompts, project contents, cookies, tokens, passwords, or environment secrets in logs or QA artifacts.
@@ -197,7 +197,7 @@ Expected: all focused tests pass.
 
 - [ ] **Step 8: Checkpoint.**
 
-Verify `/usr/bin/tmux` exists with `test -x /usr/bin/tmux`; do not create a real Devin session during unit verification.
+Verify tmux is available via the configured `TMUX_BIN`; do not create a real Devin session during unit verification.
 
 ---
 
@@ -614,7 +614,7 @@ Apply `code-review-and-quality`, `code-simplification`, cleanup of only clearly 
 | Existing browser sends legacy Last-Event-ID UUIDs | Medium | Treat unknown/legacy cursors as sequence zero and replay safely. |
 | API restart leaves stale DB `running` rows | Medium | Startup recovery reconciles every active row against exact tmux session names. |
 | The current worktree contains an uncommitted direct-child-process refactor | Medium | Reconcile edits deliberately; never reset or checkout over user changes. |
-| Root filesystem is nearly full | Medium | Avoid large artifacts, check available disk before QA/browser installation, and report if insufficient. |
+| Insufficient disk space | Medium | Avoid large artifacts, check available disk before QA/browser installation, and report if insufficient. |
 
 ## Execution order
 

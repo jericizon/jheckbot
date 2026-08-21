@@ -1,7 +1,7 @@
 export function useSSE() {
   function connect(
     conversationId: string,
-    onEvent: (event: { type: string; data: string }) => void,
+    onEvent: (event: { type: string; data: string }) => void | Promise<void>,
     onOpen?: () => void,
   ): EventSource {
     // Relative URL — same origin, proxied by Nuxt in dev

@@ -3,7 +3,7 @@ import { slugify } from '../src/utils/slugify.js'
 
 describe('slugify', () => {
   it('converts a simple name to a slug', () => {
-    expect(slugify('LunchOnline')).toBe('lunchonline')
+    expect(slugify('ExampleRepo')).toBe('examplerepo')
   })
 
   it('replaces spaces with hyphens', () => {

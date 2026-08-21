@@ -15,6 +15,7 @@ export interface PromptSendInput {
   conversationId: string
   prompt: string
   model?: string
+  bypass?: boolean
 }
 
 export interface PromptSendResult {
@@ -68,13 +69,22 @@ export class PromptExecutionService {
       if (this.pathValidatorFactory) {
         const roots = await this.projectRepo.findAllowedRoots()
         const validator = this.pathValidatorFactory(roots)
-        const pathResult = validator.validate(project.path)
+        const pathResult = validator.resolveRelative(project.path)
         if (!pathResult.valid || !pathResult.resolvedPath) {
           throw new PromptExecutionError(`Project path invalid: ${pathResult.error}`, 400)
         }
         cwd = pathResult.resolvedPath
       }
 
+      if (this.agentManager.isConversationActive(input.conversationId)) {
+        throw new AgentManagerError('Agent is currently working', 409)
+      }
+
+      // Reconcile stale in-memory locks: the lock may persist if a previous
+      // run's watcher failed to clean up (e.g. API restart mid-run). This
+      // checks whether the tmux session is actually still alive and clears
+      // the lock if not.
+      await this.agentManager.reconcileStaleLock(input.conversationId)
       if (this.agentManager.isConversationActive(input.conversationId)) {
         throw new AgentManagerError('Agent is currently working', 409)
       }
@@ -111,6 +121,7 @@ export class PromptExecutionService {
           devinSessionId: conversation.agent_session_id ?? undefined,
           model: input.model || DEFAULT_DEVIN_MODEL,
           userMessageId: message.id,
+          bypass: input.bypass,
         })
 
         await this.eventRepo.create(

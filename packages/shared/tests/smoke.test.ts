@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PORTS, DEFAULT_ALLOWED_ROOT, AGENT_LIMITS, isValidUuid } from '../src/index.js'
+import { PORTS, AGENT_LIMITS, isValidUuid } from '../src/index.js'
 
 describe('@jheckbot/shared', () => {
   it('exports reserved port constants', () => {
@@ -7,10 +7,6 @@ describe('@jheckbot/shared', () => {
     expect(PORTS.API).toBe(8801)
     expect(PORTS.POSTGRES_HOST).toBe(8802)
     expect(PORTS.POSTGRES_CONTAINER).toBe(5432)
-  })
-
-  it('exports the default allowed root', () => {
-    expect(DEFAULT_ALLOWED_ROOT).toBe('/home/jeric/Workspace')
   })
 
   it('exports agent limits', () => {

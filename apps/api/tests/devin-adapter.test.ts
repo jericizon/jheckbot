@@ -19,6 +19,8 @@ function createTmuxMock() {
     isAvailable: vi.fn().mockReturnValue(true),
     createSession: vi.fn(),
     sessionExists: vi.fn().mockReturnValue(true),
+    isPaneAlive: vi.fn().mockReturnValue(true),
+    setOption: vi.fn(),
     sendKeys: vi.fn(),
     sendInterrupt: vi.fn(),
     killSession: vi.fn().mockReturnValue(true),
@@ -33,38 +35,42 @@ describe('DevinAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockExecFileSync.mockReset()
+    // Default: PATH lookups (which) and absolute-path checks succeed.
+    mockExecFileSync.mockImplementation(() => Buffer.from(''))
     vi.mocked(existsSync).mockReturnValue(true)
     tmux = createTmuxMock()
-    adapter = new DevinAdapter('/home/jeric/.local/bin/devin', tmux)
+    adapter = new DevinAdapter('devin', tmux)
   })
 
-  it('reports available when binary exists', () => {
+  it('reports available when the command is resolvable on PATH', () => {
     expect(adapter.isAvailable()).toBe(true)
   })
 
-  it('reports unavailable when the Devin binary is missing', () => {
-    vi.mocked(existsSync).mockReturnValue(false)
+  it('reports unavailable when the Devin command is not on PATH', () => {
+    mockExecFileSync.mockImplementation(() => { throw new Error('not found') })
     expect(adapter.isAvailable()).toBe(false)
   })
 
-  it('supports existing one-argument construction through the tmux fallback', () => {
+  it('starts a session using the injected tmux manager', () => {
     mockExecFileSync.mockImplementation((_command: string, args: string[]) => {
       if (args.includes('has-session')) throw new Error('no session')
       return Buffer.from('')
     })
-    const legacyAdapter = new DevinAdapter('/home/jeric/.local/bin/devin')
+    const tmuxMock = createTmuxMock()
+    const adapter = new DevinAdapter('devin', tmuxMock)
 
-    legacyAdapter.start({ sessionName: 'legacy-session', cwd: '/tmp', prompt: 'hello' })
+    adapter.start({ sessionName: 'test-session', cwd: '/tmp', prompt: 'hello' })
 
-    expect(mockExecFileSync).toHaveBeenCalledWith(
+    expect(tmuxMock.createSession).toHaveBeenCalledWith(
+      'test-session',
+      '/tmp',
       expect.any(String),
-      expect.arrayContaining(['new-session', '-s', 'legacy-session', '-c', '/tmp']),
-      { stdio: 'pipe' },
+      undefined,
     )
   })
 
   it('starts an interactive Devin session in the validated project directory', () => {
-    const cwd = '/home/jeric/Workspace/clients/test'
+    const cwd = '/tmp/jheckbot-test-project'
     const prompt = 'Fix the failing tests; do not delete files'
 
     const info = adapter.start({
@@ -82,10 +88,11 @@ describe('DevinAdapter', () => {
       { DEVIN_TEST_FLAG: 'enabled' },
     )
     const command = vi.mocked(tmux.createSession).mock.calls[0][2]
-    expect(command).toContain("'/home/jeric/.local/bin/devin'")
+    expect(command).toContain("'devin'")
     expect(command).toContain("'--model' 'glm-5-2'")
+    expect(command).toContain("'--print'")
+    expect(command).toContain("'--respect-workspace-trust' 'false'")
     expect(command).toContain("'--' 'Fix the failing tests; do not delete files'")
-    expect(command).not.toContain('-p')
     expect(info.status).toBe('starting')
     expect(info.sessionName).toBe('jheckbot-test-1')
   })
@@ -93,7 +100,7 @@ describe('DevinAdapter', () => {
   it('includes a safely escaped resume session ID', () => {
     adapter.start({
       sessionName: 'jheckbot-test-1',
-      cwd: '/home/jeric/Workspace/clients/test',
+      cwd: '/tmp/jheckbot-test-project',
       prompt: 'Continue work',
       devinSessionId: "session-id'; touch /tmp/should-not-run",
     })
@@ -103,13 +110,38 @@ describe('DevinAdapter', () => {
     expect(command).toContain("'--resume' 'session-id'\\''; touch /tmp/should-not-run'")
   })
 
+  it('adds --permission-mode dangerous when bypass is true', () => {
+    adapter.start({
+      sessionName: 'jheckbot-test-1',
+      cwd: '/tmp/jheckbot-test-project',
+      prompt: 'Fix the tests',
+      bypass: true,
+    })
+
+    const command = vi.mocked(tmux.createSession).mock.calls[0][2]
+    expect(command).toContain("'--permission-mode' 'dangerous'")
+  })
+
+  it('omits --permission-mode when bypass is not set', () => {
+    adapter.start({
+      sessionName: 'jheckbot-test-1',
+      cwd: '/tmp/jheckbot-test-project',
+      prompt: 'Fix the tests',
+    })
+
+    const command = vi.mocked(tmux.createSession).mock.calls[0][2]
+    expect(command).not.toContain('permission-mode')
+  })
+
   it('fails closed when Devin or tmux is unavailable', () => {
-    vi.mocked(existsSync).mockReturnValue(false)
+    // Devin unavailable: PATH lookup fails.
+    mockExecFileSync.mockImplementation(() => { throw new Error('not found') })
     expect(() => adapter.start({ sessionName: 'test', cwd: '/tmp', prompt: 'hello' })).toThrow(
       'Devin binary not found',
     )
 
-    vi.mocked(existsSync).mockReturnValue(true)
+    // Devin available, tmux unavailable.
+    mockExecFileSync.mockImplementation(() => Buffer.from(''))
     vi.mocked(tmux.isAvailable).mockReturnValue(false)
     expect(() => adapter.start({ sessionName: 'test', cwd: '/tmp', prompt: 'hello' })).toThrow(
       'tmux is not available',
@@ -123,12 +155,12 @@ describe('DevinAdapter', () => {
     expect(tmux.captureOutput).toHaveBeenCalledWith('test-session', '-')
   })
 
-  it('delegates liveness checks to tmux', () => {
-    vi.mocked(tmux.sessionExists).mockReturnValue(true)
+  it('delegates liveness checks to tmux pane state', () => {
+    vi.mocked(tmux.isPaneAlive).mockReturnValue(true)
     expect(adapter.isRunning('test-session')).toBe(true)
-    expect(tmux.sessionExists).toHaveBeenCalledWith('test-session')
+    expect(tmux.isPaneAlive).toHaveBeenCalledWith('test-session')
 
-    vi.mocked(tmux.sessionExists).mockReturnValue(false)
+    vi.mocked(tmux.isPaneAlive).mockReturnValue(false)
     expect(adapter.isRunning('test-session')).toBe(false)
   })
 

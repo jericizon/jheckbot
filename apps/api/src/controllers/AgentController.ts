@@ -46,6 +46,7 @@ export class AgentController {
           conversationId,
           prompt: req.body.prompt,
           model: req.body.model,
+          bypass: req.body.bypass === true,
         })
         res.status(202).json(result)
         return
@@ -58,6 +59,7 @@ export class AgentController {
         prompt: req.body.prompt,
         devinSessionId: req.body.devinSessionId,
         model: req.body.model,
+        bypass: req.body.bypass === true,
       })
       await this.eventRepo.create({
         conversationId,
@@ -112,8 +114,22 @@ export class AgentController {
       buffer.push(event)
     })
 
-    // Replay persisted events in sequence order
-    const events = await this.eventRepo.findByConversation(conversationId, lastEventId)
+    // On first connect (no Last-Event-ID), only replay events from the
+    // current run — the most recent `starting` status onwards. This prevents
+    // replaying historical completed runs, which would cause the frontend to
+    // close the stream prematurely before the current run's events arrive.
+    // On reconnect (Last-Event-ID present), replay from where we left off.
+    let replayCursor = lastEventId
+    if (!replayCursor) {
+      const latestStart = await this.eventRepo.findLatestRunStart(conversationId)
+      if (latestStart !== null) {
+        // Use the sequence BEFORE the starting event so the starting event
+        // itself is included in the replay.
+        replayCursor = String(Number(latestStart) - 1)
+      }
+    }
+
+    const events = await this.eventRepo.findByConversation(conversationId, replayCursor)
     let watermark = 0
     for (const event of events) {
       this.writeSseEvent(res, event)

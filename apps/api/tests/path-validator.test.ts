@@ -14,6 +14,11 @@ describe('PathValidator', () => {
   beforeEach(() => {
     mkdirSync(join(TMP, 'valid-project'), { recursive: true })
     writeFileSync(join(TMP, 'valid-project', 'package.json'), '{}')
+    // Create a git repo for relative resolution tests
+    mkdirSync(join(TMP, 'git-project'), { recursive: true })
+    mkdirSync(join(TMP, 'git-project', '.git'), { recursive: true })
+    // Non-git directory
+    mkdirSync(join(TMP, 'no-git'), { recursive: true })
   })
 
   afterEach(() => {
@@ -81,5 +86,87 @@ describe('PathValidator', () => {
     ])
     const result = validator.validate(join(TMP, 'valid-project'))
     expect(result.valid).toBe(false)
+  })
+
+  describe('resolveRelative', () => {
+    it('resolves a relative path with leading slash against an allowed root', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('/git-project')
+      expect(result.valid).toBe(true)
+      expect(result.resolvedPath).toBe(join(TMP, 'git-project'))
+    })
+
+    it('resolves a relative path without leading slash', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('git-project')
+      expect(result.valid).toBe(true)
+      expect(result.resolvedPath).toBe(join(TMP, 'git-project'))
+    })
+
+    it('resolves a nested relative path', () => {
+      mkdirSync(join(TMP, 'nested', 'deep-project', '.git'), { recursive: true })
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('/nested/deep-project')
+      expect(result.valid).toBe(true)
+      expect(result.resolvedPath).toBe(join(TMP, 'nested', 'deep-project'))
+    })
+
+    it('rejects a relative path when the directory has no .git folder', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('/no-git')
+      expect(result.valid).toBe(false)
+      expect(result.error).toContain('not a git repository')
+    })
+
+    it('rejects a relative path that does not exist under any root', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('does-not-exist')
+      expect(result.valid).toBe(false)
+      expect(result.error).toContain('not found under any allowed root')
+    })
+
+    it('falls back to validate() for absolute paths', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative(join(TMP, 'git-project'))
+      expect(result.valid).toBe(true)
+      expect(result.resolvedPath).toBe(join(TMP, 'git-project'))
+    })
+
+    it('rejects an absolute path under root WITHOUT .git', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative(join(TMP, 'no-git'))
+      expect(result.valid).toBe(false)
+      expect(result.error).toContain('not a git repository')
+    })
+
+    it('accepts an absolute path under root WITH .git', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative(join(TMP, 'git-project'))
+      expect(result.valid).toBe(true)
+      expect(result.resolvedPath).toBe(join(TMP, 'git-project'))
+    })
+
+    it('accepts a worktree .git file (not a directory)', () => {
+      mkdirSync(join(TMP, 'worktree-project'), { recursive: true })
+      // A git worktree stores a .git *file* pointing to the parent repo, not a directory.
+      writeFileSync(join(TMP, 'worktree-project', '.git'), 'gitdir: /tmp/jheckbot-test-paths/git-project/.git/worktrees/wt')
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('/worktree-project')
+      expect(result.valid).toBe(true)
+      expect(result.resolvedPath).toBe(join(TMP, 'worktree-project'))
+    })
+
+    it('rejects an empty path', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('')
+      expect(result.valid).toBe(false)
+      expect(result.error).toBe('Path is required')
+    })
+
+    it('rejects path traversal with ..', () => {
+      const validator = new PathValidator(allowedRoots)
+      const result = validator.resolveRelative('../../../etc')
+      expect(result.valid).toBe(false)
+    })
   })
 })

@@ -40,6 +40,7 @@ describe('PromptExecutionService', () => {
     vi.spyOn(pool, 'connect').mockResolvedValue(client as never)
 
     mkdirSync(join(TMP, 'test-project'), { recursive: true })
+    mkdirSync(join(TMP, 'test-project', '.git'), { recursive: true })
 
     mockProject = {
       id: 'proj-1',
@@ -123,6 +124,7 @@ describe('PromptExecutionService', () => {
         rollback: preparedRollback,
       }),
       isConversationActive: vi.fn().mockReturnValue(false),
+      reconcileStaleLock: vi.fn().mockResolvedValue(undefined),
     } as unknown as AgentManager
 
     service = new PromptExecutionService(

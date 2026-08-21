@@ -34,7 +34,7 @@ The feature is successful when a three-turn conversation can be completed with:
 
 ## Approved architecture
 
-Use the literal MVP runner now that `/usr/bin/tmux` is installed:
+Use the literal MVP runner now that tmux is installed:
 
 ```text
 Browser

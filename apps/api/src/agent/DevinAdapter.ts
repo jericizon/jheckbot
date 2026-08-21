@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { TmuxManager, type TmuxSession } from './TmuxManager.js'
 
 export interface DevinSessionInfo {
@@ -17,6 +18,7 @@ export interface StartDevinOptions {
   devinSessionId?: string
   model?: string
   env?: Record<string, string>
+  bypass?: boolean
 }
 
 /**
@@ -28,18 +30,22 @@ export class DevinAdapter {
   private readonly devinBin: string
   private readonly tmux: TmuxManager
 
-  constructor(devinBin: string)
-  constructor(devinBin: string, tmux: TmuxManager)
-  constructor(devinBin: string, tmux?: TmuxManager) {
+  constructor(devinBin: string, tmux: TmuxManager) {
     this.devinBin = devinBin
-    // The one-argument overload keeps existing callers source-compatible while
-    // still using the configured host tmux boundary when no dependency is injected.
-    this.tmux = tmux ?? new TmuxManager(process.env.TMUX_BIN ?? '/usr/bin/tmux')
+    this.tmux = tmux
   }
 
-  /** Verify the Devin binary exists and is executable. */
+  /** Verify the Devin binary exists and is executable (absolute path or PATH lookup). */
   isAvailable(): boolean {
-    return existsSync(this.devinBin)
+    if (this.devinBin.includes('/')) {
+      return existsSync(this.devinBin)
+    }
+    try {
+      execFileSync('which', [this.devinBin], { stdio: 'pipe' })
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** Start an interactive Devin session inside a detached tmux session. */
@@ -92,9 +98,9 @@ export class DevinAdapter {
     return this.tmux.captureOutput(sessionName, startLine)
   }
 
-  /** Check if a session is still alive. */
+  /** Check if the Devin process is still running (not just the tmux session). */
   isRunning(sessionName: string): boolean {
-    return this.tmux.sessionExists(sessionName)
+    return this.tmux.isPaneAlive(sessionName)
   }
 
   /** List host sessions for manager startup reconciliation. */
@@ -125,6 +131,15 @@ export class DevinAdapter {
     const args = [this.devinBin]
     if (opts.model) args.push('--model', opts.model)
     if (opts.devinSessionId) args.push('--resume', opts.devinSessionId)
+    // --print: non-interactive mode, Devin processes the prompt and exits so
+    // the watcher can detect the dead tmux session and transition the run.
+    // --respect-workspace-trust false: skip the interactive trust prompt in
+    // headless mode; paths are already validated by PathValidator.
+    args.push('--print', '--respect-workspace-trust', 'false')
+    // --permission-mode dangerous: auto-approve all tools, no interactive prompts.
+    if (opts.bypass) {
+      args.push('--permission-mode', 'dangerous')
+    }
     args.push('--', opts.prompt)
     return args.map((arg) => this.escapeShellArg(arg)).join(' ')
   }

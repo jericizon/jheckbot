@@ -23,6 +23,7 @@ describe('ProjectService', () => {
 
   beforeEach(() => {
     mkdirSync(join(TMP, 'test-project'), { recursive: true })
+    mkdirSync(join(TMP, 'test-project', '.git'), { recursive: true })
     writeFileSync(join(TMP, 'test-project', 'package.json'), '{}')
 
     mockProject = {

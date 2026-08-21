@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-jheckbot}
       POSTGRES_USER: ${POSTGRES_USER:-jheckbot}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-locally}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - jheckbot_pgdata:/var/lib/postgresql/data
     healthcheck:

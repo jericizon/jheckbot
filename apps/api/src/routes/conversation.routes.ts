@@ -36,7 +36,6 @@ export function createConversationRouter(
   router.get('/:id/agent', (req, res) => agentController.getStatus(req, res))
   router.post('/:id/agent/start', (req, res) => agentController.start(req, res))
   router.post('/:id/agent/stop', (req, res) => agentController.stop(req, res))
-  router.post('/:id/agent/prompt', (req, res) => agentController.sendPrompt(req, res))
   router.get('/:id/events', (req, res) => agentController.streamEvents(req, res))
 
   return router

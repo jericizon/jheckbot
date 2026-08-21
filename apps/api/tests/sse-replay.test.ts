@@ -64,6 +64,7 @@ describe('AgentController.streamEvents (SSE)', () => {
 
     eventRepo = {
       findByConversation: vi.fn().mockResolvedValue([]),
+      findLatestRunStart: vi.fn().mockResolvedValue(null),
       create: vi.fn(),
     } as unknown as AgentEventRepository
 
@@ -77,6 +78,8 @@ describe('AgentController.streamEvents (SSE)', () => {
     const { req, res } = mockReqRes('4')
     await controller.streamEvents(req, res)
 
+    // With Last-Event-ID present, findLatestRunStart is not called
+    expect(eventRepo.findLatestRunStart).not.toHaveBeenCalled()
     expect(eventRepo.findByConversation).toHaveBeenCalledWith(
       '00000000-0000-0000-0000-000000000001',
       '4',
@@ -84,6 +87,50 @@ describe('AgentController.streamEvents (SSE)', () => {
     // Replay events written in sequence order
     expect(res.written.join('')).toContain('id: 5')
     expect(res.written.join('')).toContain('id: 6')
+  })
+
+  it('on first connect, only replays events from the latest starting status', async () => {
+    // Simulate: run 1 (seq 1-3) completed, run 2 (seq 4+) is current
+    vi.mocked(eventRepo.findLatestRunStart).mockResolvedValue('4')
+    const replayEvents = [
+      makeEvent(4, 'status', '{"status":"starting"}'),
+      makeEvent(5, 'output', '{"content":"current run output"}'),
+    ]
+    vi.mocked(eventRepo.findByConversation).mockResolvedValue(replayEvents)
+
+    const { req, res } = mockReqRes() // no Last-Event-ID
+    await controller.streamEvents(req, res)
+
+    // findLatestRunStart was called
+    expect(eventRepo.findLatestRunStart).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000001')
+    // findByConversation was called with cursor = seq-1 = '3' so the starting event is included
+    expect(eventRepo.findByConversation).toHaveBeenCalledWith(
+      '00000000-0000-0000-0000-000000000001',
+      '3',
+    )
+    // Only current run events are replayed (seq 4 and 5), not historical (seq 1-3)
+    const output = res.written.join('')
+    expect(output).toContain('id: 4')
+    expect(output).toContain('id: 5')
+    expect(output).not.toContain('id: 1')
+    expect(output).not.toContain('id: 2')
+    expect(output).not.toContain('id: 3')
+  })
+
+  it('on first connect with no starting event, replays all events', async () => {
+    vi.mocked(eventRepo.findLatestRunStart).mockResolvedValue(null)
+    const replayEvents = [makeEvent(1, 'output', '{"content":"legacy"}')]
+    vi.mocked(eventRepo.findByConversation).mockResolvedValue(replayEvents)
+
+    const { req, res } = mockReqRes()
+    await controller.streamEvents(req, res)
+
+    // No cursor — findByConversation called with undefined
+    expect(eventRepo.findByConversation).toHaveBeenCalledWith(
+      '00000000-0000-0000-0000-000000000001',
+      undefined,
+    )
+    expect(res.written.join('')).toContain('id: 1')
   })
 
   it('does not create database rows from an SSE GET request', async () => {

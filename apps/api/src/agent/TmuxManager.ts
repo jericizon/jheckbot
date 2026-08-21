@@ -19,9 +19,17 @@ export class TmuxManager {
     this.tmuxBin = tmuxBin
   }
 
-  /** Verify tmux is installed and executable. */
+  /** Verify tmux is installed and executable (absolute path or PATH lookup). */
   isAvailable(): boolean {
-    return existsSync(this.tmuxBin)
+    if (this.tmuxBin.includes('/')) {
+      return existsSync(this.tmuxBin)
+    }
+    try {
+      execFileSync('which', [this.tmuxBin], { stdio: 'pipe' })
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** Create a new detached tmux session running a command. */
@@ -46,6 +54,10 @@ export class TmuxManager {
 
     createArgs.push('--', [...environmentAssignments, command].join(' '))
     execFileSync(this.tmuxBin, createArgs, { stdio: 'pipe' })
+
+    // Keep the session alive after the command exits so scrollback is
+    // preserved for the watcher to capture the final output.
+    this.setOption(name, 'remain-on-exit', 'on')
   }
 
   /** Kill a tmux session by name. */
@@ -71,6 +83,34 @@ export class TmuxManager {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Check if the pane's process is still running. With remain-on-exit,
+   * has-session returns true even after the process exits; this method
+   * checks the pane_dead flag to detect actual process termination.
+   */
+  isPaneAlive(name: string): boolean {
+    if (!this.sessionExists(name)) return false
+    try {
+      const output = execFileSync(
+        this.tmuxBin,
+        ['display-message', '-t', name, '-p', '#{pane_dead}'],
+        { stdio: 'pipe', encoding: 'utf-8' },
+      ).trim()
+      return output !== '1'
+    } catch {
+      return false
+    }
+  }
+
+  /** Set a tmux session option. */
+  setOption(name: string, option: string, value: string): void {
+    execFileSync(
+      this.tmuxBin,
+      ['set-option', '-t', name, option, value],
+      { stdio: 'pipe' },
+    )
   }
 
   /** Send keys (text input) to a session. */

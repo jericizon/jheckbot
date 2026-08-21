@@ -38,3 +38,6 @@ docker/data/
 # Temp
 tmp/
 temp/
+
+# Superpowers SDD artifacts (internal development tracking)
+.superpowers/sdd/

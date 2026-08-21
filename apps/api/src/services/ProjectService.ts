@@ -38,7 +38,7 @@ export class ProjectService {
 
     const roots = await this.repo.findAllowedRoots()
     const validator = this.pathValidatorFactory(roots)
-    const result = validator.validate(input.path)
+    const result = validator.resolveRelative(input.path)
     if (!result.valid || !result.resolvedPath) {
       throw new ProjectValidationError(result.error ?? 'Invalid path')
     }

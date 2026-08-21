@@ -1,4 +1,5 @@
-import { pool } from '../db/pool.js'
+import { resolve, sep } from 'node:path'
+import { pool, withTransaction } from '../db/pool.js'
 import type { AllowedRoot } from '../services/PathValidator.js'
 
 export interface ProjectRecord {
@@ -78,10 +79,54 @@ export class ProjectRepository {
     return (result.rowCount ?? 0) > 0
   }
 
+  // Cascades to conversations, messages, and agent_events via ON DELETE CASCADE
+  async deleteAll(): Promise<number> {
+    const result = await pool.query('DELETE FROM projects')
+    return result.rowCount ?? 0
+  }
+
   async findAllowedRoots(): Promise<AllowedRoot[]> {
     const { rows } = await pool.query<AllowedRoot>(
       'SELECT id, name, path, enabled FROM allowed_roots WHERE enabled = TRUE ORDER BY created_at',
     )
     return rows
+  }
+
+  /**
+   * Synchronize configured roots into the allowed_roots table idempotently.
+   * Configured roots are inserted or re-enabled; rows absent from the
+   * configured set are disabled (never deleted) so existing projects keep
+   * their foreign-key references intact.
+   */
+  async syncAllowedRoots(paths: string[]): Promise<void> {
+    // Canonicalize and deduplicate before persistence.
+    const seen = new Set<string>()
+    const canonical: string[] = []
+    for (const raw of paths) {
+      const resolved = resolve(raw)
+      if (seen.has(resolved)) continue
+      seen.add(resolved)
+      canonical.push(resolved)
+    }
+
+    await withTransaction(async (client) => {
+      for (const path of canonical) {
+        const name = path.split(sep).filter(Boolean).pop() ?? path
+        await client.query(
+          `INSERT INTO allowed_roots (name, path, enabled)
+           VALUES ($1, $2, TRUE)
+           ON CONFLICT (path) DO UPDATE SET enabled = TRUE, updated_at = NOW()`,
+          [name, path],
+        )
+      }
+
+      if (canonical.length > 0) {
+        await client.query(
+          `UPDATE allowed_roots SET enabled = FALSE, updated_at = NOW()
+           WHERE path <> ALL($1::text[])`,
+          [canonical],
+        )
+      }
+    })
   }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Kills any processes holding the JheckBot dev ports (8800, 8801)
-// so `pnpm dev` always starts cleanly without port conflicts.
+// Explicit opt-in utility: terminates processes holding the JheckBot dev ports
+// (8800, 8801) so a fresh `pnpm dev` can start without port conflicts.
+// This is NOT run automatically — invoke via `pnpm dev:clean` when needed.
 import { execSync } from 'node:child_process'
 
 const PORTS = [8800, 8801]
@@ -27,4 +28,4 @@ for (const port of PORTS) {
   }
 }
 
-console.log('Ports 8800 and 8801 are free.')
+console.log('JheckBot dev ports (8800, 8801) are free.')

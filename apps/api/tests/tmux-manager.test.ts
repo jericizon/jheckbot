@@ -25,9 +25,8 @@ describe('TmuxManager', () => {
     expect(tmux.isAvailable()).toBe(false)
   })
 
-  it('creates a session with correct args', () => {
+  it('creates a session with correct args and remain-on-exit', () => {
     vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
-      // has-session throws when session doesn't exist; new-session succeeds
       if (args.includes('has-session')) throw new Error('no session')
       return Buffer.from('')
     })
@@ -35,6 +34,11 @@ describe('TmuxManager', () => {
     expect(execFileSync).toHaveBeenCalledWith(
       '/usr/bin/tmux',
       ['new-session', '-d', '-s', 'test-session', '-c', '/tmp', '--', 'echo hello'],
+      { stdio: 'pipe' },
+    )
+    expect(execFileSync).toHaveBeenCalledWith(
+      '/usr/bin/tmux',
+      ['set-option', '-t', 'test-session', 'remain-on-exit', 'on'],
       { stdio: 'pipe' },
     )
   })
@@ -93,6 +97,31 @@ describe('TmuxManager', () => {
       throw new Error('can\'t find session')
     })
     expect(tmux.sessionExists('nonexistent')).toBe(false)
+  })
+
+  it('reports pane alive when pane_dead is 0', () => {
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('has-session')) return Buffer.from('')
+      if (args.includes('display-message')) return '0'
+      return Buffer.from('')
+    })
+    expect(tmux.isPaneAlive('test')).toBe(true)
+  })
+
+  it('reports pane dead when pane_dead is 1', () => {
+    vi.mocked(execFileSync).mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('has-session')) return Buffer.from('')
+      if (args.includes('display-message')) return '1'
+      return Buffer.from('')
+    })
+    expect(tmux.isPaneAlive('test')).toBe(false)
+  })
+
+  it('reports pane dead when session does not exist', () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('no session')
+    })
+    expect(tmux.isPaneAlive('nonexistent')).toBe(false)
   })
 
   it('sends keys to a session', () => {

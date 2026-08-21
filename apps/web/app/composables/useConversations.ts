@@ -71,8 +71,8 @@ export function useConversations() {
     archive: (id: string) => api.post<Conversation>(`/api/conversations/${id}/archive`),
     delete: (id: string) => api.delete<void>(`/api/conversations/${id}`),
     messages: (id: string) => api.get<Message[]>(`/api/conversations/${id}/messages`),
-    sendMessage: (id: string, content: string, model?: string) =>
-      api.post<SendMessageResponse>(`/api/conversations/${id}/messages`, { content, model }),
+    sendMessage: (id: string, content: string, model?: string, bypass?: boolean) =>
+      api.post<SendMessageResponse>(`/api/conversations/${id}/messages`, { content, model, bypass }),
     stopAgent: (id: string) => api.post(`/api/conversations/${id}/agent/stop`),
     agentStatus: (id: string) => api.get(`/api/conversations/${id}/agent`),
     search: (q: string) => api.get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),

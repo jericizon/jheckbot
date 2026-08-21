@@ -77,6 +77,29 @@ describe('AgentEventRepository', () => {
     expect(sql).toContain('ORDER BY event_sequence ASC')
     expect(params).toEqual(['conversation-1', '0'])
   })
+
+  it('finds the latest starting status event sequence', async () => {
+    const executor = fakeExecutor()
+    executor.query.mockResolvedValue({ rows: [{ event_sequence: '7' }] })
+    const repository = new AgentEventRepository()
+
+    await expect(repository.findLatestRunStart('conversation-1', executor as never)).resolves.toBe('7')
+
+    const [sql, params] = executor.query.mock.calls[0]
+    expect(sql).toContain("event_type = 'status'")
+    expect(sql).toContain('"status"\\s*:\\s*"starting"')
+    expect(sql).toContain('ORDER BY event_sequence DESC')
+    expect(sql).toContain('LIMIT 1')
+    expect(params).toEqual(['conversation-1'])
+  })
+
+  it('returns null when no starting event exists', async () => {
+    const executor = fakeExecutor()
+    executor.query.mockResolvedValue({ rows: [] })
+    const repository = new AgentEventRepository()
+
+    await expect(repository.findLatestRunStart('conversation-1', executor as never)).resolves.toBeNull()
+  })
 })
 
 describe('transaction-aware repositories', () => {

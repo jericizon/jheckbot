@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AgentManager, AgentManagerError } from '../src/agent/AgentManager.js'
 import { DevinAdapter } from '../src/agent/DevinAdapter.js'
+import { TmuxManager } from '../src/agent/TmuxManager.js'
 import { ProjectRepository, type ProjectRecord } from '../src/repositories/ProjectRepository.js'
 import { ConversationRepository, type ConversationRecord } from '../src/repositories/ConversationRepository.js'
 import { MessageRepository } from '../src/repositories/MessageRepository.js'
@@ -27,6 +28,7 @@ describe('AgentManager', () => {
 
   beforeEach(() => {
     mkdirSync(join(TMP, 'test-project'), { recursive: true })
+    mkdirSync(join(TMP, 'test-project', '.git'), { recursive: true })
     writeFileSync(join(TMP, 'test-project', 'package.json'), '{}')
 
     mockProject = {
@@ -77,7 +79,7 @@ describe('AgentManager', () => {
       } satisfies AgentEventRecord)),
     } as unknown as AgentEventRepository
 
-    devin = new DevinAdapter('/home/jeric/.local/bin/devin')
+    devin = new DevinAdapter('devin', new TmuxManager('tmux'))
 
     vi.spyOn(devin, 'isAvailable').mockReturnValue(true)
     vi.spyOn(devin, 'start').mockReturnValue({
@@ -92,6 +94,7 @@ describe('AgentManager', () => {
     vi.spyOn(devin, 'getExitCode').mockReturnValue(null)
     vi.spyOn(devin, 'captureOutput').mockReturnValue([])
     vi.spyOn(devin, 'listSessions').mockReturnValue([])
+    vi.spyOn(devin, 'forceKill').mockImplementation(() => {})
 
     const factory = (roots: AllowedRoot[]) => new PathValidator(roots)
     manager = new AgentManager(devin, repo, factory, conversationRepo, messageRepo, eventRepo)
@@ -138,6 +141,30 @@ describe('AgentManager', () => {
     // The previous run was finalized, not left as a zombie
     expect(first.status).toBe('completed')
     expect(first.endedAt).toBeDefined()
+  })
+
+  it('reconcileStaleLock clears a stale lock when the pane is dead', async () => {
+    await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'Q1' })
+    expect(manager.isConversationActive('conv-1')).toBe(true)
+
+    // Devin finishes and the pane dies — but the lock wasn't cleaned up
+    vi.mocked(devin.isRunning).mockReturnValue(false)
+
+    await manager.reconcileStaleLock('conv-1')
+    expect(manager.isConversationActive('conv-1')).toBe(false)
+    expect(conversationRepo.updateAgentStatus).toHaveBeenCalledWith('conv-1', 'idle')
+  })
+
+  it('reconcileStaleLock does nothing when no lock exists', async () => {
+    await manager.reconcileStaleLock('conv-with-no-lock')
+    expect(manager.isConversationActive('conv-with-no-lock')).toBe(false)
+  })
+
+  it('reconcileStaleLock keeps the lock when the pane is alive', async () => {
+    await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'Q1' })
+    // isRunning stays true (default mock)
+    await manager.reconcileStaleLock('conv-1')
+    expect(manager.isConversationActive('conv-1')).toBe(true)
   })
 
   it('syncRunState finalizes a run when the child process exits', async () => {
@@ -372,11 +399,14 @@ describe('AgentManager', () => {
       await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'flush this' })
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(eventRepo.create).toHaveBeenCalledOnce()
-      expect(eventRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      // Both an output event and a log event are flushed on each capture
+      const calls = vi.mocked(eventRepo.create).mock.calls
+      const outputCall = calls.find((c) => c[0].eventType === 'output')
+      expect(outputCall).toBeDefined()
+      expect(outputCall![0]).toMatchObject({
         eventType: 'output',
         content: JSON.stringify({ content: 'x'.repeat(4096) }),
-      }))
+      })
     } finally {
       vi.useRealTimers()
     }
@@ -484,9 +514,12 @@ describe('AgentManager', () => {
       alive = false
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(received).toHaveLength(2)
-      expect(received.map((event) => event.event_type)).toEqual(['output', 'status'])
-      expect(eventRepo.create).toHaveBeenCalledTimes(2)
+      // output + log (during run) + log (final flush) + status (terminal)
+      const types = received.map((event) => event.event_type)
+      expect(types).toContain('output')
+      expect(types).toContain('status')
+      expect(types.filter((t) => t === 'status')).toHaveLength(1)
+      expect(types.filter((t) => t === 'output')).toHaveLength(1)
     } finally {
       vi.useRealTimers()
     }

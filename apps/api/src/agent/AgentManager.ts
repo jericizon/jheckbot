@@ -30,6 +30,7 @@ export interface StartAgentOptions {
   prompt: string
   devinSessionId?: string
   model?: string
+  bypass?: boolean
 }
 
 export interface PrepareRunOptions {
@@ -41,6 +42,7 @@ export interface PrepareRunOptions {
   devinSessionId?: string
   model?: string
   userMessageId?: string
+  bypass?: boolean
 }
 
 export type AgentStreamEvent = AgentEventRecord
@@ -53,6 +55,8 @@ type WatcherHandle = ReturnType<typeof setInterval>
 interface ManagedAgentRun {
   run: AgentRun
   pendingOutput: string[]
+  pendingLog: string[]
+  lastLogSnapshot: string
   watcher?: WatcherHandle
   watcherInFlight?: Promise<void>
   terminalPersistence?: Promise<void>
@@ -204,6 +208,7 @@ export class AgentManager {
         prompt: options.prompt,
         devinSessionId: options.devinSessionId,
         model: options.model || DEFAULT_DEVIN_MODEL,
+        bypass: options.bypass,
       })
     } catch (error) {
       // A failed create is not assumed to have created a session. Killing here
@@ -252,7 +257,7 @@ export class AgentManager {
 
     const roots = await this.repo.findAllowedRoots()
     const validator = this.pathValidatorFactory(roots)
-    const pathResult = validator.validate(project.path)
+    const pathResult = validator.resolveRelative(project.path)
     if (!pathResult.valid || !pathResult.resolvedPath) {
       throw new AgentManagerError(`Project path invalid: ${pathResult.error}`, 400)
     }
@@ -278,6 +283,7 @@ export class AgentManager {
         prompt: opts.prompt,
         devinSessionId: resumeSessionId,
         model: opts.model || DEFAULT_DEVIN_MODEL,
+        bypass: opts.bypass,
       })
       const run = prepared.commit()
       try {
@@ -357,6 +363,36 @@ export class AgentManager {
 
   isConversationActive(conversationId: string): boolean {
     return this.conversationLocks.has(conversationId)
+  }
+
+  /**
+   * Reconcile a stale in-memory lock for a conversation. If the lock exists
+   * but the underlying tmux session is gone (or the pane is dead), clear the
+   * lock so a new run can start. This handles the case where a previous run's
+   * watcher failed to clean up (e.g. API restart mid-run).
+   */
+  async reconcileStaleLock(conversationId: string): Promise<void> {
+    if (!this.conversationLocks.has(conversationId)) return
+
+    const state = this.runs.get(conversationId)
+    if (state && this.isActiveStatus(state.run.status)) {
+      let alive = false
+      try {
+        alive = this.devin.isRunning(state.run.sessionName)
+      } catch {
+        alive = false
+      }
+      if (alive) return
+
+      // The pane is dead but the lock persists — finalize the run.
+      if (state.watcherInFlight) await state.watcherInFlight
+      await this.finishRun(state, 'completed', undefined, true)
+      return
+    }
+
+    // Lock exists with no active run state — clear it.
+    this.conversationLocks.delete(conversationId)
+    await this.conversationRepo?.updateAgentStatus(conversationId, 'idle')
   }
 
   listActiveRuns(): AgentRun[] {
@@ -448,6 +484,28 @@ export class AgentManager {
         continue
       }
 
+      // With remain-on-exit the tmux session outlives the Devin process.
+      // A dead pane means the run finished before the API restarted; capture
+      // its final output and finalize instead of recovering as running.
+      if (!this.devin.isRunning(session.name)) {
+        const normalizedSnapshot = this.captureNormalizedSnapshot(session.name)
+        const run: AgentRun = {
+          conversationId: conversation.id,
+          projectSlug,
+          sessionName: session.name,
+          status: 'running',
+          devinSessionId: conversation.agent_session_id ?? undefined,
+          startedAt: this.sessionStartedAt(session, conversation),
+          outputBuffer: normalizedSnapshot.join('\n'),
+          normalizedSnapshot,
+        }
+        const state = this.createManagedRun(run)
+        this.runs.set(conversation.id, state)
+        this.conversationLocks.add(conversation.id)
+        await this.finishRun(state, 'completed', undefined, true)
+        continue
+      }
+
       const normalizedSnapshot = this.captureNormalizedSnapshot(session.name)
       const run: AgentRun = {
         conversationId: conversation.id,
@@ -520,6 +578,8 @@ export class AgentManager {
     return {
       run,
       pendingOutput: [],
+      pendingLog: [],
+      lastLogSnapshot: '',
       terminalizing: false,
       stopRequested: false,
       lastFlushAt: Date.now(),
@@ -607,6 +667,7 @@ export class AgentManager {
     if (alive) {
       if (!captureError && this.shouldFlush(state)) {
         await this.flushOutput(state)
+        await this.flushLog(state)
       }
       return
     }
@@ -660,6 +721,12 @@ export class AgentManager {
       } catch {
         // The terminal status and history still need to be attempted even if
         // one last live output event could not be written.
+      }
+
+      try {
+        await this.flushLog(state, true)
+      } catch {
+        // Log flush is best-effort during terminal transition.
       }
 
       try {
@@ -722,6 +789,13 @@ export class AgentManager {
         )
       } finally {
         this.conversationLocks.delete(state.run.conversationId)
+        // With remain-on-exit the tmux session outlives the Devin process;
+        // kill it now that the final output has been captured.
+        try {
+          this.devin.forceKill(state.run.sessionName)
+        } catch {
+          // Best-effort cleanup; session may already be gone.
+        }
       }
     }
   }
@@ -747,6 +821,23 @@ export class AgentManager {
     if (event) this.publish(event)
   }
 
+  private async flushLog(state: ManagedAgentRun, force = false): Promise<void> {
+    if (state.pendingLog.length === 0) return
+    if (!this.eventRepo) {
+      state.pendingLog = []
+      return
+    }
+
+    const content = state.pendingLog.join('\n')
+    const event = await this.eventRepo.create({
+      conversationId: state.run.conversationId,
+      eventType: 'log',
+      content: JSON.stringify({ content }),
+    })
+    state.pendingLog = []
+    if (event) this.publish(event)
+  }
+
   private shouldFlush(state: ManagedAgentRun): boolean {
     const buffered = state.pendingOutput.join('\n')
     return (
@@ -758,14 +849,23 @@ export class AgentManager {
   private captureAndAppend(state: ManagedAgentRun): void {
     const captured = this.devin.captureOutput(state.run.sessionName)
     const normalized = this.normalizer.normalize(captured)
-    const delta = this.normalizer.delta(state.run.normalizedSnapshot, normalized)
+    const newOutput = normalized.join('\n')
     state.run.normalizedSnapshot = normalized
 
-    if (delta.length === 0) return
-    state.run.outputBuffer = state.run.outputBuffer
-      ? `${state.run.outputBuffer}\n${delta.join('\n')}`
-      : delta.join('\n')
-    state.pendingOutput.push(...delta)
+    if (newOutput !== state.run.outputBuffer) {
+      state.run.outputBuffer = newOutput
+      state.pendingOutput = [newOutput]
+    }
+
+    // Capture raw ANSI-stripped terminal output for the activity log.
+    // This includes progress indicators, commands, and status lines that
+    // the normalizer filters out.
+    const rawLines = this.normalizer.stripAnsi(captured)
+    const rawSnapshot = rawLines.join('\n')
+    if (rawSnapshot && rawSnapshot !== state.lastLogSnapshot) {
+      state.lastLogSnapshot = rawSnapshot
+      state.pendingLog = [rawSnapshot]
+    }
   }
 
   private captureNormalizedSnapshot(sessionName: string): string[] {

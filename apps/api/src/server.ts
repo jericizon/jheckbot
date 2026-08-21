@@ -2,6 +2,7 @@ import { createApp } from './app.js'
 import { env } from './config/env.js'
 import { runMigrations } from './db/migrate.js'
 import { closePool } from './db/pool.js'
+import { ProjectRepository } from './repositories/ProjectRepository.js'
 import { UserRepository } from './repositories/UserRepository.js'
 import { AuthService } from './services/AuthService.js'
 import type { AgentManager } from './agent/AgentManager.js'
@@ -12,6 +13,17 @@ async function main() {
     console.log('Database migrations complete')
   } catch (err) {
     console.error('Migration failed:', err)
+    process.exit(1)
+  }
+
+  // Synchronize configured allowed roots before any project validation runs.
+  try {
+    const projectRepo = new ProjectRepository()
+    await projectRepo.syncAllowedRoots(env.allowedRoots)
+    console.log('Allowed roots synchronized')
+  } catch (err) {
+    console.error('Allowed root synchronization failed:', err)
+    await closePool()
     process.exit(1)
   }
 

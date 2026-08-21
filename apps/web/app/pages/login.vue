@@ -1,15 +1,15 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-900 px-4">
-    <div class="w-full max-w-sm">
-      <h1 class="text-2xl font-bold text-white text-center mb-8">JheckBot</h1>
+  <div class="min-h-[100dvh] flex items-center justify-center bg-surface px-4">
+    <div class="w-full max-w-sm animate-fade-in">
+      <h1 class="text-2xl font-bold text-content text-center mb-8">JheckBot</h1>
       <form @submit.prevent="handleLogin" class="space-y-4">
         <div>
           <input
             v-model="username"
             type="text"
             placeholder="Username"
-            class="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
             autocomplete="username"
+            class="w-full rounded-lg border border-border bg-surface-elevated px-4 py-3 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
           />
         </div>
         <div>
@@ -17,15 +17,15 @@
             v-model="password"
             type="password"
             placeholder="Password"
-            class="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
             autocomplete="current-password"
+            class="w-full rounded-lg border border-border bg-surface-elevated px-4 py-3 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
           />
         </div>
-        <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
+        <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
         <button
           type="submit"
           :disabled="loading"
-          class="w-full rounded-lg bg-indigo-600 px-4 py-3 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          class="w-full rounded-lg bg-content text-surface px-4 py-3 text-sm font-medium hover:opacity-80 disabled:opacity-50 transition-opacity active:scale-[0.98]"
         >
           {{ loading ? 'Signing in...' : 'Sign In' }}
         </button>

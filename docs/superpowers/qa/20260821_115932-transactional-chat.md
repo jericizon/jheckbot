@@ -12,7 +12,7 @@ Full verification of the transactional chat MVP (Tasks 1-8) for JheckBot.
 | Node | v24.12.0 |
 | pnpm | 11.1.1 |
 | tmux | 3.4 |
-| Devin CLI | `/home/jeric/.local/bin/devin` |
+| Devin CLI | configured via `DEVIN_BIN` |
 | Database | PostgreSQL (configured via `.env`) |
 
 ## Automated verification

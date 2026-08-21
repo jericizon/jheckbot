@@ -34,5 +34,6 @@ export function useProjects() {
     delete: (id: string) => api.delete<void>(`/api/projects/${id}`),
     validate: (id: string) => api.post<{ valid: boolean; resolvedPath: string; error: string | null }>(`/api/projects/${id}/validate`),
     health: (id: string) => api.post<HealthResult>(`/api/projects/${id}/health`),
+    clearAllData: () => api.delete<{ stoppedAgents: number; deletedProjects: number }>('/api/data', { confirm: 'DELETE EVERYTHING' }),
   }
 }

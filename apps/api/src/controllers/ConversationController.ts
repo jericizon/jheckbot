@@ -140,6 +140,7 @@ export class ConversationController {
           conversationId: id,
           prompt: req.body.content,
           model: req.body.model,
+          bypass: req.body.bypass === true,
         })
         res.status(202).json(result)
         return
