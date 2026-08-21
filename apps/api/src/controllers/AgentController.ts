@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import { isValidUuid } from '@jheckbot/shared'
 import { AgentManager, AgentManagerError } from '../agent/AgentManager.js'
 import { AgentEventRepository } from '../repositories/AgentEventRepository.js'
+import { PromptExecutionService, PromptExecutionError } from '../services/PromptExecutionService.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
@@ -21,6 +22,7 @@ export class AgentController {
   constructor(
     private agentManager: AgentManager,
     private eventRepo: AgentEventRepository,
+    private promptExecutionService?: PromptExecutionService,
   ) {}
 
   async getStatus(req: Request, res: Response): Promise<void> {
@@ -38,6 +40,18 @@ export class AgentController {
     const conversationId = validateIdParam(req, res)
     if (!conversationId) return
     try {
+      // Delegate to the atomic prompt service when available
+      if (this.promptExecutionService) {
+        const result = await this.promptExecutionService.send({
+          conversationId,
+          prompt: req.body.prompt,
+          model: req.body.model,
+        })
+        res.status(202).json(result)
+        return
+      }
+
+      // Legacy compatibility path
       const run = await this.agentManager.start({
         conversationId,
         projectId: req.body.projectId,
@@ -45,7 +59,6 @@ export class AgentController {
         devinSessionId: req.body.devinSessionId,
         model: req.body.model,
       })
-      // Persist status event
       await this.eventRepo.create({
         conversationId,
         eventType: 'status',
@@ -54,6 +67,10 @@ export class AgentController {
       res.status(202).json(run)
     } catch (err) {
       if (err instanceof AgentManagerError) {
+        res.status(err.statusCode).json({ error: err.message })
+        return
+      }
+      if (err instanceof PromptExecutionError) {
         res.status(err.statusCode).json({ error: err.message })
         return
       }
@@ -75,22 +92,6 @@ export class AgentController {
       content: JSON.stringify({ status: 'stopped' }),
     })
     res.json(run)
-  }
-
-  /** Send a follow-up prompt to a running agent session. */
-  async sendPrompt(req: Request, res: Response): Promise<void> {
-    const conversationId = validateIdParam(req, res)
-    if (!conversationId) return
-    try {
-      this.agentManager.sendPrompt(conversationId, req.body.prompt)
-      res.status(202).json({ ok: true })
-    } catch (err) {
-      if (err instanceof AgentManagerError) {
-        res.status(err.statusCode).json({ error: err.message })
-        return
-      }
-      throw err
-    }
   }
 
   /** SSE endpoint for streaming agent output. */
@@ -119,7 +120,8 @@ export class AgentController {
     if (run && (run.status === 'running' || run.status === 'starting')) {
       let lastLineCount = 0
       const interval = setInterval(async () => {
-        const currentRun = this.agentManager.getStatus(conversationId)
+        // Detect natural completion (child process exited) before reading status
+        const currentRun = this.agentManager.syncRunState(conversationId)
         if (!currentRun || currentRun.status === 'completed' || currentRun.status === 'failed' || currentRun.status === 'stopped') {
           clearInterval(interval)
           res.write(`event: status\ndata: ${JSON.stringify({ status: currentRun?.status ?? 'unknown' })}\n\n`)

@@ -5,6 +5,11 @@ import {
   ConversationValidationError,
 } from '../services/ConversationService.js'
 import { MessageService } from '../services/MessageService.js'
+import {
+  PromptExecutionService,
+  PromptExecutionError,
+} from '../services/PromptExecutionService.js'
+import { AgentManagerError } from '../agent/AgentManager.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
@@ -24,6 +29,7 @@ export class ConversationController {
   constructor(
     private conversationService: ConversationService,
     private messageService: MessageService,
+    private promptExecutionService?: PromptExecutionService,
   ) {}
 
   async listByProject(req: Request, res: Response): Promise<void> {
@@ -124,9 +130,34 @@ export class ConversationController {
   }
 
   async createMessage(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res, 'id')
+    if (!id) return
+
+    // Atomic prompt path: one request persists the user message and starts the agent
+    if (this.promptExecutionService) {
+      try {
+        const result = await this.promptExecutionService.send({
+          conversationId: id,
+          prompt: req.body.content,
+          model: req.body.model,
+        })
+        res.status(202).json(result)
+        return
+      } catch (err) {
+        if (err instanceof PromptExecutionError) {
+          res.status(err.statusCode).json({ error: err.message })
+          return
+        }
+        if (err instanceof AgentManagerError) {
+          res.status(err.statusCode).json({ error: err.message })
+          return
+        }
+        throw err
+      }
+    }
+
+    // Legacy path for callers without the atomic service
     try {
-      const id = validateIdParam(req, res, 'id')
-      if (!id) return
       const message = await this.messageService.create({
         conversationId: id,
         role: req.body.role,

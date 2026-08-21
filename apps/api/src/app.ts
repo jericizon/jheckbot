@@ -15,6 +15,7 @@ import { ProjectService } from './services/ProjectService.js'
 import { ProjectHealthService } from './services/ProjectHealthService.js'
 import { ConversationService } from './services/ConversationService.js'
 import { MessageService } from './services/MessageService.js'
+import { PromptExecutionService } from './services/PromptExecutionService.js'
 import { AuthService } from './services/AuthService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
@@ -68,7 +69,6 @@ export function createApp(): express.Express {
   const authService = new AuthService(userRepo)
 
   const projectController = new ProjectController(projectService, healthService)
-  const conversationController = new ConversationController(conversationService, messageService)
 
   const tmux = new TmuxManager(env.tmuxBin)
   const devin = new DevinAdapter(env.devinBin, tmux)
@@ -83,7 +83,21 @@ export function createApp(): express.Express {
   )
   // The server performs startup recovery before it begins listening.
   app.locals.agentManager = agentManager
-  const agentController = new AgentController(agentManager, eventRepo)
+
+  const promptExecutionService = new PromptExecutionService(
+    agentManager,
+    conversationRepo,
+    repo,
+    messageRepo,
+    eventRepo,
+    pathValidatorFactory,
+  )
+  const conversationController = new ConversationController(
+    conversationService,
+    messageService,
+    promptExecutionService,
+  )
+  const agentController = new AgentController(agentManager, eventRepo, promptExecutionService)
 
   const authMiddleware = createAuthMiddleware(authService)
   const authController = new AuthController(authService, authMiddleware)
@@ -94,7 +108,7 @@ export function createApp(): express.Express {
       status: 'ok',
       services: {
         database: 'unknown',
-        tmux: existsSync(env.tmuxBin) ? 'available' : 'missing',
+        tmux: 'unknown',
         devin: existsSync(env.devinBin) ? 'available' : 'missing',
       },
       timestamp: new Date().toISOString(),
