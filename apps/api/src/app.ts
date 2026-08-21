@@ -28,6 +28,7 @@ import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimit
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { TmuxManager } from './agent/TmuxManager.js'
 import { DevinAdapter } from './agent/DevinAdapter.js'
+import { pool } from './db/pool.js'
 import { AgentManager } from './agent/AgentManager.js'
 import { AgentController } from './controllers/AgentController.js'
 import { env } from './config/env.js'
@@ -103,12 +104,21 @@ export function createApp(): express.Express {
   const authController = new AuthController(authService, authMiddleware)
 
   // Health (no auth required)
-  app.get('/health', (_req, res) => {
+  app.get('/health', async (_req, res) => {
+    let dbStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown'
+    try {
+      await pool.query('SELECT 1')
+      dbStatus = 'connected'
+    } catch {
+      dbStatus = 'disconnected'
+    }
+
+    const allOk = dbStatus === 'connected' && tmux.isAvailable() && existsSync(env.devinBin)
     const status: HealthStatus = {
-      status: 'ok',
+      status: allOk ? 'ok' : 'degraded',
       services: {
-        database: 'unknown',
-        tmux: 'unknown',
+        database: dbStatus,
+        tmux: tmux.isAvailable() ? 'available' : 'missing',
         devin: existsSync(env.devinBin) ? 'available' : 'missing',
       },
       timestamp: new Date().toISOString(),

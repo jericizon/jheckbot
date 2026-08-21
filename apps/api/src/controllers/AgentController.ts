@@ -86,11 +86,7 @@ export class AgentController {
       res.status(404).json({ error: 'No agent run for this conversation' })
       return
     }
-    await this.eventRepo.create({
-      conversationId,
-      eventType: 'status',
-      content: JSON.stringify({ status: 'stopped' }),
-    })
+    // The manager's finishRun already persists the terminal status event.
     res.json(run)
   }
 
@@ -155,7 +151,8 @@ export class AgentController {
           if (seq > watermark) watermark = seq
           // Close on terminal status
           if (event.event_type === 'status') {
-            const content = event.content ? JSON.parse(event.content) : {}
+            let content: { status?: string } = {}
+            try { content = event.content ? JSON.parse(event.content) : {} } catch { /* malformed */ }
             if (content.status === 'completed' || content.status === 'failed' || content.status === 'stopped') {
               closed = true
               unsubscribe()
