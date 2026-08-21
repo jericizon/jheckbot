@@ -1,4 +1,4 @@
-import { pool } from '../db/pool.js'
+import { pool, type DbExecutor } from '../db/pool.js'
 
 export interface ConversationRecord {
   id: string
@@ -22,27 +22,44 @@ export interface SearchResult {
 }
 
 export class ConversationRepository {
-  async findByProject(projectId: string): Promise<ConversationRecord[]> {
-    const { rows } = await pool.query<ConversationRecord>(
+  async findByProject(
+    projectId: string,
+    executor: DbExecutor = pool,
+  ): Promise<ConversationRecord[]> {
+    const { rows } = await executor.query<ConversationRecord>(
       `SELECT * FROM conversations WHERE project_id = $1 ORDER BY last_message_at DESC NULLS LAST, created_at DESC`,
       [projectId],
     )
     return rows
   }
 
-  async findById(id: string): Promise<ConversationRecord | null> {
-    const { rows } = await pool.query<ConversationRecord>(
+  async findById(id: string, executor: DbExecutor = pool): Promise<ConversationRecord | null> {
+    const { rows } = await executor.query<ConversationRecord>(
       'SELECT * FROM conversations WHERE id = $1',
       [id],
     )
     return rows[0] ?? null
   }
 
-  async create(data: {
-    projectId: string
-    title?: string
-  }): Promise<ConversationRecord> {
-    const { rows } = await pool.query<ConversationRecord>(
+  async findByIdForUpdate(
+    id: string,
+    executor: DbExecutor = pool,
+  ): Promise<ConversationRecord | null> {
+    const { rows } = await executor.query<ConversationRecord>(
+      'SELECT * FROM conversations WHERE id = $1 FOR UPDATE',
+      [id],
+    )
+    return rows[0] ?? null
+  }
+
+  async create(
+    data: {
+      projectId: string
+      title?: string
+    },
+    executor: DbExecutor = pool,
+  ): Promise<ConversationRecord> {
+    const { rows } = await executor.query<ConversationRecord>(
       `INSERT INTO conversations (project_id, title)
        VALUES ($1, $2)
        RETURNING *`,
@@ -54,11 +71,12 @@ export class ConversationRepository {
   async update(
     id: string,
     data: { title?: string; status?: string; agentSessionId?: string; agentStatus?: string },
+    executor: DbExecutor = pool,
   ): Promise<ConversationRecord | null> {
-    const existing = await this.findById(id)
+    const existing = await this.findById(id, executor)
     if (!existing) return null
 
-    const { rows } = await pool.query<ConversationRecord>(
+    const { rows } = await executor.query<ConversationRecord>(
       `UPDATE conversations
        SET title = $1, status = $2, agent_session_id = $3, agent_status = $4,
            updated_at = NOW()
@@ -75,27 +93,58 @@ export class ConversationRepository {
     return rows[0] ?? null
   }
 
-  async delete(id: string): Promise<boolean> {
-    const result = await pool.query('DELETE FROM conversations WHERE id = $1', [id])
+  async delete(id: string, executor: DbExecutor = pool): Promise<boolean> {
+    const result = await executor.query('DELETE FROM conversations WHERE id = $1', [id])
     return (result.rowCount ?? 0) > 0
   }
 
-  async touchLastMessage(id: string): Promise<void> {
-    await pool.query(
+  async touchLastMessage(id: string, executor: DbExecutor = pool): Promise<void> {
+    await executor.query(
       'UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1',
       [id],
     )
   }
 
-  async updateAgentStatus(id: string, agentStatus: string): Promise<void> {
-    await pool.query(
+  async setAgentStatus(
+    id: string,
+    agentStatus: string,
+    executor: DbExecutor = pool,
+  ): Promise<void> {
+    await executor.query(
       'UPDATE conversations SET agent_status = $1, updated_at = NOW() WHERE id = $2',
       [agentStatus, id],
     )
   }
 
-  async search(query: string): Promise<SearchResult[]> {
-    const { rows } = await pool.query<SearchResult>(
+  async updateAgentStatus(
+    id: string,
+    agentStatus: string,
+    executor: DbExecutor = pool,
+  ): Promise<void> {
+    await this.setAgentStatus(id, agentStatus, executor)
+  }
+
+  async updateAgentSessionId(
+    id: string,
+    sessionId: string,
+    executor: DbExecutor = pool,
+  ): Promise<void> {
+    await executor.query(
+      'UPDATE conversations SET agent_session_id = $1, updated_at = NOW() WHERE id = $2',
+      [sessionId, id],
+    )
+  }
+
+  async countActiveAgents(executor: DbExecutor = pool): Promise<number> {
+    const { rows } = await executor.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM conversations
+       WHERE agent_status IN ('starting', 'running', 'stopping')`,
+    )
+    return Number(rows[0].count)
+  }
+
+  async search(query: string, executor: DbExecutor = pool): Promise<SearchResult[]> {
+    const { rows } = await executor.query<SearchResult>(
       `SELECT c.id AS conversation_id, c.project_id, p.name AS project_name,
               c.title AS conversation_title, c.created_at
        FROM conversations c

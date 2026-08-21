@@ -1,4 +1,4 @@
-import { pool } from '../db/pool.js'
+import { pool, type DbExecutor } from '../db/pool.js'
 
 export interface MessageRecord {
   id: string
@@ -10,8 +10,13 @@ export interface MessageRecord {
 }
 
 export class MessageRepository {
-  async findByConversation(conversationId: string, limit = 100, offset = 0): Promise<MessageRecord[]> {
-    const { rows } = await pool.query<MessageRecord>(
+  async findByConversation(
+    conversationId: string,
+    limit = 100,
+    offset = 0,
+    executor: DbExecutor = pool,
+  ): Promise<MessageRecord[]> {
+    const { rows } = await executor.query<MessageRecord>(
       `SELECT * FROM messages
        WHERE conversation_id = $1
        ORDER BY created_at ASC
@@ -21,23 +26,28 @@ export class MessageRepository {
     return rows
   }
 
-  async create(data: {
-    conversationId: string
-    role: string
-    content: string
-    messageType?: string
-  }): Promise<MessageRecord> {
-    const { rows } = await pool.query<MessageRecord>(
+  async create(
+    data: {
+      conversationId: string
+      role: string
+      content: string
+      messageType?: string
+    },
+    executor: DbExecutor = pool,
+  ): Promise<MessageRecord> {
+    const defaultMessageType =
+      data.role === 'user' ? 'prompt' : data.role === 'assistant' ? 'output' : 'status'
+    const { rows } = await executor.query<MessageRecord>(
       `INSERT INTO messages (conversation_id, role, content, message_type)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [data.conversationId, data.role, data.content, data.messageType ?? 'text'],
+      [data.conversationId, data.role, data.content, data.messageType ?? defaultMessageType],
     )
     return rows[0]
   }
 
-  async countByConversation(conversationId: string): Promise<number> {
-    const { rows } = await pool.query<{ count: string }>(
+  async countByConversation(conversationId: string, executor: DbExecutor = pool): Promise<number> {
+    const { rows } = await executor.query<{ count: string }>(
       'SELECT COUNT(*) as count FROM messages WHERE conversation_id = $1',
       [conversationId],
     )
