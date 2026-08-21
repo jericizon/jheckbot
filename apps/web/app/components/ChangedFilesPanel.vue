@@ -54,34 +54,55 @@
                     <span>{{ child.name }}/</span>
                   </button>
                   <div v-show="!collapsedDirs.has(child.key)" class="ml-3 border-l border-border pl-2">
-                    <div
+                    <button
                       v-for="file in child.children"
                       :key="file.key"
-                      class="flex items-center gap-1.5 py-0.5 text-[11px] font-mono"
+                      @click="openDiff(file.key)"
+                      class="flex items-center gap-1.5 w-full text-left py-0.5 text-[11px] font-mono text-content-muted hover:text-content hover:bg-surface-subtle/60 rounded transition-colors"
+                      :title="`View diff: ${file.key}`"
                     >
                       <StatusBadge :status="file.status" :staged="file.staged" />
-                      <span class="truncate text-content-muted">{{ file.name }}</span>
-                    </div>
+                      <span class="truncate">{{ file.name }}</span>
+                    </button>
                   </div>
                 </div>
-                <div
+                <button
                   v-else
-                  class="flex items-center gap-1.5 py-0.5 text-[11px] font-mono"
+                  @click="openDiff(child.key)"
+                  class="flex items-center gap-1.5 w-full text-left py-0.5 text-[11px] font-mono text-content-muted hover:text-content hover:bg-surface-subtle/60 rounded transition-colors"
+                  :title="`View diff: ${child.key}`"
                 >
                   <StatusBadge :status="child.status" :staged="child.staged" />
-                  <span class="truncate text-content-muted">{{ child.name }}</span>
-                </div>
+                  <span class="truncate">{{ child.name }}</span>
+                </button>
               </template>
             </div>
           </div>
           <!-- Top-level file -->
-          <div v-else class="flex items-center gap-1.5 py-0.5 text-[11px] font-mono">
+          <button
+            v-else
+            @click="openDiff(node.key)"
+            class="flex items-center gap-1.5 w-full text-left py-0.5 text-[11px] font-mono text-content-muted hover:text-content hover:bg-surface-subtle/60 rounded transition-colors"
+            :title="`View diff: ${node.key}`"
+          >
             <StatusBadge :status="node.status" :staged="node.staged" />
-            <span class="truncate text-content-muted">{{ node.name }}</span>
-          </div>
+            <span class="truncate">{{ node.name }}</span>
+          </button>
         </template>
       </div>
     </div>
+
+    <!-- Diff viewer modal -->
+    <DiffModal
+      :open="diffOpen"
+      :path="diffTarget.path"
+      :status="diffTarget.status"
+      :staged="diffTarget.staged"
+      :loading="diffLoading"
+      :diff="diffContent"
+      :error="diffError"
+      @close="closeDiff"
+    />
   </div>
 </template>
 
@@ -104,6 +125,16 @@ const loading = ref(false)
 const error = ref('')
 const changes = ref<FileChange[]>([])
 const collapsedDirs = ref(new Set<string>())
+
+const diffOpen = ref(false)
+const diffLoading = ref(false)
+const diffError = ref('')
+const diffContent = ref('')
+const diffTarget = ref<{ path: string; status: FileChange['status']; staged: boolean }>({
+  path: '',
+  status: 'modified',
+  staged: false,
+})
 
 const count = computed(() => changes.value.length)
 
@@ -171,6 +202,32 @@ function toggleOpen() {
   if (open.value && changes.value.length === 0 && !loading.value) {
     refresh()
   }
+}
+
+async function openDiff(path: string) {
+  if (!props.projectId) return
+  const change = changes.value.find((c) => c.path === path)
+  if (!change) return
+  diffTarget.value = { path, status: change.status, staged: change.staged }
+  diffContent.value = ''
+  diffError.value = ''
+  diffLoading.value = true
+  diffOpen.value = true
+  try {
+    const result = await projectsApi.diff(props.projectId, path)
+    diffContent.value = result.diff
+  } catch (err: unknown) {
+    diffError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to load diff'
+  } finally {
+    diffLoading.value = false
+  }
+}
+
+function closeDiff() {
+  if (diffLoading.value) return
+  diffOpen.value = false
+  diffContent.value = ''
+  diffError.value = ''
 }
 
 async function refresh() {

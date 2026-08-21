@@ -40,6 +40,15 @@ interface ChangesResult {
   checkedAt: string
 }
 
+interface FileDiffResult {
+  projectId: string
+  path: string
+  status: FileChange['status']
+  staged: boolean
+  diff: string
+  checkedAt: string
+}
+
 export function useProjects() {
   const api = useApi()
 
@@ -55,6 +64,7 @@ export function useProjects() {
     health: (id: string) => api.post<HealthResult>(`/api/projects/${id}/health`),
     branch: (id: string) => api.get<BranchResult>(`/api/projects/${id}/branch`),
     changes: (id: string) => api.get<ChangesResult>(`/api/projects/${id}/changes`),
+    diff: (id: string, path: string) => api.get<FileDiffResult>(`/api/projects/${id}/diff`, { path }),
     clearAllData: () => api.delete<{ stoppedAgents: number; deletedProjects: number }>('/api/data', { confirm: 'DELETE EVERYTHING' }),
   }
 }

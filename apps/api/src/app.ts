@@ -18,6 +18,7 @@ import { MessageService } from './services/MessageService.js'
 import { PromptExecutionService } from './services/PromptExecutionService.js'
 import { AuthService } from './services/AuthService.js'
 import { DataService } from './services/DataService.js'
+import { SkillsService } from './services/SkillsService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
@@ -114,6 +115,8 @@ export function createApp(): express.Express {
   const dataService = new DataService(repo, agentManager)
   const dataController = new DataController(dataService)
 
+  const skillsService = new SkillsService(env.devinBin)
+
   // Health (no auth required)
   app.get('/health', async (_req, res) => {
     let dbStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown'
@@ -150,6 +153,13 @@ export function createApp(): express.Express {
   // Models endpoint — returns curated Devin model list
   app.get('/api/models', (_req, res) => {
     res.json({ models: DEVIN_MODELS, default: DEFAULT_DEVIN_MODEL })
+  })
+
+  // Skills endpoint — lists Devin CLI skills (cached, ?refresh=1 forces a reload)
+  app.get('/api/skills', async (req, res) => {
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true'
+    const result = await skillsService.list(refresh)
+    res.json(result)
   })
 
   // Project routes (includes nested conversation list/create)

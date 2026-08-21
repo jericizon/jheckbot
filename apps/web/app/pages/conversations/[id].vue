@@ -237,6 +237,15 @@
                 </optgroup>
               </select>
               <button
+                @click="skillsPickerOpen = true"
+                :disabled="agentStarting || agentRunning"
+                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Browse and insert skills"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                <span>Skills</span>
+              </button>
+              <button
                 @click="toggleBypass"
                 :disabled="agentStarting || agentRunning"
                 class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -271,6 +280,9 @@
       @confirm="confirmDeleteConversation"
       @cancel="closeDeleteModal"
     />
+
+    <!-- Skills picker -->
+    <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
   </div>
 </template>
 
@@ -296,6 +308,7 @@ const agentStarting = ref(false)
 const sendError = ref('')
 const activityLog = ref('')
 const activityOpen = ref(false)
+const skillsPickerOpen = ref(false)
 const { bypassMode, toggle: toggleBypass } = useBypassMode()
 const editingTitle = ref(false)
 const titleDraft = ref('')
@@ -353,6 +366,16 @@ function autoResize() {
   if (!el) return
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+}
+
+// Insert a selected skill slash command into the input and focus it so the
+// user can immediately append their prompt.
+function insertSkill(command: string) {
+  input.value = input.value ? `${input.value} ${command}`.trim() : command
+  nextTick(() => {
+    inputEl.value?.focus()
+    autoResize()
+  })
 }
 
 async function loadSidebarConversations() {

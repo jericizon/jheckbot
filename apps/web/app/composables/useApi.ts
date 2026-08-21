@@ -3,11 +3,12 @@ export function useApi() {
   // In dev, Nuxt proxies /api/** to the Express API at localhost:8801
   async function request<T>(
     path: string,
-    options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: Record<string, unknown> } = {},
+    options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: Record<string, unknown>; query?: Record<string, string> } = {},
   ): Promise<T> {
     const res = await $fetch<T>(path, {
       method: options.method ?? 'GET',
       body: options.body as Record<string, unknown> | undefined,
+      query: options.query,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
     })
@@ -15,7 +16,7 @@ export function useApi() {
   }
 
   return {
-    get: <T>(path: string) => request<T>(path),
+    get: <T>(path: string, query?: Record<string, string>) => request<T>(path, { query }),
     post: <T>(path: string, body?: Record<string, unknown>) => request<T>(path, { method: 'POST', body }),
     patch: <T>(path: string, body?: Record<string, unknown>) => request<T>(path, { method: 'PATCH', body }),
     delete: <T>(path: string, body?: Record<string, unknown>) => request<T>(path, { method: 'DELETE', body }),

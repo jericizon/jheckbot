@@ -46,3 +46,17 @@ export interface HealthStatus {
   }
   timestamp: string
 }
+
+export type SkillTrigger = 'user' | 'model'
+
+// Mirrors `devin skills list --json` output.
+export interface Skill {
+  name: string
+  description: string
+  triggers: SkillTrigger[]
+  provider: string
+  base_dir: string
+  display_name: string
+  warnings: string[]
+  errors: string[]
+}

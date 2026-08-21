@@ -13,6 +13,7 @@ export function createProjectRouter(controller: ProjectController): Router {
   router.post('/:id/health', (req, res) => controller.health(req, res))
   router.get('/:id/branch', (req, res) => controller.branch(req, res))
   router.get('/:id/changes', (req, res) => controller.changes(req, res))
+  router.get('/:id/diff', (req, res) => controller.diff(req, res))
 
   return router
 }

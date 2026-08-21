@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { isValidUuid } from '@jheckbot/shared'
 import { ProjectService, ProjectValidationError } from '../services/ProjectService.js'
-import { ProjectHealthService } from '../services/ProjectHealthService.js'
+import { ProjectHealthService, FileNotChangedError } from '../services/ProjectHealthService.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
@@ -136,5 +136,30 @@ export class ProjectController {
     }
     const result = await this.healthService.getChanges(project)
     res.json(result)
+  }
+
+  async diff(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const filePath = typeof req.query.path === 'string' ? req.query.path : ''
+    if (!filePath) {
+      res.status(400).json({ error: 'Missing path query parameter' })
+      return
+    }
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    try {
+      const result = await this.healthService.getFileDiff(project, filePath)
+      res.json(result)
+    } catch (err) {
+      if (err instanceof FileNotChangedError) {
+        res.status(404).json({ error: err.message })
+        return
+      }
+      throw err
+    }
   }
 }

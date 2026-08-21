@@ -1,6 +1,6 @@
 import { existsSync, realpathSync, statSync, accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 import type { ProjectRecord } from '../repositories/ProjectRepository.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
 import { PathValidator, type AllowedRoot } from './PathValidator.js'
@@ -34,6 +34,22 @@ export interface ProjectChangesResult {
   branch: string | null
   changes: FileChange[]
   checkedAt: string
+}
+
+export interface ProjectFileDiffResult {
+  projectId: string
+  path: string
+  status: FileChange['status']
+  staged: boolean
+  diff: string
+  checkedAt: string
+}
+
+export class FileNotChangedError extends Error {
+  constructor(path: string) {
+    super(`File is not in the changes list: ${path}`)
+    this.name = 'FileNotChangedError'
+  }
 }
 
 export interface PathValidationResult {
@@ -104,6 +120,34 @@ export class ProjectHealthService {
     }
   }
 
+  async getFileDiff(project: ProjectRecord, filePath: string): Promise<ProjectFileDiffResult> {
+    const changes = this.readGitStatus(project.path)
+    const change = changes.find((c) => c.path === filePath)
+    if (!change) throw new FileNotChangedError(filePath)
+
+    // Rename display path is "old -> new"; diff against the new path.
+    const diffPath = filePath.includes(' -> ') ? filePath.split(' -> ')[1] : filePath
+
+    let diff: string
+    if (change.status === 'untracked') {
+      // No tracked baseline to diff against; synthesize a "new file" diff
+      // via --no-index (exits 1 when content differs, which is expected).
+      diff = this.runGit(project.path, ['diff', '--no-index', '--', '/dev/null', diffPath], [0, 1])
+    } else {
+      // Diff everything (staged + unstaged) against HEAD for a full review.
+      diff = this.runGit(project.path, ['diff', 'HEAD', '--', diffPath], [0])
+    }
+
+    return {
+      projectId: project.id,
+      path: filePath,
+      status: change.status,
+      staged: change.staged,
+      diff,
+      checkedAt: new Date().toISOString(),
+    }
+  }
+
   private readGitStatus(path: string): FileChange[] {
     if (!this.checkGitRepo(path)) return []
     try {
@@ -119,6 +163,28 @@ export class ProjectHealthService {
         .map((line) => this.parsePorcelainLine(line))
     } catch {
       return []
+    }
+  }
+
+  // Runs git without a shell so user-controlled path arguments are passed
+  // as argv and cannot be shell-injected. `allowExit` lists exit codes that
+  // are treated as success (e.g. git diff --no-index exits 1 on differences).
+  private runGit(cwd: string, args: string[], allowExit: number[] = [0]): string {
+    try {
+      const stdout = execFileSync('git', ['-C', cwd, ...args], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        maxBuffer: 8 * 1024 * 1024,
+      })
+      return stdout
+    } catch (err) {
+      const code = (err as { status?: number }).status ?? -1
+      if (allowExit.includes(code)) {
+        // git writes the diff to stdout even when it exits non-zero.
+        const stdout = (err as { stdout?: string }).stdout
+        return typeof stdout === 'string' ? stdout : ''
+      }
+      throw err
     }
   }
 
