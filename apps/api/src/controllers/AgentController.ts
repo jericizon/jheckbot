@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { isValidUuid } from '@jheckbot/shared'
 import { AgentManager, AgentManagerError } from '../agent/AgentManager.js'
-import { AgentEventRepository } from '../repositories/AgentEventRepository.js'
+import { AgentEventRepository, type AgentEventRecord } from '../repositories/AgentEventRepository.js'
 import { PromptExecutionService, PromptExecutionError } from '../services/PromptExecutionService.js'
 
 function getParam(req: Request, name: string): string {
@@ -107,51 +107,83 @@ export class AgentController {
       'X-Accel-Buffering': 'no',
     })
 
-    // Send replay of missed events
+    // Buffer live events received during replay so none are lost or duplicated
+    const buffer: AgentEventRecord[] = []
+    let closed = false
+
+    const unsubscribe = this.agentManager.subscribe(conversationId, (event) => {
+      if (closed) return
+      buffer.push(event)
+    })
+
+    // Replay persisted events in sequence order
     const events = await this.eventRepo.findByConversation(conversationId, lastEventId)
+    let watermark = 0
     for (const event of events) {
-      res.write(`id: ${event.id}\n`)
-      res.write(`event: ${event.event_type}\n`)
-      res.write(`data: ${event.content ?? ''}\n\n`)
+      this.writeSseEvent(res, event)
+      const seq = Number(event.event_sequence)
+      if (Number.isFinite(seq) && seq > watermark) watermark = seq
     }
 
-    // Stream live output if agent is running
+    // Flush buffered live events that are newer than the replay watermark
+    for (const event of buffer) {
+      const seq = Number(event.event_sequence)
+      if (Number.isFinite(seq) && seq > watermark) {
+        this.writeSseEvent(res, event)
+        if (seq > watermark) watermark = seq
+      }
+    }
+
+    // Check if the run is already terminal
     const run = this.agentManager.getStatus(conversationId)
-    if (run && (run.status === 'running' || run.status === 'starting')) {
-      let lastLineCount = 0
-      const interval = setInterval(async () => {
-        // Detect natural completion (child process exited) before reading status
-        const currentRun = this.agentManager.syncRunState(conversationId)
-        if (!currentRun || currentRun.status === 'completed' || currentRun.status === 'failed' || currentRun.status === 'stopped') {
-          clearInterval(interval)
-          res.write(`event: status\ndata: ${JSON.stringify({ status: currentRun?.status ?? 'unknown' })}\n\n`)
-          res.end()
-          return
-        }
-        const output = this.agentManager.getOutput(conversationId)
-        const newLines = output.slice(lastLineCount)
-        lastLineCount = output.length
-        for (const line of newLines) {
-          if (line.trim()) {
-            const event = await this.eventRepo.create({
-              conversationId,
-              eventType: 'output',
-              content: JSON.stringify({ content: line }),
-            })
-            res.write(`id: ${event.id}\n`)
-            res.write(`event: output\n`)
-            res.write(`data: ${JSON.stringify({ content: line })}\n\n`)
+    const isTerminal = run && (run.status === 'completed' || run.status === 'failed' || run.status === 'stopped')
+
+    if (isTerminal) {
+      // The terminal status event was already replayed or buffered; just close
+      unsubscribe()
+      res.end()
+      return
+    }
+
+    // Continue listening for live events
+    const flushBuffer = () => {
+      while (buffer.length > 0) {
+        const event = buffer.shift()!
+        const seq = Number(event.event_sequence)
+        if (Number.isFinite(seq) && seq > watermark) {
+          this.writeSseEvent(res, event)
+          if (seq > watermark) watermark = seq
+          // Close on terminal status
+          if (event.event_type === 'status') {
+            const content = event.content ? JSON.parse(event.content) : {}
+            if (content.status === 'completed' || content.status === 'failed' || content.status === 'stopped') {
+              closed = true
+              unsubscribe()
+              res.end()
+              return
+            }
           }
         }
-      }, 1000)
-
-      req.on('close', () => {
-        clearInterval(interval)
-      })
-    } else {
-      // No active run — just send replay and close
-      res.write(`event: status\ndata: ${JSON.stringify({ status: 'idle' })}\n\n`)
-      res.end()
+      }
     }
+
+    // Replace the subscriber with one that writes directly
+    unsubscribe()
+    const liveUnsubscribe = this.agentManager.subscribe(conversationId, (event) => {
+      if (closed) return
+      buffer.push(event)
+      flushBuffer()
+    })
+
+    req.on('close', () => {
+      closed = true
+      liveUnsubscribe()
+    })
+  }
+
+  private writeSseEvent(res: Response, event: AgentEventRecord): void {
+    res.write(`id: ${event.event_sequence}\n`)
+    res.write(`event: ${event.event_type}\n`)
+    res.write(`data: ${event.content ?? ''}\n\n`)
   }
 }
