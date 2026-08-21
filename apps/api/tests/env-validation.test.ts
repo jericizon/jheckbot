@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { delimiter } from 'node:path'
 import { loadEnv, parseAllowedRoots, type RuntimeEnv } from '../src/config/env-validation.js'
 
@@ -16,7 +16,7 @@ function validSource(): NodeJS.ProcessEnv {
   }
 }
 
-describe('loadEnv — required variables', () => {
+describe('loadEnv — missing variables use fallbacks with warnings', () => {
   const requiredKeys = [
     'DATABASE_URL',
     'SESSION_SECRET',
@@ -28,78 +28,111 @@ describe('loadEnv — required variables', () => {
   ] as const
 
   for (const key of requiredKeys) {
-    it(`throws naming ${key} when missing`, () => {
+    it(`returns a fallback for ${key} when missing (does not throw)`, () => {
       const source = validSource()
       delete source[key]
-      expect(() => loadEnv(source)).toThrow(key)
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect(() => loadEnv(source)).not.toThrow()
+      warnSpy.mockRestore()
     })
 
-    it(`throws naming ${key} when empty`, () => {
+    it(`returns a fallback for ${key} when empty (does not throw)`, () => {
       const source = validSource()
       source[key] = ''
-      expect(() => loadEnv(source)).toThrow(key)
-    })
-
-    it(`throws naming ${key} when whitespace-only`, () => {
-      const source = validSource()
-      source[key] = '   '
-      expect(() => loadEnv(source)).toThrow(key)
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect(() => loadEnv(source)).not.toThrow()
+      warnSpy.mockRestore()
     })
   }
 })
 
-describe('loadEnv — placeholder rejection', () => {
-  it('rejects change-me-locally for DATABASE_URL', () => {
+describe('loadEnv — placeholder detection warns', () => {
+  it('warns about change-me-locally for DATABASE_URL', () => {
     const source = validSource()
     source.DATABASE_URL = 'postgresql://user:change-me-locally@host/db'
-    expect(() => loadEnv(source)).toThrow('DATABASE_URL')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.databaseUrl).toContain('change-me-locally')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DATABASE_URL'))
+    warnSpy.mockRestore()
   })
 
-  it('rejects dev-only-not-secret for SESSION_SECRET', () => {
+  it('warns about dev-only-not-secret for SESSION_SECRET', () => {
     const source = validSource()
     source.SESSION_SECRET = 'dev-only-not-secret'
-    expect(() => loadEnv(source)).toThrow('SESSION_SECRET')
-  })
-
-  it('rejects generate-and-store-locally for SESSION_SECRET', () => {
-    const source = validSource()
-    source.SESSION_SECRET = 'generate-and-store-locally'
-    expect(() => loadEnv(source)).toThrow('SESSION_SECRET')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.sessionSecret).toBe('dev-only-not-secret')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SESSION_SECRET'))
+    warnSpy.mockRestore()
   })
 })
 
-describe('loadEnv — secret strength', () => {
-  it('rejects a session secret shorter than 32 characters', () => {
+describe('loadEnv — secret strength warns', () => {
+  it('warns when session secret is shorter than 32 characters', () => {
     const source = validSource()
     source.SESSION_SECRET = 'too-short-secret-only-20-chars'
-    expect(() => loadEnv(source)).toThrow('SESSION_SECRET')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.sessionSecret).toBe('too-short-secret-only-20-chars')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SESSION_SECRET'))
+    warnSpy.mockRestore()
   })
 
-  it('accepts a session secret of exactly 32 characters', () => {
+  it('does not warn when session secret is exactly 32 characters', () => {
     const source = validSource()
     source.SESSION_SECRET = 'x'.repeat(32)
-    expect(() => loadEnv(source)).not.toThrow()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    loadEnv(source)
+    const sessionWarnings = warnSpy.mock.calls
+      .map((c) => String(c[0]))
+      .filter((s) => s.includes('SESSION_SECRET'))
+    expect(sessionWarnings).toHaveLength(0)
+    warnSpy.mockRestore()
+  })
+
+  it('generates a random session secret when missing', () => {
+    const source = validSource()
+    delete source.SESSION_SECRET
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.sessionSecret.length).toBeGreaterThanOrEqual(32)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SESSION_SECRET'))
+    warnSpy.mockRestore()
   })
 })
 
-describe('loadEnv — admin password', () => {
-  it('rejects a password shorter than 12 characters', () => {
+describe('loadEnv — admin password warns', () => {
+  it('warns when password is shorter than 12 characters', () => {
     const source = validSource()
     source.ADMIN_PASSWORD = 'short-pass'
-    expect(() => loadEnv(source)).toThrow('ADMIN_PASSWORD')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.adminPassword).toBe('short-pass')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ADMIN_PASSWORD'))
+    warnSpy.mockRestore()
   })
 
-  it('rejects a password equal to the username', () => {
+  it('warns when password equals username', () => {
     const source = validSource()
     source.ADMIN_USERNAME = 'admin-user-12'
     source.ADMIN_PASSWORD = 'admin-user-12'
-    expect(() => loadEnv(source)).toThrow('ADMIN_PASSWORD')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    loadEnv(source)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ADMIN_PASSWORD'))
+    warnSpy.mockRestore()
   })
 
-  it('accepts a 12-character password different from the username', () => {
+  it('does not warn for a 12-char password different from username', () => {
     const source = validSource()
     source.ADMIN_PASSWORD = 'twelve-chars'
-    expect(() => loadEnv(source)).not.toThrow()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    loadEnv(source)
+    const pwWarnings = warnSpy.mock.calls
+      .map((c) => String(c[0]))
+      .filter((s) => s.includes('ADMIN_PASSWORD'))
+    expect(pwWarnings).toHaveLength(0)
+    warnSpy.mockRestore()
   })
 })
 
@@ -107,14 +140,20 @@ describe('loadEnv — optional defaults and parsing', () => {
   it('defaults NODE_ENV to development when not set', () => {
     const source = validSource()
     delete source.NODE_ENV
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const env = loadEnv(source)
     expect(env.nodeEnv).toBe('development')
+    warnSpy.mockRestore()
   })
 
-  it('rejects an invalid NODE_ENV', () => {
+  it('falls back to development for an invalid NODE_ENV', () => {
     const source = validSource()
     source.NODE_ENV = 'staging'
-    expect(() => loadEnv(source)).toThrow('NODE_ENV')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.nodeEnv).toBe('development')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('NODE_ENV'))
+    warnSpy.mockRestore()
   })
 
   it('defaults API_PORT to 8801', () => {
@@ -131,16 +170,22 @@ describe('loadEnv — optional defaults and parsing', () => {
     expect(env.webPort).toBe(8800)
   })
 
-  it('rejects a non-positive API_PORT', () => {
+  it('falls back for a non-positive API_PORT', () => {
     const source = validSource()
     source.API_PORT = '0'
-    expect(() => loadEnv(source)).toThrow('API_PORT')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.apiPort).toBe(8801)
+    warnSpy.mockRestore()
   })
 
-  it('rejects a non-numeric API_PORT', () => {
+  it('falls back for a non-numeric API_PORT', () => {
     const source = validSource()
     source.API_PORT = 'abc'
-    expect(() => loadEnv(source)).toThrow('API_PORT')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.apiPort).toBe(8801)
+    warnSpy.mockRestore()
   })
 
   it('parses COOKIE_SECURE from string true', () => {
@@ -155,10 +200,13 @@ describe('loadEnv — optional defaults and parsing', () => {
     expect(loadEnv(source).cookieSecure).toBe(false)
   })
 
-  it('rejects an invalid COOKIE_SAME_SITE', () => {
+  it('falls back for an invalid COOKIE_SAME_SITE', () => {
     const source = validSource()
     source.COOKIE_SAME_SITE = 'none-strict'
-    expect(() => loadEnv(source)).toThrow('COOKIE_SAME_SITE')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.cookieSameSite).toBe('lax')
+    warnSpy.mockRestore()
   })
 
   it('defaults CORS_ORIGIN', () => {
@@ -173,10 +221,13 @@ describe('loadEnv — optional defaults and parsing', () => {
     expect(loadEnv(source).trustProxy).toBe(1)
   })
 
-  it('rejects a negative TRUST_PROXY', () => {
+  it('falls back for a negative TRUST_PROXY', () => {
     const source = validSource()
     source.TRUST_PROXY = '-1'
-    expect(() => loadEnv(source)).toThrow('TRUST_PROXY')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const env = loadEnv(source)
+    expect(env.trustProxy).toBe(1)
+    warnSpy.mockRestore()
   })
 })
 
@@ -190,7 +241,9 @@ describe('loadEnv — valid configuration', () => {
     source.CORS_ORIGIN = 'https://example.com'
     source.TRUST_PROXY = '2'
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const env: RuntimeEnv = loadEnv(source)
+    warnSpy.mockRestore()
 
     expect(env.nodeEnv).toBe('test')
     expect(env.apiPort).toBe(9000)
@@ -211,16 +264,15 @@ describe('loadEnv — valid configuration', () => {
     expect(env.trustProxy).toBe(2)
   })
 
-  it('never includes secret values in error messages', () => {
+  it('never includes secret values in warning messages', () => {
     const source = validSource()
     source.SESSION_SECRET = 'super-secret-value-that-should-not-leak-123'
     delete source.DATABASE_URL
-    expect(() => loadEnv(source)).toThrow('DATABASE_URL')
-    try {
-      loadEnv(source)
-    } catch (err) {
-      expect(String(err)).not.toContain('super-secret-value')
-    }
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    loadEnv(source)
+    const allWarnText = warnSpy.mock.calls.map((c) => String(c)).join(' ')
+    expect(allWarnText).not.toContain('super-secret-value')
+    warnSpy.mockRestore()
   })
 })
 

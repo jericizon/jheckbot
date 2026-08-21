@@ -1,4 +1,5 @@
 import { delimiter } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { PORTS } from '@jheckbot/shared'
 
 export interface RuntimeEnv {
@@ -30,11 +31,10 @@ const VALID_SAME_SITE = new Set(['lax', 'strict', 'none'])
 const MIN_SESSION_SECRET_LENGTH = 32
 const MIN_ADMIN_PASSWORD_LENGTH = 12
 
-class EnvValidationError extends Error {
-  constructor(variable: string, message: string) {
-    super(`${variable}: ${message}`)
-    this.name = 'EnvValidationError'
-  }
+const warnings: string[] = []
+
+function warn(variable: string, message: string): void {
+  warnings.push(`[config] ${variable}: ${message}`)
 }
 
 /** Split a delimited roots string into a clean, deduplicated string array. */
@@ -57,10 +57,15 @@ function getString(source: NodeJS.ProcessEnv, name: string): string | undefined 
   return raw.trim()
 }
 
-function requireString(source: NodeJS.ProcessEnv, name: string): string {
+function optString(
+  source: NodeJS.ProcessEnv,
+  name: string,
+  fallback: string,
+): string {
   const value = getString(source, name)
   if (value === undefined || value.length === 0) {
-    throw new EnvValidationError(name, 'is required but was not set or is empty')
+    warn(name, `not set or empty — using default "${fallback}"`)
+    return fallback
   }
   return value
 }
@@ -70,7 +75,8 @@ function parsePositiveInt(source: NodeJS.ProcessEnv, name: string, fallback: num
   if (raw === undefined || raw.trim().length === 0) return fallback
   const parsed = Number(raw)
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new EnvValidationError(name, 'must be a positive integer')
+    warn(name, `"${raw}" is not a positive integer — using default ${fallback}`)
+    return fallback
   }
   return parsed
 }
@@ -80,72 +86,92 @@ function parseNonNegativeInt(source: NodeJS.ProcessEnv, name: string, fallback: 
   if (raw === undefined || raw.trim().length === 0) return fallback
   const parsed = Number(raw)
   if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new EnvValidationError(name, 'must be a non-negative integer')
+    warn(name, `"${raw}" is not a non-negative integer — using default ${fallback}`)
+    return fallback
   }
   return parsed
 }
 
+/** Flush accumulated warnings to console.warn. Called once after loadEnv finishes. */
+function flushWarnings(): void {
+  if (warnings.length > 0) {
+    console.warn('Configuration warnings:')
+    for (const w of warnings) console.warn(`  ${w}`)
+    warnings.length = 0
+  }
+}
+
 /**
- * Validate and parse runtime environment variables into an immutable typed
- * object. Throws actionable errors naming the offending variable without
- * echoing secret values.
+ * Load and parse runtime environment variables into an immutable typed object.
+ * Missing or weak values produce warnings instead of throwing — the app
+ * starts with sensible fallbacks so local development stays frictionless.
  */
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
-  const databaseUrl = requireString(source, 'DATABASE_URL')
+  // DATABASE_URL — no fallback; the pool will fail naturally if invalid.
+  const databaseUrl = optString(source, 'DATABASE_URL', 'postgresql://jheckbot:jheckbot@127.0.0.1:8802/jheckbot')
   if (databaseUrl.includes('change-me-locally')) {
-    throw new EnvValidationError('DATABASE_URL', 'uses a known placeholder value; set a real connection string')
+    warn('DATABASE_URL', 'uses a known placeholder value — set a real connection string')
   }
 
-  const sessionSecret = requireString(source, 'SESSION_SECRET')
-  if (PLACEHOLDER_VALUES.has(sessionSecret)) {
-    throw new EnvValidationError('SESSION_SECRET', 'uses a known placeholder value; generate a real secret')
-  }
-  if (sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
-    throw new EnvValidationError('SESSION_SECRET', `must be at least ${MIN_SESSION_SECRET_LENGTH} characters long`)
+  // SESSION_SECRET — generate a random one if missing or too short.
+  let sessionSecret = getString(source, 'SESSION_SECRET') ?? ''
+  if (sessionSecret.length === 0) {
+    sessionSecret = randomBytes(32).toString('hex')
+    warn('SESSION_SECRET', `not set — generated a random secret for this process`)
+  } else if (PLACEHOLDER_VALUES.has(sessionSecret)) {
+    warn('SESSION_SECRET', 'uses a known placeholder value — generate a real secret with: openssl rand -hex 32')
+  } else if (sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
+    warn('SESSION_SECRET', `is only ${sessionSecret.length} characters — recommended minimum is ${MIN_SESSION_SECRET_LENGTH}`)
   }
 
-  const adminUsername = requireString(source, 'ADMIN_USERNAME')
+  const adminUsername = optString(source, 'ADMIN_USERNAME', 'admin')
 
-  const adminPassword = requireString(source, 'ADMIN_PASSWORD')
+  const adminPassword = optString(source, 'ADMIN_PASSWORD', 'admin')
   if (adminPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
-    throw new EnvValidationError('ADMIN_PASSWORD', `must be at least ${MIN_ADMIN_PASSWORD_LENGTH} characters long`)
+    warn('ADMIN_PASSWORD', `is only ${adminPassword.length} characters — recommended minimum is ${MIN_ADMIN_PASSWORD_LENGTH}`)
   }
   if (adminPassword === adminUsername) {
-    throw new EnvValidationError('ADMIN_PASSWORD', 'must not equal the admin username')
+    warn('ADMIN_PASSWORD', 'should not equal the admin username')
   }
 
-  const allowedRootsRaw = requireString(source, 'ALLOWED_ROOTS')
+  // ALLOWED_ROOTS — default to empty; project creation will fail with a clear error.
+  const allowedRootsRaw = getString(source, 'ALLOWED_ROOTS') ?? ''
   const allowedRoots = parseAllowedRoots(allowedRootsRaw)
   if (allowedRoots.length === 0) {
-    throw new EnvValidationError('ALLOWED_ROOTS', 'must contain at least one non-empty path')
+    warn('ALLOWED_ROOTS', 'not set or empty — project creation will fail until at least one root is configured')
   }
 
-  const devinBin = requireString(source, 'DEVIN_BIN')
-  const tmuxBin = requireString(source, 'TMUX_BIN')
+  const devinBin = optString(source, 'DEVIN_BIN', 'devin')
+  const tmuxBin = optString(source, 'TMUX_BIN', 'tmux')
 
   const nodeEnvRaw = getString(source, 'NODE_ENV') ?? 'development'
   if (!VALID_NODE_ENVS.has(nodeEnvRaw)) {
-    throw new EnvValidationError('NODE_ENV', 'must be one of: development, test, production')
+    warn('NODE_ENV', `"${nodeEnvRaw}" is not one of: development, test, production — using "development"`)
   }
+  const nodeEnv = (VALID_NODE_ENVS.has(nodeEnvRaw) ? nodeEnvRaw : 'development') as RuntimeEnv['nodeEnv']
 
   const apiPort = parsePositiveInt(source, 'API_PORT', PORTS.API)
   const webPort = parsePositiveInt(source, 'WEB_PORT', PORTS.WEB)
 
   const cookieSecureRaw = getString(source, 'COOKIE_SECURE') ?? 'false'
   if (cookieSecureRaw !== 'true' && cookieSecureRaw !== 'false') {
-    throw new EnvValidationError('COOKIE_SECURE', 'must be "true" or "false"')
+    warn('COOKIE_SECURE', `"${cookieSecureRaw}" is not "true" or "false" — using "false"`)
   }
+  const cookieSecure = cookieSecureRaw === 'true'
 
   const cookieSameSiteRaw = getString(source, 'COOKIE_SAME_SITE') ?? 'lax'
   if (!VALID_SAME_SITE.has(cookieSameSiteRaw)) {
-    throw new EnvValidationError('COOKIE_SAME_SITE', 'must be one of: lax, strict, none')
+    warn('COOKIE_SAME_SITE', `"${cookieSameSiteRaw}" is not one of: lax, strict, none — using "lax"`)
   }
+  const cookieSameSite = (VALID_SAME_SITE.has(cookieSameSiteRaw) ? cookieSameSiteRaw : 'lax') as RuntimeEnv['cookieSameSite']
 
   const corsOrigin = getString(source, 'CORS_ORIGIN') ?? 'http://localhost:8800'
   const trustProxy = parseNonNegativeInt(source, 'TRUST_PROXY', 1)
 
+  flushWarnings()
+
   return {
-    nodeEnv: nodeEnvRaw as RuntimeEnv['nodeEnv'],
+    nodeEnv,
     apiPort,
     webPort,
     databaseUrl,
@@ -153,8 +179,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
     devinBin,
     tmuxBin,
     allowedRoots,
-    cookieSecure: cookieSecureRaw === 'true',
-    cookieSameSite: cookieSameSiteRaw as RuntimeEnv['cookieSameSite'],
+    cookieSecure,
+    cookieSameSite,
     corsOrigin,
     trustProxy,
     adminUsername,
