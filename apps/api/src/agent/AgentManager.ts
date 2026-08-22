@@ -7,6 +7,7 @@ import { MessageRepository } from '../repositories/MessageRepository.js'
 import { AgentEventRepository, type AgentEventRecord } from '../repositories/AgentEventRepository.js'
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
 import type { PushService } from '../services/PushService.js'
+import type { ScreenshotService } from '../services/ScreenshotService.js'
 import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 
 export type AgentStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'stopped'
@@ -67,6 +68,8 @@ interface ManagedAgentRun {
   stopRequested: boolean
   lastFlushAt: number
   sessionIdPersisted: boolean
+  knownScreenshots: Set<string>
+  screenshotMarkdown: string[]
 }
 
 interface ActiveConversationRepository {
@@ -135,6 +138,7 @@ export class AgentManager {
   private readonly eventRepo?: AgentEventRepository
   private readonly tmux?: TmuxManager
   private readonly pushService?: PushService
+  screenshotService?: ScreenshotService
 
   constructor(
     devin: DevinAdapter,
@@ -210,6 +214,16 @@ export class AgentManager {
     const startedAt = new Date().toISOString()
     let sessionInfo
 
+    // Expose the screenshot directory + conversation id to the agent so its
+    // browser automation tool (Playwright/Puppeteer MCP) can save PNGs that
+    // JheckBot surfaces inline in the chat.
+    const screenshotEnv: Record<string, string> = this.screenshotService
+      ? {
+          JHECKBOT_SCREENSHOTS_DIR: this.screenshotService.conversationDir(options.conversationId),
+          JHECKBOT_CONVERSATION_ID: options.conversationId,
+        }
+      : {}
+
     try {
       sessionInfo = this.devin.start({
         sessionName,
@@ -218,6 +232,7 @@ export class AgentManager {
         resumeSessionId: options.devinSessionId,
         model: options.model || DEFAULT_DEVIN_MODEL,
         bypass: options.bypass,
+        env: screenshotEnv,
       })
     } catch (error) {
       // A failed create is not assumed to have created a session. Killing here
@@ -597,6 +612,8 @@ export class AgentManager {
       stopRequested: false,
       lastFlushAt: Date.now(),
       sessionIdPersisted: false,
+      knownScreenshots: new Set(),
+      screenshotMarkdown: [],
     }
   }
 
@@ -663,6 +680,13 @@ export class AgentManager {
       this.captureAndAppend(state)
     } catch (error) {
       captureError = error instanceof Error ? error.message : String(error)
+    }
+
+    // Surface any new screenshots the agent's browser tool has written.
+    try {
+      await this.scanScreenshots(state)
+    } catch {
+      // screenshot scanning is best-effort; never block the run on it
     }
 
     let alive = false
@@ -873,9 +897,17 @@ export class AgentManager {
     const newOutput = normalized.join('\n')
     state.run.normalizedSnapshot = normalized
 
-    if (newOutput !== state.run.outputBuffer) {
-      state.run.outputBuffer = newOutput
-      state.pendingOutput = [newOutput]
+    // Append any screenshot markdown so images persist in the assistant
+    // message. Re-applied each tick because outputBuffer is overwritten
+    // with the fresh tmux capture above.
+    const screenshotBlock = state.screenshotMarkdown.join('\n\n')
+    const outputWithScreenshots = screenshotBlock
+      ? `${newOutput}${newOutput.endsWith('\n') ? '' : '\n\n'}${screenshotBlock}`
+      : newOutput
+
+    if (outputWithScreenshots !== state.run.outputBuffer) {
+      state.run.outputBuffer = outputWithScreenshots
+      state.pendingOutput = [outputWithScreenshots]
     }
 
     // Capture raw ANSI-stripped terminal output for the activity log.
@@ -887,6 +919,35 @@ export class AgentManager {
       state.lastLogSnapshot = rawSnapshot
       state.pendingLog = [rawSnapshot]
     }
+  }
+
+  /**
+   * Detect new PNGs in the conversation's screenshot directory and emit a
+   * `screenshot` agent event for each, plus inject a markdown image link
+   * into the run output so it lands in the persisted assistant message.
+   */
+  private async scanScreenshots(state: ManagedAgentRun): Promise<void> {
+    if (!this.screenshotService || !this.eventRepo) return
+    const conversationId = state.run.conversationId
+    const fresh = this.screenshotService.scanForNew(conversationId, state.knownScreenshots)
+    if (fresh.length === 0) return
+
+    for (const filename of fresh) {
+      state.knownScreenshots.add(filename)
+      const markdown = this.screenshotService.markdownImage(conversationId, filename)
+      state.screenshotMarkdown.push(markdown)
+      const event = await this.eventRepo.create({
+        conversationId,
+        eventType: 'screenshot',
+        content: JSON.stringify({
+          url: this.screenshotService.publicUrl(conversationId, filename),
+          filename,
+        }),
+      })
+      if (event) this.publish(event)
+    }
+    // Force a flush so the injected markdown appears in the next output event.
+    state.lastFlushAt = 0
   }
 
   private captureNormalizedSnapshot(sessionName: string): string[] {

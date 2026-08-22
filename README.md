@@ -105,6 +105,7 @@ jheckbot/
 ## Documentation
 
 - [Architecture reference](docs/mvp.md) — core concepts, data model, SSE, security model
+- [Screenshots](docs/screenshots.md) — agent-captured browser screenshots inline in chat
 - [Deployment guide](deploy/README.md) — production setup, Cloudflare Tunnel, security checklist
 - [Contributing guide](CONTRIBUTING.md) — setup, testing, PR guidelines
 - [Security policy](SECURITY.md) — vulnerability reporting, hardening requirements

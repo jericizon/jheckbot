@@ -24,7 +24,11 @@
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
         </button>
-        <h1 class="flex-1 text-sm font-semibold truncate">{{ project?.name || 'Project' }}</h1>
+        <ProjectSwitcher
+          :current-id="project?.id"
+          :current-label="project?.name || 'Project'"
+          class="flex-1 min-w-0"
+        />
         <button
           v-if="project && !editing && !confirmingDelete"
           @click="startEdit"

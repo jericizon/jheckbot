@@ -28,7 +28,7 @@ export class ConversationRepository {
     executor: DbExecutor = pool,
   ): Promise<ConversationRecord[]> {
     const { rows } = await executor.query<ConversationRecord>(
-      `SELECT * FROM conversations WHERE project_id = $1 ORDER BY last_message_at DESC NULLS LAST, created_at DESC`,
+      `SELECT * FROM conversations WHERE project_id = $1 ORDER BY COALESCE(last_message_at, created_at) DESC`,
       [projectId],
     )
     return rows

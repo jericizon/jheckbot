@@ -1,15 +1,34 @@
 <template>
-  <div class="markdown-body" v-html="html" />
+  <div class="markdown-body" v-html="html" ref="containerEl" @click="handleClick" />
+  <Teleport to="body">
+    <div
+      v-if="lightboxSrc"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-fade-in"
+      @click="closeLightbox"
+    >
+      <img :src="lightboxSrc" class="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl" alt="screenshot" />
+      <button
+        class="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+        aria-label="Close"
+        @click.stop="closeLightbox"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { marked } from 'marked'
-import { computed } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 
 const props = defineProps<{ content: string }>()
 
 // GFM + line breaks; marked escapes raw HTML by default (no html option).
 marked.setOptions({ breaks: true, gfm: true })
+
+const containerEl = ref<HTMLElement | null>(null)
+const lightboxSrc = ref<string | null>(null)
 
 const html = computed(() => {
   const raw = props.content ?? ''
@@ -17,6 +36,30 @@ const html = computed(() => {
   const cleaned = raw.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
   return marked.parse(cleaned, { async: false }) as string
 })
+
+function handleClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  if (target.tagName === 'IMG') {
+    const src = (target as HTMLImageElement).src
+    if (src) {
+      e.preventDefault()
+      lightboxSrc.value = src
+    }
+  }
+}
+
+function closeLightbox() {
+  lightboxSrc.value = null
+}
+
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeLightbox()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', onKey)
+  onUnmounted(() => window.removeEventListener('keydown', onKey))
+}
 </script>
 
 <style scoped>
@@ -87,4 +130,13 @@ const html = computed(() => {
   background: rgb(var(--surface-subtle));
   font-weight: 600;
 }
+.markdown-body :deep(img) {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--border));
+  margin: 0 0 0.75rem;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.markdown-body :deep(img:hover) { opacity: 0.9; }
 </style>

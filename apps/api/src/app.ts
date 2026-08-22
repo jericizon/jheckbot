@@ -20,16 +20,19 @@ import { AuthService } from './services/AuthService.js'
 import { DataService } from './services/DataService.js'
 import { SkillsService } from './services/SkillsService.js'
 import { PushService } from './services/PushService.js'
+import { ScreenshotService } from './services/ScreenshotService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
 import { DataController } from './controllers/DataController.js'
 import { PushController } from './controllers/PushController.js'
+import { ScreenshotController } from './controllers/ScreenshotController.js'
 import { createProjectRouter } from './routes/project.routes.js'
 import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
 import { createAuthRouter } from './routes/auth.routes.js'
 import { createDataRouter } from './routes/data.routes.js'
 import { createPushRouter } from './routes/push.routes.js'
+import { createScreenshotRouter } from './routes/screenshot.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
@@ -102,6 +105,7 @@ export function createApp(): express.Express {
   providerRegistry.register(devin)
   const providerService = new ProviderService(providerRegistry)
   const providerController = new ProviderController(providerService)
+  const screenshotService = new ScreenshotService(env.screenshotsDir)
   const agentManager = new AgentManager(
     devin,
     tmux,
@@ -112,6 +116,7 @@ export function createApp(): express.Express {
     eventRepo,
     pushService,
   )
+  agentManager.screenshotService = screenshotService
   // The server performs startup recovery before it begins listening.
   app.locals.agentManager = agentManager
 
@@ -127,6 +132,7 @@ export function createApp(): express.Express {
     conversationService,
     messageService,
     promptExecutionService,
+    screenshotService,
   )
   const agentController = new AgentController(agentManager, eventRepo, promptExecutionService)
 
@@ -202,6 +208,10 @@ export function createApp(): express.Express {
     next()
   })
   const conversationRouter = createConversationRouter(conversationController, agentController)
+  conversationRouter.use(
+    '/:id/screenshots',
+    createScreenshotRouter(new ScreenshotController(screenshotService)),
+  )
   app.use('/api/conversations', conversationRouter)
 
   // Bulk data management (destructive — requires confirmation token)

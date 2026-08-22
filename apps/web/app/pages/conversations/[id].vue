@@ -59,6 +59,10 @@
             </span>
           </button>
         </div>
+        <ProjectSwitcher
+          :current-id="conversation?.project_id"
+          :current-label="projectName || undefined"
+        />
         <button
           @click="toggleTheme"
           class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle shrink-0"
@@ -496,6 +500,12 @@ function connectSSE() {
     } else if (event.type === 'log') {
       const data = JSON.parse(event.data)
       activityLog.value = data.content
+    } else if (event.type === 'screenshot') {
+      // The screenshot is also injected into the output buffer as markdown,
+      // so it renders inline in the live output. This event signals a new
+      // screenshot arrived — scroll to reveal it immediately.
+      await nextTick()
+      scrollToBottom()
     }
   })
 }
