@@ -1,20 +1,51 @@
 <template>
   <div class="pb-20">
-    <header class="sticky top-0 bg-surface-elevated border-b border-border px-4 py-3 z-40">
+    <header class="sticky top-0 bg-surface-elevated border-b border-border px-4 py-3 z-40 space-y-3">
       <h1 class="text-lg font-semibold">JheckBot</h1>
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-subtle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        <input
+          v-model="query"
+          @input="onSearchInput"
+          placeholder="Search conversations..."
+          class="w-full rounded-lg border border-border bg-surface pl-9 pr-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:ring-2 focus:ring-content-subtle/20 focus:outline-none transition-all"
+        />
+      </div>
     </header>
 
     <div class="px-4 py-4 max-w-2xl mx-auto">
-      <h2 class="text-[11px] font-medium text-content-subtle uppercase tracking-wide mb-3">Recent</h2>
+      <h2 class="text-[11px] font-medium text-content-subtle uppercase tracking-wide mb-3">
+        {{ query.trim() ? 'Results' : 'Recent' }}
+      </h2>
+
+      <!-- Loading -->
       <div v-if="loading" class="space-y-2">
         <div v-for="i in 3" :key="i" class="rounded-lg border border-border bg-surface-elevated p-3 animate-pulse">
           <div class="h-4 w-32 bg-surface-subtle rounded" />
           <div class="h-3 w-20 bg-surface-subtle rounded mt-2" />
         </div>
       </div>
-      <div v-else-if="recent.length === 0" class="text-content-subtle text-sm py-8 text-center">
-        No conversations yet. Select a project to start.
+
+      <!-- Empty -->
+      <div v-else-if="items.length === 0" class="text-content-subtle text-sm py-8 text-center">
+        {{ query.trim() ? 'No results found.' : 'No conversations yet. Select a project to start.' }}
       </div>
+
+      <!-- Search results -->
+      <div v-else-if="query.trim()" class="space-y-2">
+        <NuxtLink
+          v-for="result in searchResults"
+          :key="result.conversation_id"
+          :to="`/conversations/${result.conversation_id}`"
+          class="block rounded-lg border border-border bg-surface-elevated p-3 hover:border-content-subtle transition-colors"
+        >
+          <div class="text-xs text-content-subtle">{{ result.project_name }}</div>
+          <div class="font-medium text-sm mt-1">{{ result.conversation_title }}</div>
+          <div class="text-xs text-content-subtle mt-1">{{ new Date(result.created_at).toLocaleDateString() }}</div>
+        </NuxtLink>
+      </div>
+
+      <!-- Recent conversations -->
       <div v-else class="space-y-2">
         <NuxtLink
           v-for="conv in recent"
@@ -39,6 +70,7 @@
 
 <script setup lang="ts">
 const { fetchUser, user } = useAuth()
+const convApi = useConversations()
 
 interface Conversation {
   id: string
@@ -48,8 +80,21 @@ interface Conversation {
   created_at: string
 }
 
+interface SearchResult {
+  conversation_id: string
+  project_id: string
+  project_name: string
+  conversation_title: string
+  created_at: string
+}
+
 const recent = ref<Conversation[]>([])
+const searchResults = ref<SearchResult[]>([])
+const query = ref('')
 const loading = ref(true)
+let debounce: ReturnType<typeof setTimeout>
+
+const items = computed(() => (query.value.trim() ? searchResults.value : recent.value))
 
 const ACTIVE_STATUSES = ['starting', 'running', 'stopping']
 function isAgentActive(conv: Conversation) {
@@ -65,6 +110,25 @@ function formatTime(iso: string): string {
   if (mins < 60) return `${mins}m ago`
   if (mins < 1440) return `${Math.floor(mins / 60)}h ago`
   return d.toLocaleDateString()
+}
+
+function onSearchInput() {
+  clearTimeout(debounce)
+  if (!query.value.trim()) {
+    searchResults.value = []
+    loading.value = false
+    return
+  }
+  loading.value = true
+  debounce = setTimeout(async () => {
+    try {
+      searchResults.value = await convApi.search(query.value)
+    } catch {
+      searchResults.value = []
+    } finally {
+      loading.value = false
+    }
+  }, 300)
 }
 
 onMounted(async () => {
