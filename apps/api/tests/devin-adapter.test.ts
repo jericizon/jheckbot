@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
+import { DEVIN_MODELS } from '@jheckbot/shared'
 import { DevinAdapter } from '../src/agent/DevinAdapter.js'
 import type { TmuxManager } from '../src/agent/TmuxManager.js'
 
@@ -40,6 +41,20 @@ describe('DevinAdapter', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     tmux = createTmuxMock()
     adapter = new DevinAdapter('devin', tmux)
+  })
+
+  it('identifies as the devin provider', () => {
+    expect(adapter.providerId).toBe('devin')
+    expect(adapter.displayName).toBe('Devin')
+  })
+
+  it('exposes Devin models and default', () => {
+    expect(adapter.defaultModel()).toBe('glm-5-2')
+    expect(adapter.supportedModels()).toEqual(DEVIN_MODELS)
+  })
+
+  it('reports skills are available', () => {
+    expect(adapter.hasSkills()).toBe(true)
   })
 
   it('reports available when the command is resolvable on PATH', () => {
@@ -102,7 +117,7 @@ describe('DevinAdapter', () => {
       sessionName: 'jheckbot-test-1',
       cwd: '/tmp/jheckbot-test-project',
       prompt: 'Continue work',
-      devinSessionId: "session-id'; touch /tmp/should-not-run",
+      resumeSessionId: "session-id'; touch /tmp/should-not-run",
     })
 
     const command = vi.mocked(tmux.createSession).mock.calls[0][2]
@@ -115,7 +130,7 @@ describe('DevinAdapter', () => {
       sessionName: 'jheckbot-test-1',
       cwd: '/tmp/jheckbot-test-project',
       prompt: 'Continue work',
-      devinSessionId: 'prior-session',
+      resumeSessionId: 'prior-session',
       model: 'glm-5-2',
     })
 
@@ -195,6 +210,7 @@ describe('DevinAdapter', () => {
     ])
 
     expect(adapter.getDevinSessionId('test-session')).toBe('healthy-dollar')
+    expect(adapter.captureSessionId('test-session')).toBe('healthy-dollar')
   })
 
   it('discovers the latest session ID via devin list --format json', () => {
@@ -208,6 +224,7 @@ describe('DevinAdapter', () => {
     })
 
     expect(adapter.getLatestSessionId('/tmp')).toBe('healthy-dollar')
+    expect(adapter.discoverSessionId('/tmp')).toBe('healthy-dollar')
   })
 
   it('filters devin list sessions by start time when provided', () => {
@@ -222,12 +239,14 @@ describe('DevinAdapter', () => {
 
     // sinceMs = 4000 → 4000 - 120 = 3880 seconds threshold
     expect(adapter.getLatestSessionId('/tmp', 4_000_000)).toBe('recent-session')
+    expect(adapter.discoverSessionId('/tmp', 4_000_000)).toBe('recent-session')
   })
 
   it('returns undefined when devin list fails', () => {
     mockExecFileSync.mockImplementation(() => { throw new Error('failed') })
 
     expect(adapter.getLatestSessionId('/tmp')).toBeUndefined()
+    expect(adapter.discoverSessionId('/tmp')).toBeUndefined()
   })
 
   it('reports no exit code when tmux no longer has a session', () => {

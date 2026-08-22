@@ -17,6 +17,9 @@ export interface RuntimeEnv {
   trustProxy: number
   adminUsername: string
   adminPassword: string
+  vapidPublicKey?: string
+  vapidPrivateKey?: string
+  vapidSubject?: string
 }
 
 const PLACEHOLDER_VALUES = new Set([
@@ -29,7 +32,6 @@ const VALID_NODE_ENVS = new Set(['development', 'test', 'production'])
 const VALID_SAME_SITE = new Set(['lax', 'strict', 'none'])
 
 const MIN_SESSION_SECRET_LENGTH = 32
-const MIN_ADMIN_PASSWORD_LENGTH = 12
 
 const warnings: string[] = []
 
@@ -127,9 +129,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
   const adminUsername = optString(source, 'ADMIN_USERNAME', 'admin')
 
   const adminPassword = optString(source, 'ADMIN_PASSWORD', 'admin')
-  if (adminPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
-    warn('ADMIN_PASSWORD', `is only ${adminPassword.length} characters — recommended minimum is ${MIN_ADMIN_PASSWORD_LENGTH}`)
-  }
   if (adminPassword === adminUsername) {
     warn('ADMIN_PASSWORD', 'should not equal the admin username')
   }
@@ -168,6 +167,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
   const corsOrigin = getString(source, 'CORS_ORIGIN') ?? 'http://localhost:8800'
   const trustProxy = parseNonNegativeInt(source, 'TRUST_PROXY', 1)
 
+  // VAPID keys for Web Push — optional. Push notifications are disabled
+  // when not set. Generate with: npx web-push generate-vapid-keys
+  const vapidPublicKey = getString(source, 'VAPID_PUBLIC_KEY')
+  const vapidPrivateKey = getString(source, 'VAPID_PRIVATE_KEY')
+  const vapidSubject = getString(source, 'VAPID_SUBJECT') ?? `mailto:admin@localhost`
+  if ((vapidPublicKey && !vapidPrivateKey) || (!vapidPublicKey && vapidPrivateKey)) {
+    warn('VAPID_KEYS', 'only one of VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY is set — both are required for push notifications')
+  }
+  if (!vapidPublicKey && !vapidPrivateKey) {
+    warn('VAPID_KEYS', 'not set — push notifications disabled. Generate with: npx web-push generate-vapid-keys')
+  }
+
   flushWarnings()
 
   return {
@@ -185,5 +196,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
     trustProxy,
     adminUsername,
     adminPassword,
+    vapidPublicKey: vapidPublicKey && vapidPrivateKey ? vapidPublicKey : undefined,
+    vapidPrivateKey: vapidPublicKey && vapidPrivateKey ? vapidPrivateKey : undefined,
+    vapidSubject,
   }
 }

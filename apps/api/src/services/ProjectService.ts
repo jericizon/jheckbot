@@ -6,12 +6,16 @@ export interface CreateProjectInput {
   name: string
   path: string
   description?: string
+  defaultProviderId?: string
+  defaultProviderConfig?: Record<string, unknown> | null
 }
 
 export interface UpdateProjectInput {
   name?: string
   description?: string
   enabled?: boolean
+  defaultProviderId?: string
+  defaultProviderConfig?: Record<string, unknown> | null
 }
 
 export class ProjectService {
@@ -53,6 +57,8 @@ export class ProjectService {
       slug: slugify(input.name),
       path: result.resolvedPath,
       description: input.description?.trim() || undefined,
+      defaultProviderId: input.defaultProviderId,
+      defaultProviderConfig: input.defaultProviderConfig,
     })
   }
 
@@ -68,6 +74,8 @@ export class ProjectService {
       name: input.name?.trim(),
       description: input.description?.trim(),
       enabled: input.enabled,
+      defaultProviderId: input.defaultProviderId,
+      defaultProviderConfig: input.defaultProviderConfig,
     })
   }
 

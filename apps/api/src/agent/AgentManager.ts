@@ -6,6 +6,7 @@ import { ConversationRepository, type ConversationRecord } from '../repositories
 import { MessageRepository } from '../repositories/MessageRepository.js'
 import { AgentEventRepository, type AgentEventRecord } from '../repositories/AgentEventRepository.js'
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
+import type { PushService } from '../services/PushService.js'
 import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 
 export type AgentStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'stopped'
@@ -133,6 +134,7 @@ export class AgentManager {
   private readonly messageRepo?: MessageRepository
   private readonly eventRepo?: AgentEventRepository
   private readonly tmux?: TmuxManager
+  private readonly pushService?: PushService
 
   constructor(
     devin: DevinAdapter,
@@ -141,6 +143,7 @@ export class AgentManager {
     conversationRepo?: ConversationRepository,
     messageRepo?: MessageRepository,
     eventRepo?: AgentEventRepository,
+    pushService?: PushService,
   )
   constructor(
     devin: DevinAdapter,
@@ -150,6 +153,7 @@ export class AgentManager {
     conversationRepo?: ConversationRepository,
     messageRepo?: MessageRepository,
     eventRepo?: AgentEventRepository,
+    pushService?: PushService,
   )
   constructor(
     devin: DevinAdapter,
@@ -158,27 +162,30 @@ export class AgentManager {
     fourth?: ConversationRepository | PathValidatorFactory,
     fifth?: ConversationRepository | MessageRepository,
     sixth?: MessageRepository | AgentEventRepository,
-    seventh?: AgentEventRepository,
+    seventh?: AgentEventRepository | PushService,
+    eighth?: PushService,
   ) {
     this.devin = devin
 
     if (typeof third === 'function') {
+      // Overload 1: (devin, repo, pathValidatorFactory, conversationRepo?, messageRepo?, eventRepo?, pushService?)
       this.repo = second as ProjectRepository
       this.pathValidatorFactory = third
       this.conversationRepo = fourth as ConversationRepository | undefined
       this.messageRepo = fifth as MessageRepository | undefined
       this.eventRepo = sixth as AgentEventRepository | undefined
+      this.pushService = seventh as PushService | undefined
       return
     }
 
-    // Keep the pre-Task-2 constructor source-compatible for callers that own
-    // the TmuxManager instance directly.
+    // Overload 2: (devin, tmux, repo, pathValidatorFactory, conversationRepo?, messageRepo?, eventRepo?, pushService?)
     this.tmux = second as TmuxManager
     this.repo = third
     this.pathValidatorFactory = fourth as PathValidatorFactory
     this.conversationRepo = fifth as ConversationRepository | undefined
     this.messageRepo = sixth as MessageRepository | undefined
-    this.eventRepo = seventh
+    this.eventRepo = seventh as AgentEventRepository | undefined
+    this.pushService = eighth
   }
 
   /**
@@ -208,7 +215,7 @@ export class AgentManager {
         sessionName,
         cwd: options.cwd,
         prompt: options.prompt,
-        devinSessionId: options.devinSessionId,
+        resumeSessionId: options.devinSessionId,
         model: options.model || DEFAULT_DEVIN_MODEL,
         bypass: options.bypass,
       })
@@ -785,6 +792,13 @@ export class AgentManager {
         } catch {
           // The in-memory lock is still released in the finally block below.
         }
+      }
+
+      // Best-effort Web Push notification for terminal statuses.
+      if (this.pushService && status !== 'idle') {
+        this.pushService
+          .notifyConversationCompletion(state.run.conversationId, status, error)
+          .catch(() => {})
       }
     } finally {
       // `agent_status` is deliberately updated only after the terminal event

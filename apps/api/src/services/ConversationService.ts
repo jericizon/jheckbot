@@ -8,11 +8,15 @@ import { ProjectRepository } from '../repositories/ProjectRepository.js'
 export interface CreateConversationInput {
   projectId: string
   title?: string
+  agentType?: string
+  providerConfig?: Record<string, unknown> | null
 }
 
 export interface UpdateConversationInput {
   title?: string
   status?: string
+  agentType?: string
+  providerConfig?: Record<string, unknown> | null
   agentSessionId?: string
   agentStatus?: string
 }
@@ -45,7 +49,12 @@ export class ConversationService {
     }
 
     const title = input.title?.trim() || 'New Conversation'
-    return this.conversationRepo.create({ projectId: input.projectId, title })
+    return this.conversationRepo.create({
+      projectId: input.projectId,
+      title,
+      agentType: input.agentType ?? project.default_provider_id ?? 'devin',
+      providerConfig: input.providerConfig ?? project.default_provider_config,
+    })
   }
 
   async update(id: string, input: UpdateConversationInput): Promise<ConversationRecord | null> {
@@ -59,6 +68,8 @@ export class ConversationService {
     return this.conversationRepo.update(id, {
       title: input.title?.trim(),
       status: input.status,
+      agentType: input.agentType,
+      providerConfig: input.providerConfig,
       agentSessionId: input.agentSessionId,
       agentStatus: input.agentStatus,
     })

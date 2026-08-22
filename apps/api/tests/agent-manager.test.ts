@@ -240,7 +240,7 @@ describe('AgentManager', () => {
     await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'Follow up' })
 
     expect(startSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ devinSessionId: 'prior-session-id' }),
+      expect.objectContaining({ resumeSessionId: 'prior-session-id' }),
     )
   })
 

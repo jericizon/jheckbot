@@ -46,6 +46,8 @@ export class ConversationController {
       const conversation = await this.conversationService.create({
         projectId,
         title: req.body.title,
+        agentType: req.body.agentType,
+        providerConfig: req.body.providerConfig,
       })
       res.status(201).json(conversation)
     } catch (err) {
@@ -75,6 +77,8 @@ export class ConversationController {
       const conversation = await this.conversationService.update(id, {
         title: req.body.title,
         status: req.body.status,
+        agentType: req.body.agentType,
+        providerConfig: req.body.providerConfig,
         agentSessionId: req.body.agentSessionId,
         agentStatus: req.body.agentStatus,
       })

@@ -317,6 +317,10 @@ const { sidebarOpen, toggle: toggleSidebar } = useSidebar()
 const sidebarConversations = ref<Conversation[]>([])
 let eventSource: EventSource | null = null
 
+// Track background conversations that were running on the previous poll,
+// so we can detect transitions to idle and fire a notification.
+const prevBackgroundRunning = ref<Set<string>>(new Set())
+
 // Refresh sidebar statuses periodically so background runs in other
 // conversations surface without a manual reload. While the active
 // conversation's agent is running, SSE owns its status and we skip
@@ -334,6 +338,25 @@ useConversationPolling(
     } else {
       sidebarConversations.value = convs
     }
+
+    // Detect background conversations that just finished. The active
+    // conversation is owned by SSE above; only notify for others.
+    const { notify } = useNotifications()
+    const nextRunning = new Set<string>()
+    for (const c of convs) {
+      const isActive = c.id === id.value
+      const wasRunning = prevBackgroundRunning.value.has(c.id) || (!isActive && (c.agent_status === 'running' || c.agent_status === 'starting'))
+      const isRunning = c.agent_status === 'running' || c.agent_status === 'starting'
+      if (isRunning && !isActive) nextRunning.add(c.id)
+      if (wasRunning && !isRunning && !isActive) {
+        notify(`${c.title || 'Conversation'} — task completed`, {
+          body: `Devin finished working on "${c.title || 'Conversation'}"`,
+          tag: `conv-${c.id}`,
+          url: `/conversations/${c.id}`,
+        })
+      }
+    }
+    prevBackgroundRunning.value = nextRunning
   },
 )
 
@@ -450,6 +473,17 @@ function connectSSE() {
         eventSource?.close()
         await reloadMessages()
         changedFilesPanel.value?.refresh()
+        // Fire a push notification when the page is backgrounded
+        if (data.status !== 'idle') {
+          const { notify } = useNotifications()
+          const title = conversation.value?.title || 'Conversation'
+          const verb = data.status === 'completed' ? 'completed' : data.status === 'failed' ? 'failed' : 'stopped'
+          notify(`${title} — task ${verb}`, {
+            body: data.status === 'failed' && data.error ? data.error : `Devin finished working on "${title}"`,
+            tag: `conv-${id.value}`,
+            url: `/conversations/${id.value}`,
+          })
+        }
       } else {
         setSidebarStatus(id.value, data.status)
       }

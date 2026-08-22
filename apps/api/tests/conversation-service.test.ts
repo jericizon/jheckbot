@@ -28,6 +28,8 @@ describe('ConversationService', () => {
       path: '/tmp/test',
       description: null,
       enabled: true,
+      default_provider_id: null,
+      default_provider_config: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -38,6 +40,7 @@ describe('ConversationService', () => {
       title: 'New Conversation',
       status: 'active',
       agent_type: 'devin',
+      provider_config: null,
       agent_session_id: null,
       agent_status: 'idle',
       created_at: new Date().toISOString(),
@@ -68,6 +71,8 @@ describe('ConversationService', () => {
     expect(conversationRepo.create).toHaveBeenCalledWith({
       projectId: 'proj-1',
       title: 'My Task',
+      agentType: 'devin',
+      providerConfig: null,
     })
   })
 
@@ -76,6 +81,8 @@ describe('ConversationService', () => {
     expect(conversationRepo.create).toHaveBeenCalledWith({
       projectId: 'proj-1',
       title: 'New Conversation',
+      agentType: 'devin',
+      providerConfig: null,
     })
   })
 

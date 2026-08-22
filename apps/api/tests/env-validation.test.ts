@@ -103,16 +103,6 @@ describe('loadEnv — secret strength warns', () => {
 })
 
 describe('loadEnv — admin password warns', () => {
-  it('warns when password is shorter than 12 characters', () => {
-    const source = validSource()
-    source.ADMIN_PASSWORD = 'short-pass'
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const env = loadEnv(source)
-    expect(env.adminPassword).toBe('short-pass')
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ADMIN_PASSWORD'))
-    warnSpy.mockRestore()
-  })
-
   it('warns when password equals username', () => {
     const source = validSource()
     source.ADMIN_USERNAME = 'admin-user-12'

@@ -45,6 +45,8 @@ export class ProjectController {
         name: req.body.name,
         path: req.body.path,
         description: req.body.description,
+        defaultProviderId: req.body.defaultProviderId,
+        defaultProviderConfig: req.body.defaultProviderConfig,
       })
       res.status(201).json(project)
     } catch (err) {
@@ -64,6 +66,8 @@ export class ProjectController {
         name: req.body.name,
         description: req.body.description,
         enabled: req.body.enabled,
+        defaultProviderId: req.body.defaultProviderId,
+        defaultProviderConfig: req.body.defaultProviderConfig,
       })
       if (!project) {
         res.status(404).json({ error: 'Project not found' })

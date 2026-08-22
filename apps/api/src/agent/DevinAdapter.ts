@@ -1,32 +1,23 @@
 import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import type { Skill } from '@jheckbot/shared'
+import { DEFAULT_DEVIN_MODEL, DEVIN_MODELS } from '@jheckbot/shared'
 import { TmuxManager, type TmuxSession } from './TmuxManager.js'
+import {
+  AgentAdapterError,
+  type AgentAdapter,
+  type AgentSessionInfo,
+  type StartAgentOptions,
+} from './AgentAdapter.js'
 
-export interface DevinSessionInfo {
-  sessionName: string
+export interface DevinAgentSessionInfo extends AgentSessionInfo {
   devinSessionId?: string
-  status: DevinSessionStatus
-  startedAt: string
 }
 
-export type DevinSessionStatus = 'starting' | 'running' | 'stopped' | 'failed'
+export class DevinAdapter implements AgentAdapter {
+  readonly providerId = 'devin'
+  readonly displayName = 'Devin'
 
-export interface StartDevinOptions {
-  sessionName: string
-  cwd: string
-  prompt: string
-  devinSessionId?: string
-  model?: string
-  env?: Record<string, string>
-  bypass?: boolean
-}
-
-/**
- * Adapter for the Devin CLI.
- * Keeps Devin-specific command construction here while TmuxManager owns the
- * persistent PTY boundary.
- */
-export class DevinAdapter {
   private readonly devinBin: string
   private readonly tmux: TmuxManager
 
@@ -48,13 +39,46 @@ export class DevinAdapter {
     }
   }
 
+  defaultModel(): string {
+    return DEFAULT_DEVIN_MODEL
+  }
+
+  supportedModels() {
+    return DEVIN_MODELS
+  }
+
+  hasSkills(): boolean {
+    return true
+  }
+
+  listSkills(): Skill[] {
+    try {
+      const output = execFileSync(this.devinBin, ['skills', 'list', '--json'], {
+        stdio: 'pipe',
+        timeout: 10000,
+        encoding: 'utf8',
+      })
+      const parsed = JSON.parse(output)
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter(this.isSkill)
+    } catch {
+      return []
+    }
+  }
+
+  private isSkill(value: unknown): value is Skill {
+    if (!value || typeof value !== 'object') return false
+    const v = value as Record<string, unknown>
+    return typeof v.name === 'string' && typeof v.description === 'string'
+  }
+
   /** Start an interactive Devin session inside a detached tmux session. */
-  start(opts: StartDevinOptions): DevinSessionInfo {
+  start(opts: StartAgentOptions): DevinAgentSessionInfo {
     if (!this.isAvailable()) {
-      throw new DevinAdapterError(`Devin binary not found: ${this.devinBin}`)
+      throw new AgentAdapterError(`Devin binary not found: ${this.devinBin}`)
     }
     if (!this.tmux.isAvailable()) {
-      throw new DevinAdapterError('tmux is not available')
+      throw new AgentAdapterError('tmux is not available')
     }
 
     this.tmux.createSession(
@@ -66,6 +90,8 @@ export class DevinAdapter {
 
     return {
       sessionName: opts.sessionName,
+      sessionId: opts.resumeSessionId,
+      devinSessionId: opts.resumeSessionId,
       status: 'starting',
       startedAt: new Date().toISOString(),
     }
@@ -74,7 +100,7 @@ export class DevinAdapter {
   /** Send a follow-up prompt to an existing Devin session. */
   sendPrompt(sessionName: string, prompt: string): void {
     if (!this.tmux.sessionExists(sessionName)) {
-      throw new DevinAdapterError(`Session does not exist: ${sessionName}`)
+      throw new AgentAdapterError(`Session does not exist: ${sessionName}`)
     }
     this.tmux.sendKeys(sessionName, prompt)
   }
@@ -108,14 +134,18 @@ export class DevinAdapter {
     return this.tmux.listSessions()
   }
 
-  /** Extract a Devin session ID from captured output when the CLI prints one. */
-  getDevinSessionId(sessionName: string): string | undefined {
-    return this.extractSessionId(this.captureOutput(sessionName))
-  }
-
   /** Tmux does not retain an exit code after a pane disappears. */
   getExitCode(_sessionName: string): number | null {
     return null
+  }
+
+  /** Extract a Devin session ID from captured output when the CLI prints one. */
+  captureSessionId(sessionName: string): string | undefined {
+    return this.getDevinSessionId(sessionName)
+  }
+
+  getDevinSessionId(sessionName: string): string | undefined {
+    return this.extractSessionId(this.captureOutput(sessionName))
   }
 
   /** Extract a session ID from output if the CLI prints one. */
@@ -139,6 +169,10 @@ export class DevinAdapter {
    * way to obtain a session ID after a --print run, since --print mode
    * does not print the session ID to stdout.
    */
+  discoverSessionId(cwd: string, sinceMs?: number): string | undefined {
+    return this.getLatestSessionId(cwd, sinceMs)
+  }
+
   getLatestSessionId(cwd: string, sinceMs?: number): string | undefined {
     try {
       const output = execFileSync(this.devinBin, ['list', '--format', 'json'], {
@@ -166,12 +200,12 @@ export class DevinAdapter {
     }
   }
 
-  private buildCommand(opts: StartDevinOptions): string {
+  private buildCommand(opts: StartAgentOptions): string {
     const args = [this.devinBin]
     // --model is ignored when resuming (the session's saved model is used),
     // and passing it produces a warning. Omit it on resume.
-    if (opts.model && !opts.devinSessionId) args.push('--model', opts.model)
-    if (opts.devinSessionId) args.push('--resume', opts.devinSessionId)
+    if (opts.model && !opts.resumeSessionId) args.push('--model', opts.model)
+    if (opts.resumeSessionId) args.push('--resume', opts.resumeSessionId)
     // --print: non-interactive mode, Devin processes the prompt and exits so
     // the watcher can detect the dead tmux session and transition the run.
     // --respect-workspace-trust false: skip the interactive trust prompt in
@@ -187,12 +221,5 @@ export class DevinAdapter {
 
   private escapeShellArg(value: string): string {
     return `'${value.replace(/'/g, "'\\''")}'`
-  }
-}
-
-export class DevinAdapterError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'DevinAdapterError'
   }
 }

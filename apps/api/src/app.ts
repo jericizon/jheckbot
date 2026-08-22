@@ -4,12 +4,12 @@ import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { existsSync } from 'node:fs'
 import type { HealthStatus } from '@jheckbot/shared'
-import { DEVIN_MODELS, DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 import { ProjectRepository } from './repositories/ProjectRepository.js'
 import { ConversationRepository } from './repositories/ConversationRepository.js'
 import { MessageRepository } from './repositories/MessageRepository.js'
 import { AgentEventRepository } from './repositories/AgentEventRepository.js'
 import { UserRepository } from './repositories/UserRepository.js'
+import { PushSubscriptionRepository } from './repositories/PushSubscriptionRepository.js'
 import { PathValidator, type AllowedRoot } from './services/PathValidator.js'
 import { ProjectService } from './services/ProjectService.js'
 import { ProjectHealthService } from './services/ProjectHealthService.js'
@@ -19,22 +19,28 @@ import { PromptExecutionService } from './services/PromptExecutionService.js'
 import { AuthService } from './services/AuthService.js'
 import { DataService } from './services/DataService.js'
 import { SkillsService } from './services/SkillsService.js'
+import { PushService } from './services/PushService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
 import { DataController } from './controllers/DataController.js'
+import { PushController } from './controllers/PushController.js'
 import { createProjectRouter } from './routes/project.routes.js'
 import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
 import { createAuthRouter } from './routes/auth.routes.js'
 import { createDataRouter } from './routes/data.routes.js'
+import { createPushRouter } from './routes/push.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { TmuxManager } from './agent/TmuxManager.js'
 import { DevinAdapter } from './agent/DevinAdapter.js'
+import { AgentProviderRegistry } from './agent/AgentProviderRegistry.js'
 import { pool } from './db/pool.js'
 import { AgentManager } from './agent/AgentManager.js'
 import { AgentController } from './controllers/AgentController.js'
+import { ProviderController } from './controllers/ProviderController.js'
+import { ProviderService } from './services/ProviderService.js'
 import { env } from './config/env.js'
 
 export function createApp(): express.Express {
@@ -78,10 +84,24 @@ export function createApp(): express.Express {
   const messageService = new MessageService(messageRepo, conversationRepo)
   const authService = new AuthService(userRepo)
 
+  const pushRepo = new PushSubscriptionRepository()
+  const pushConfig = env.vapidPublicKey && env.vapidPrivateKey
+    ? {
+        vapidPublicKey: env.vapidPublicKey,
+        vapidPrivateKey: env.vapidPrivateKey,
+        vapidSubject: env.vapidSubject ?? 'mailto:admin@localhost',
+      }
+    : undefined
+  const pushService = new PushService(pushRepo, conversationRepo, pushConfig)
+
   const projectController = new ProjectController(projectService, healthService)
 
   const tmux = new TmuxManager(env.tmuxBin)
   const devin = new DevinAdapter(env.devinBin, tmux)
+  const providerRegistry = new AgentProviderRegistry()
+  providerRegistry.register(devin)
+  const providerService = new ProviderService(providerRegistry)
+  const providerController = new ProviderController(providerService)
   const agentManager = new AgentManager(
     devin,
     tmux,
@@ -90,6 +110,7 @@ export function createApp(): express.Express {
     conversationRepo,
     messageRepo,
     eventRepo,
+    pushService,
   )
   // The server performs startup recovery before it begins listening.
   app.locals.agentManager = agentManager
@@ -150,9 +171,13 @@ export function createApp(): express.Express {
   // Search endpoint
   app.get('/api/search', (req, res) => conversationController.search(req, res))
 
-  // Models endpoint — returns curated Devin model list
+  // Provider listing and per-provider models
+  app.get('/api/providers', (req, res) => providerController.list(req, res))
+  app.get('/api/providers/:id/models', (req, res) => providerController.models(req, res))
+
+  // Models endpoint — backward-compatible alias for Devin models
   app.get('/api/models', (_req, res) => {
-    res.json({ models: DEVIN_MODELS, default: DEFAULT_DEVIN_MODEL })
+    res.json(providerService.getModels('devin'))
   })
 
   // Skills endpoint — lists Devin CLI skills (cached, ?refresh=1 forces a reload)
@@ -181,6 +206,10 @@ export function createApp(): express.Express {
 
   // Bulk data management (destructive — requires confirmation token)
   app.use('/api/data', createDataRouter(dataController))
+
+  // Web Push subscription management
+  const pushController = new PushController(pushService, pushRepo)
+  app.use('/api/push', createPushRouter(pushController))
 
   // Error handling
   app.use(notFoundHandler)

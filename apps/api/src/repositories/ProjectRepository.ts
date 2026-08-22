@@ -9,6 +9,8 @@ export interface ProjectRecord {
   path: string
   description: string | null
   enabled: boolean
+  default_provider_id: string | null
+  default_provider_config: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -42,32 +44,52 @@ export class ProjectRepository {
     slug: string
     path: string
     description?: string
+    defaultProviderId?: string
+    defaultProviderConfig?: Record<string, unknown> | null
   }): Promise<ProjectRecord> {
     const { rows } = await pool.query<ProjectRecord>(
-      `INSERT INTO projects (name, slug, path, description)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO projects (name, slug, path, description, default_provider_id, default_provider_config)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [data.name, data.slug, data.path, data.description ?? null],
+      [
+        data.name,
+        data.slug,
+        data.path,
+        data.description ?? null,
+        data.defaultProviderId ?? null,
+        data.defaultProviderConfig ? JSON.stringify(data.defaultProviderConfig) : null,
+      ],
     )
     return rows[0]
   }
 
   async update(
     id: string,
-    data: { name?: string; description?: string; enabled?: boolean },
+    data: {
+      name?: string
+      description?: string
+      enabled?: boolean
+      defaultProviderId?: string
+      defaultProviderConfig?: Record<string, unknown> | null
+    },
   ): Promise<ProjectRecord | null> {
     const existing = await this.findById(id)
     if (!existing) return null
 
     const { rows } = await pool.query<ProjectRecord>(
       `UPDATE projects
-       SET name = $1, description = $2, enabled = $3, updated_at = NOW()
-       WHERE id = $4
+       SET name = $1, description = $2, enabled = $3, default_provider_id = $4,
+           default_provider_config = $5, updated_at = NOW()
+       WHERE id = $6
        RETURNING *`,
       [
         data.name ?? existing.name,
         data.description ?? existing.description,
         data.enabled ?? existing.enabled,
+        data.defaultProviderId ?? existing.default_provider_id,
+        data.defaultProviderConfig !== undefined
+          ? (data.defaultProviderConfig ? JSON.stringify(data.defaultProviderConfig) : null)
+          : existing.default_provider_config,
         id,
       ],
     )

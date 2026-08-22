@@ -6,6 +6,7 @@ export interface ConversationRecord {
   title: string
   status: string
   agent_type: string
+  provider_config: Record<string, unknown> | null
   agent_session_id: string | null
   agent_status: string
   created_at: string
@@ -56,21 +57,35 @@ export class ConversationRepository {
     data: {
       projectId: string
       title?: string
+      agentType?: string
+      providerConfig?: Record<string, unknown> | null
     },
     executor: DbExecutor = pool,
   ): Promise<ConversationRecord> {
     const { rows } = await executor.query<ConversationRecord>(
-      `INSERT INTO conversations (project_id, title)
-       VALUES ($1, $2)
+      `INSERT INTO conversations (project_id, title, agent_type, provider_config)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [data.projectId, data.title ?? 'New Conversation'],
+      [
+        data.projectId,
+        data.title ?? 'New Conversation',
+        data.agentType ?? 'devin',
+        data.providerConfig ? JSON.stringify(data.providerConfig) : null,
+      ],
     )
     return rows[0]
   }
 
   async update(
     id: string,
-    data: { title?: string; status?: string; agentSessionId?: string; agentStatus?: string },
+    data: {
+      title?: string
+      status?: string
+      agentType?: string
+      providerConfig?: Record<string, unknown> | null
+      agentSessionId?: string
+      agentStatus?: string
+    },
     executor: DbExecutor = pool,
   ): Promise<ConversationRecord | null> {
     const existing = await this.findById(id, executor)
@@ -78,13 +93,17 @@ export class ConversationRepository {
 
     const { rows } = await executor.query<ConversationRecord>(
       `UPDATE conversations
-       SET title = $1, status = $2, agent_session_id = $3, agent_status = $4,
-           updated_at = NOW()
-       WHERE id = $5
+       SET title = $1, status = $2, agent_type = $3, provider_config = $4,
+           agent_session_id = $5, agent_status = $6, updated_at = NOW()
+       WHERE id = $7
        RETURNING *`,
       [
         data.title ?? existing.title,
         data.status ?? existing.status,
+        data.agentType ?? existing.agent_type,
+        data.providerConfig !== undefined
+          ? (data.providerConfig ? JSON.stringify(data.providerConfig) : null)
+          : existing.provider_config,
         data.agentSessionId ?? existing.agent_session_id,
         data.agentStatus ?? existing.agent_status,
         id,

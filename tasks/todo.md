@@ -1,51 +1,67 @@
-# Transactional MVP Chat Work Items
+# Multi-Provider Agent Support
 
-- [x] Task 1: Add transactional database primitives and ordered event cursors
-  - Acceptance: `withTransaction`, row-lock repository methods, message-type migration, and monotonic event replay compile and pass focused tests.
-  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/db-transaction.test.ts tests/agent-event-repository.test.ts`; API typecheck — 9 focused tests, API 111 tests, and typecheck passed.
-  - Dependencies: None.
+- [ ] Task 1: Provider interface and Devin adapter refactor
+  - Acceptance: `DevinAdapter` implements the common `AgentAdapter` interface; registry resolves `'devin'`; existing tests pass.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/devin-adapter.test.ts tests/agent-manager.test.ts`
+  - Files: `apps/api/src/agent/AgentAdapter.ts`, `AgentProviderRegistry.ts`, `DevinAdapter.ts`, `packages/shared/src/types/index.ts`
 
-- [x] Task 2: Restore tmux-backed Devin execution and clean output normalization
-  - Acceptance: DevinAdapter delegates to TmuxManager; normalizer removes observed TUI chrome and preserves meaningful output.
-  - Verify: normalizer, adapter, and tmux tests — 33 focused tests and API typecheck passed; review fix round addressed environment escaping and snapshot deduplication.
-  - Dependencies: Task 1 migration/contract review only.
+- [ ] Task 2: Database and repository changes
+  - Acceptance: `provider_config` on conversations; `default_provider_id`/`default_provider_config` on projects; repositories updated.
+  - Verify: repository tests + API typecheck
+  - Files: `apps/api/migrations/006_provider_config.sql`, `ConversationRepository.ts`, `ProjectRepository.ts`, types
 
-- [x] Task 3: Implement one watcher per run, lifecycle persistence, and startup recovery
-  - Acceptance: one watcher per active run, assistant/error persistence, terminal lock release, and API restart recovery.
-  - Verify: agent-manager focused tests (24/24); API typecheck passed. Review `task-3-review.md` approved with findings (3 important deferred to Task 4/8, 4 minor).
-  - Dependencies: Tasks 1 and 2.
+- [ ] Task 3: Provider API endpoints
+  - Acceptance: `GET /api/providers` and `/api/providers/:id/models`; conversation/project create/update accept provider fields; invalid provider rejected.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/conversation-controller.test.ts tests/conversation-service.test.ts`
+  - Files: `ProviderController.ts`, `provider.routes.ts`, route/service updates
 
-- [x] Task 4: Add the atomic prompt command and API integration
-  - Acceptance: one message request owns validation, row lock, prompt persistence, tmux preparation, initial state, commit, and compensation.
-  - Verify: prompt-execution (8) and conversation-controller (7) tests; API 139 tests; typecheck and build passed. Review `task-4-review.md` approved with findings (2 important deferred, 3 minor).
-  - Dependencies: Tasks 1 and 3.
+- [ ] Task 4: Agent runner provider routing
+  - Acceptance: `AgentManager` and `PromptExecutionService` use conversation provider; Devin resume unchanged.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/prompt-execution.test.ts tests/agent-manager.test.ts`
+  - Files: `AgentManager.ts`, `PromptExecutionService.ts`, shared types/constants
 
-- [x] Task 5: Replace per-client SSE polling with ordered replay and subscriptions
-  - Acceptance: ordered cursor replay, one manager watcher, no controller-side event writes, no duplicate reconnect output.
-  - Verify: SSE replay tests (6/6); API 145 tests; typecheck passed. Review `task-5-review.md` approved with findings (2 important deferred to Task 7/8, 2 minor).
-  - Dependencies: Tasks 1 and 3.
+- [ ] Task 5: Health and diagnostics
+  - Acceptance: Health reports per-provider availability; project health reflects default provider.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/project-health.test.ts tests/health.test.ts`
+  - Files: `app.ts`, `ProjectHealthService.ts`, `projects/[id].vue`
 
-- [x] Task 6: Align the Nuxt chat UI with the atomic API and SSR reconnection
-  - Acceptance: one send request, server-ID reconciliation, visible errors, terminal message refresh, authenticated SSR refresh.
-  - Verify: web chat tests (5/5); web 7 tests; workspace 161 tests; typecheck passed. Review `task-6-review.md` approved with findings (2 important deferred to Task 8, 3 minor).
-  - Dependencies: Tasks 4 and 5.
+- [ ] Task 6: Frontend provider selector
+  - Acceptance: Provider selector in chat composer and project page; models load per provider; skills disabled for non-skill providers.
+  - Verify: web tests + typecheck
+  - Files: `ProviderSelector.vue`, `useConversations.ts`, `useProjects.ts`, `conversations/[id].vue`, `projects/[id].vue`
 
-- [x] Task 7: Add API integration coverage and security/health corrections
-  - Acceptance: auth, isolation, concurrency, history, rate limiting, and readiness checks are covered and pass.
-  - Verify: integration (9) + health (5) tests; API 158 tests; workspace 174 tests; typecheck and build passed. Review `task-7-review.md` approved with findings (2 important deferred to Task 8, 2 minor).
-  - Fixed: duplicate stop event, JSON.parse try/catch, health readiness probes.
-  - Dependencies: Tasks 4–6.
+- [ ] Task 7: Claude Code adapter
+  - Acceptance: `claude-code` provider builds command and reports availability.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/claude-code-adapter.test.ts`
+  - Files: `apps/api/src/agent/providers/ClaudeCodeAdapter.ts`, registry
 
-- [x] Task 8: Full verification, runtime QA, and QA report
-  - Acceptance: full tests/build/typecheck/lint pass and dedicated headless real-user QA reports every acceptance criterion.
-  - Verify: 174 tests pass; typecheck, build, lint pass; QA report at `docs/superpowers/qa/20260821_115932-transactional-chat.md`.
-  - Runtime QA: not executed (rules prohibit starting servers). 9 manual verification items documented for the user.
-  - Fixed: POST-only rate limiting, safe live output clearing.
-  - Verify: `pnpm test`; `pnpm typecheck`; `pnpm build`; `pnpm lint`; runtime QA report.
-  - Dependencies: Tasks 1–7.
+- [ ] Task 8: Codex adapter
+  - Acceptance: `codex` provider builds command and reports availability.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/codex-adapter.test.ts`
+  - Files: `apps/api/src/agent/providers/CodexAdapter.ts`, registry
+
+- [ ] Task 9: Gemini CLI adapter
+  - Acceptance: `gemini-cli` provider builds command and reports availability.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/gemini-cli-adapter.test.ts`
+  - Files: `apps/api/src/agent/providers/GeminiCliAdapter.ts`, registry
+
+- [ ] Task 10: Custom provider
+  - Acceptance: Custom binary validated and run safely; no shell injection.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/custom-adapter.test.ts`
+  - Files: `apps/api/src/agent/providers/CustomAdapter.ts`, `ProviderSelector.vue`
+
+- [ ] Task 11: Skills and models per provider
+  - Acceptance: Provider-aware skills and models; legacy `/api/models` preserved.
+  - Verify: `pnpm --filter @jheckbot/api exec vitest run tests/skills-service.test.ts`; web typecheck
+  - Files: `SkillsService.ts`, `app.ts`, `SkillsPicker.vue`, `useConversations.ts`
+
+- [ ] Task 12: Full verification and QA
+  - Acceptance: `pnpm test`, `pnpm typecheck`, `pnpm build`, `pnpm lint` pass; manual QA for installed providers; QA report written.
+  - Verify: full workspace commands + manual runtime QA
+  - Files: `docs/superpowers/qa/20260822_003000-agent-provider-qa.md`
 
 ## Checkpoints
 
-- [ ] After Tasks 1–3: database, tmux, normalizer, watcher, recovery, and API typecheck are green.
-- [ ] After Tasks 4–6: atomic API, SSE, frontend chat, and both package typechecks are green.
-- [ ] Complete: full verification, QA report, final code review, simplification, and evidence-backed completion report.
+- [ ] After Task 4: Foundation complete — Devin behavior preserved, provider persistence works.
+- [ ] After Task 10: All built-in and custom adapters implemented.
+- [ ] After Task 12: Complete — all checks green, QA report approved.
