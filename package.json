@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently -n web,api -c blue,green \"pnpm --filter @jheckbot/web dev\" \"pnpm --filter @jheckbot/api dev\"",
     "dev:clean": "node scripts/kill-ports.mjs",
+    "tunnel": "node scripts/tunnel.mjs",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:unit": "pnpm -r test:unit",

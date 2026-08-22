@@ -55,6 +55,19 @@ pnpm dev
 - API: http://localhost:8801
 - PostgreSQL: localhost:8802
 
+## Share via Cloudflare Tunnel
+
+With `pnpm dev` running, expose the local dev server to a public URL:
+
+```bash
+pnpm tunnel
+```
+
+This creates an ephemeral `*.trycloudflare.com` URL. Quick Tunnels are intended
+for testing only and do not support Server-Sent Events (SSE), so live agent
+output in the chat may not work. For a production tunnel with full feature
+support, see [deploy/README.md](deploy/README.md).
+
 ## Reserved Ports
 
 | Port | Service |
