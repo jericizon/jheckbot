@@ -14,6 +14,8 @@ export function createProjectRouter(controller: ProjectController): Router {
   router.get('/:id/branch', (req, res) => controller.branch(req, res))
   router.get('/:id/changes', (req, res) => controller.changes(req, res))
   router.get('/:id/diff', (req, res) => controller.diff(req, res))
+  router.post('/:id/commit/generate', (req, res) => controller.generateCommitMessage(req, res))
+  router.post('/:id/commit', (req, res) => controller.commit(req, res))
 
   return router
 }

@@ -11,60 +11,57 @@
     <!-- Main chat area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
       <!-- Header -->
-      <header class="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
+      <header class="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
         <button
           @click="toggleSidebar"
-          class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle"
+          class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
+          aria-label="Toggle sidebar"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
-        <button
-          @click="navigateTo('/projects/' + conversation?.project_id)"
-          class="text-content-subtle hover:text-content transition-colors p-1 rounded-md hover:bg-surface-subtle"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        </button>
-        <!-- Project + branch badges -->
-        <div v-if="projectName" class="flex items-center gap-1.5 shrink-0">
+        <!-- Title + project subtitle -->
+        <div class="flex-1 min-w-0 flex flex-col">
+          <div class="flex items-center gap-1 min-w-0">
+            <input
+              v-if="editingTitle"
+              v-model="titleDraft"
+              @blur="saveTitle"
+              @keydown.enter.exact.prevent="saveTitle"
+              @keydown.escape="cancelEditTitle"
+              ref="titleInputEl"
+              class="flex-1 min-w-0 text-sm font-semibold bg-transparent border-b border-content-subtle focus:outline-none focus:border-content text-content"
+            />
+            <button
+              v-else
+              @click="startEditTitle"
+              class="flex items-center gap-1 min-w-0 group"
+              :disabled="agentRunning"
+            >
+              <span class="text-sm font-semibold truncate text-content">{{ conversation?.title || 'Conversation' }}</span>
+              <svg class="w-3 h-3 text-content-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            </button>
+            <span v-if="agentRunning" class="flex items-center gap-1 text-xs text-emerald-500 font-medium shrink-0">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Active
+            </span>
+          </div>
+          <!-- Project + branch as compact tappable subtitle (replaces separate back arrow) -->
           <button
+            v-if="projectName"
             @click="navigateTo('/projects/' + conversation?.project_id)"
-            class="text-xs font-medium text-content-muted hover:text-content transition-colors"
+            class="flex items-center gap-1 mt-0.5 text-xs text-content-subtle hover:text-content-muted transition-colors min-w-0"
           >
-            {{ projectName }}
-          </button>
-          <span v-if="projectBranch" class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">
-            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
-            <span class="font-mono">{{ projectBranch }}</span>
-          </span>
-        </div>
-        <!-- Editable title -->
-        <div class="flex-1 min-w-0 flex items-center gap-1">
-          <input
-            v-if="editingTitle"
-            v-model="titleDraft"
-            @blur="saveTitle"
-            @keydown.enter.exact.prevent="saveTitle"
-            @keydown.escape="cancelEditTitle"
-            ref="titleInputEl"
-            class="flex-1 min-w-0 text-sm font-semibold bg-transparent border-b border-content-subtle focus:outline-none focus:border-content text-content"
-          />
-          <button
-            v-else
-            @click="startEditTitle"
-            class="flex items-center gap-1 min-w-0 group"
-            :disabled="agentRunning"
-          >
-            <span class="text-sm font-semibold truncate text-content">{{ conversation?.title || 'Conversation' }}</span>
-            <svg class="w-3 h-3 text-content-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            <span class="truncate">{{ projectName }}</span>
+            <span v-if="projectBranch" class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5 shrink-0">
+              <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
+              <span class="font-mono truncate max-w-[12ch]">{{ projectBranch }}</span>
+            </span>
           </button>
         </div>
-        <span v-if="agentRunning" class="flex items-center gap-1.5 text-xs text-emerald-500 font-medium shrink-0">
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Active
-        </span>
         <button
           @click="toggleTheme"
-          class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
+          class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle shrink-0"
           :title="theme === 'dark' ? 'Switch to light' : 'Switch to dark'"
         >
           <svg v-if="theme === 'dark'" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
@@ -185,7 +182,7 @@
       </div>
 
       <!-- Input area -->
-      <div class="shrink-0 pb-4 pt-2">
+      <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div class="max-w-3xl mx-auto px-4">
           <!-- Stop button -->
           <div v-if="agentRunning" class="flex justify-center mb-3">
@@ -223,44 +220,42 @@
           </div>
 
           <!-- Model selector + bypass toggle + hint -->
-          <div class="flex items-center justify-between mt-2 px-1 gap-2">
-            <div class="flex items-center gap-3">
-              <select
-                v-model="selectedModel"
-                :disabled="agentStarting || agentRunning"
-                class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50"
-              >
-                <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
-                  <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
-                    {{ m.label }}{{ m.free ? ' (Free)' : '' }}
-                  </option>
-                </optgroup>
-              </select>
-              <button
-                @click="skillsPickerOpen = true"
-                :disabled="agentStarting || agentRunning"
-                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Browse and insert skills"
-              >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                <span>Skills</span>
-              </button>
-              <button
-                @click="toggleBypass"
-                :disabled="agentStarting || agentRunning"
-                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                :class="bypassMode
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
-                  : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
-                :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
-                :aria-pressed="bypassMode"
-              >
-                <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
-                <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
-              </button>
-            </div>
-            <p class="text-xs text-content-subtle shrink-0">Enter to send, Shift+Enter for new line</p>
+          <div class="flex items-center gap-2 mt-2 px-1 overflow-x-auto">
+            <select
+              v-model="selectedModel"
+              :disabled="agentStarting || agentRunning"
+              class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
+                <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
+                  {{ m.label }}{{ m.free ? ' (Free)' : '' }}
+                </option>
+              </optgroup>
+            </select>
+            <button
+              @click="skillsPickerOpen = true"
+              :disabled="agentStarting || agentRunning"
+              class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              title="Browse and insert skills"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              <span>Skills</span>
+            </button>
+            <button
+              @click="toggleBypass"
+              :disabled="agentStarting || agentRunning"
+              class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              :class="bypassMode
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
+                : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
+              :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
+              :aria-pressed="bypassMode"
+            >
+              <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
+            </button>
+            <p class="text-xs text-content-subtle shrink-0 ml-auto hidden sm:block">Enter to send, Shift+Enter for new line</p>
           </div>
         </div>
       </div>

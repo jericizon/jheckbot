@@ -122,42 +122,40 @@
             </div>
 
             <!-- Model selector + bypass toggle + hint -->
-            <div class="w-full flex items-center justify-between mt-2 px-1 gap-2">
-              <div class="flex items-center gap-3">
-                <select
-                  v-model="selectedModel"
-                  :disabled="sending"
-                  class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50"
-                >
-                  <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
-                    <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
-                      {{ m.label }}{{ m.free ? ' (Free)' : '' }}
-                    </option>
-                  </optgroup>
-                </select>
-                <button
-                  @click="toggleBypass"
-                  :disabled="sending"
-                  class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  :class="bypassMode
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
-                    : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
-                  :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
-                  :aria-pressed="bypassMode"
-                >
-                  <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
-                  <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
-                </button>
-                <button
-                  @click="checkHealth"
-                  :disabled="healthLoading"
-                  class="text-xs text-content-muted hover:text-content transition-colors disabled:opacity-50"
-                >
-                  {{ healthLoading ? 'Checking...' : 'Health' }}
-                </button>
-              </div>
-              <p class="text-xs text-content-subtle shrink-0">Enter to send, Shift+Enter for new line</p>
+            <div class="w-full flex items-center gap-2 mt-2 px-1 overflow-x-auto">
+              <select
+                v-model="selectedModel"
+                :disabled="sending"
+                class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
+                  <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
+                    {{ m.label }}{{ m.free ? ' (Free)' : '' }}
+                  </option>
+                </optgroup>
+              </select>
+              <button
+                @click="toggleBypass"
+                :disabled="sending"
+                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                :class="bypassMode
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
+                  : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
+                :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
+                :aria-pressed="bypassMode"
+              >
+                <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
+              </button>
+              <button
+                @click="checkHealth"
+                :disabled="healthLoading"
+                class="text-xs text-content-muted hover:text-content transition-colors disabled:opacity-50 shrink-0"
+              >
+                {{ healthLoading ? 'Checking...' : 'Health' }}
+              </button>
+              <p class="text-xs text-content-subtle shrink-0 ml-auto hidden sm:block">Enter to send, Shift+Enter for new line</p>
             </div>
 
             <p v-if="sendError" class="mt-3 text-sm text-red-500">{{ sendError }}</p>

@@ -49,6 +49,22 @@ interface FileDiffResult {
   checkedAt: string
 }
 
+interface GenerateCommitResult {
+  projectId: string
+  message: string
+  fileCount: number
+  checkedAt: string
+}
+
+interface CommitResult {
+  projectId: string
+  branch: string
+  commitHash: string
+  pushed: boolean
+  commitMessage: string
+  checkedAt: string
+}
+
 export function useProjects() {
   const api = useApi()
 
@@ -65,6 +81,8 @@ export function useProjects() {
     branch: (id: string) => api.get<BranchResult>(`/api/projects/${id}/branch`),
     changes: (id: string) => api.get<ChangesResult>(`/api/projects/${id}/changes`),
     diff: (id: string, path: string) => api.get<FileDiffResult>(`/api/projects/${id}/diff`, { path }),
+    generateCommit: (id: string) => api.post<GenerateCommitResult>(`/api/projects/${id}/commit/generate`),
+    commit: (id: string, message: string) => api.post<CommitResult>(`/api/projects/${id}/commit`, { message }),
     clearAllData: () => api.delete<{ stoppedAgents: number; deletedProjects: number }>('/api/data', { confirm: 'DELETE EVERYTHING' }),
   }
 }

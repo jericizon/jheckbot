@@ -24,6 +24,15 @@
       >
         <svg class="w-3.5 h-3.5" :class="loading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
       </button>
+      <button
+        v-if="open && count > 0"
+        @click.stop="commitModalOpen = true"
+        class="ml-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border border-border text-content-subtle hover:text-content hover:border-content-subtle transition-colors shrink-0"
+        title="Commit and push changes"
+      >
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+        Commit
+      </button>
     </button>
     <div v-show="open" class="px-4 pb-3 max-h-64 overflow-y-auto bg-surface-subtle/50">
       <div v-if="error" class="text-[11px] text-red-500 py-2">{{ error }}</div>
@@ -103,6 +112,15 @@
       :error="diffError"
       @close="closeDiff"
     />
+
+    <!-- Commit & push modal -->
+    <CommitModal
+      :open="commitModalOpen"
+      :project-id="props.projectId"
+      :file-count="count"
+      @close="commitModalOpen = false"
+      @committed="handleCommitted"
+    />
   </div>
 </template>
 
@@ -135,6 +153,8 @@ const diffTarget = ref<{ path: string; status: FileChange['status']; staged: boo
   status: 'modified',
   staged: false,
 })
+
+const commitModalOpen = ref(false)
 
 const count = computed(() => changes.value.length)
 
@@ -228,6 +248,12 @@ function closeDiff() {
   diffOpen.value = false
   diffContent.value = ''
   diffError.value = ''
+}
+
+function handleCommitted() {
+  // Refresh the changes list after a successful commit so the panel reflects
+  // the clean working tree.
+  refresh()
 }
 
 async function refresh() {

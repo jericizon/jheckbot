@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { isValidUuid } from '@jheckbot/shared'
 import { ProjectService, ProjectValidationError } from '../services/ProjectService.js'
-import { ProjectHealthService, FileNotChangedError } from '../services/ProjectHealthService.js'
+import { ProjectHealthService, FileNotChangedError, NoChangesError, GitOperationError } from '../services/ProjectHealthService.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
@@ -157,6 +157,55 @@ export class ProjectController {
     } catch (err) {
       if (err instanceof FileNotChangedError) {
         res.status(404).json({ error: err.message })
+        return
+      }
+      throw err
+    }
+  }
+
+  async generateCommitMessage(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    try {
+      const result = await this.healthService.generateCommitMessage(project)
+      res.json(result)
+    } catch (err) {
+      if (err instanceof NoChangesError) {
+        res.status(400).json({ error: err.message })
+        return
+      }
+      throw err
+    }
+  }
+
+  async commit(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const message = typeof req.body?.message === 'string' ? req.body.message : ''
+    if (!message.trim()) {
+      res.status(400).json({ error: 'Commit message is required' })
+      return
+    }
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    try {
+      const result = await this.healthService.commit(project, message)
+      res.json(result)
+    } catch (err) {
+      if (err instanceof NoChangesError) {
+        res.status(400).json({ error: err.message })
+        return
+      }
+      if (err instanceof GitOperationError) {
+        res.status(422).json({ error: err.message })
         return
       }
       throw err

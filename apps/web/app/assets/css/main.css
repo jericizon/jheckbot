@@ -69,3 +69,16 @@
     }
   }
 }
+
+@layer utilities {
+  /* iOS safe-area helpers for notched / home-indicator devices */
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-pt {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-area-mb {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+}
