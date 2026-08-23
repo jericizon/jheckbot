@@ -96,7 +96,17 @@
             </div>
             <p class="text-content text-sm font-medium mb-1">{{ project.name }}</p>
             <p v-if="project.description" class="text-content-muted text-xs mb-1">{{ project.description }}</p>
-            <p class="text-content-subtle text-xs font-mono break-all mb-6">{{ project.path }}</p>
+            <p class="text-content-subtle text-xs font-mono break-all mb-2">{{ project.path }}</p>
+            <button
+              v-if="projectBranch"
+              @click="branchModalOpen = true"
+              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 mb-6 cursor-pointer transition-colors"
+              title="Manage branches"
+            >
+              <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
+              <span class="font-mono truncate max-w-[20ch]">{{ projectBranch }}</span>
+            </button>
+            <p v-else class="mb-6"></p>
 
             <!-- Input box -->
             <div class="w-full relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle transition-colors">
@@ -189,6 +199,15 @@
 
     <!-- Skills picker -->
     <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
+
+    <!-- Branch manager -->
+    <BranchModal
+      :open="branchModalOpen"
+      :project-id="project?.id"
+      :current-branch="projectBranch"
+      @close="branchModalOpen = false"
+      @switched="handleBranchSwitched"
+    />
   </div>
 </template>
 
@@ -211,6 +230,8 @@ const conversations = ref<Conversation[]>([])
 const convLoading = ref(true)
 const health = ref<HealthResult | null>(null)
 const healthLoading = ref(false)
+const projectBranch = ref<string | null>(null)
+const branchModalOpen = ref(false)
 
 // Refresh sidebar statuses periodically so background agent runs in any
 // conversation of this project surface without a manual reload.
@@ -266,11 +287,17 @@ async function load() {
     conversations.value = convs
     availableModels.value = modelsRes.models
     selectedModel.value = modelsRes.default
+    // Load branch best-effort; non-git projects just leave it null.
+    projectsApi.branch(id.value).then((r) => { projectBranch.value = r.branch }).catch(() => { projectBranch.value = null })
   } catch {
     // ignore
   } finally {
     convLoading.value = false
   }
+}
+
+function handleBranchSwitched(branch: string) {
+  projectBranch.value = branch
 }
 
 async function checkHealth() {

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { isValidUuid } from '@jheckbot/shared'
 import { ProjectService, ProjectValidationError } from '../services/ProjectService.js'
-import { ProjectHealthService, FileNotChangedError, NoChangesError, GitOperationError } from '../services/ProjectHealthService.js'
+import { ProjectHealthService, FileNotChangedError, NoChangesError, GitOperationError, InvalidBranchNameError, BranchNotFoundError } from '../services/ProjectHealthService.js'
 
 function getParam(req: Request, name: string): string {
   const value = req.params[name]
@@ -128,6 +128,88 @@ export class ProjectController {
     }
     const result = await this.healthService.getBranch(project)
     res.json(result)
+  }
+
+  async branches(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    try {
+      const result = await this.healthService.listBranches(project)
+      res.json(result)
+    } catch (err) {
+      if (err instanceof GitOperationError) {
+        res.status(422).json({ error: err.message })
+        return
+      }
+      throw err
+    }
+  }
+
+  async createBranch(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const name = typeof req.body?.name === 'string' ? req.body.name : ''
+    if (!name.trim()) {
+      res.status(400).json({ error: 'Branch name is required' })
+      return
+    }
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    try {
+      const result = await this.healthService.createBranch(project, name)
+      res.status(201).json(result)
+    } catch (err) {
+      if (err instanceof InvalidBranchNameError) {
+        res.status(400).json({ error: err.message })
+        return
+      }
+      if (err instanceof GitOperationError) {
+        res.status(422).json({ error: err.message })
+        return
+      }
+      throw err
+    }
+  }
+
+  async checkout(req: Request, res: Response): Promise<void> {
+    const id = validateIdParam(req, res)
+    if (!id) return
+    const name = typeof req.body?.name === 'string' ? req.body.name : ''
+    if (!name.trim()) {
+      res.status(400).json({ error: 'Branch name is required' })
+      return
+    }
+    const project = await this.projectService.get(id)
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    try {
+      const result = await this.healthService.checkoutBranch(project, name)
+      res.json(result)
+    } catch (err) {
+      if (err instanceof InvalidBranchNameError) {
+        res.status(400).json({ error: err.message })
+        return
+      }
+      if (err instanceof BranchNotFoundError) {
+        res.status(404).json({ error: err.message })
+        return
+      }
+      if (err instanceof GitOperationError) {
+        res.status(422).json({ error: err.message })
+        return
+      }
+      throw err
+    }
   }
 
   async changes(req: Request, res: Response): Promise<void> {

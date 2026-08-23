@@ -1,6 +1,7 @@
 import { existsSync, realpathSync, statSync, accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
 import { execSync, execFileSync } from 'node:child_process'
+import { isValidGitBranchName } from '@jheckbot/shared'
 import type { ProjectRecord } from '../repositories/ProjectRepository.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
 import { PathValidator, type AllowedRoot } from './PathValidator.js'
@@ -61,6 +62,34 @@ export interface CommitResult {
   checkedAt: string
 }
 
+export interface BranchInfo {
+  name: string
+  current: boolean
+  remote: boolean
+  remoteName: string | null
+}
+
+export interface ListBranchesResult {
+  projectId: string
+  current: string | null
+  local: BranchInfo[]
+  remote: BranchInfo[]
+  checkedAt: string
+}
+
+export interface CreateBranchResult {
+  projectId: string
+  branch: string
+  base: string
+  checkedAt: string
+}
+
+export interface CheckoutResult {
+  projectId: string
+  branch: string
+  checkedAt: string
+}
+
 export class FileNotChangedError extends Error {
   constructor(path: string) {
     super(`File is not in the changes list: ${path}`)
@@ -79,6 +108,20 @@ export class GitOperationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'GitOperationError'
+  }
+}
+
+export class InvalidBranchNameError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidBranchNameError'
+  }
+}
+
+export class BranchNotFoundError extends Error {
+  constructor(name: string) {
+    super(`Branch not found: ${name}`)
+    this.name = 'BranchNotFoundError'
   }
 }
 
@@ -156,6 +199,117 @@ export class ProjectHealthService {
     return {
       projectId: project.id,
       branch,
+      checkedAt: new Date().toISOString(),
+    }
+  }
+
+  async listBranches(project: ProjectRecord): Promise<ListBranchesResult> {
+    const current = this.readGitBranch(project.path)
+    // --format avoids fragile porcelain parsing; %(upstream:remotename) gives
+    // the remote for local branches that track one. Remotes are listed via -r.
+    const localOut = this.runGit(project.path, [
+      'branch', '--format=%(HEAD)%(refname:short)|%(upstream:remotename)',
+    ], [0])
+    const remoteOut = this.runGit(project.path, [
+      'branch', '-r', '--format=%(refname:short)',
+    ], [0])
+
+    const local: BranchInfo[] = localOut
+      .split('\n')
+      .map((l) => l.trimEnd())
+      .filter((l) => l.length > 0)
+      .map((l) => {
+        const isCurrent = l.startsWith('*')
+        const [name, remoteName] = l.replace(/^\*\s*/, '').split('|')
+        return {
+          name: name.trim(),
+          current: isCurrent,
+          remote: false,
+          remoteName: remoteName ? remoteName.trim() || null : null,
+        }
+      })
+
+    const remote: BranchInfo[] = remoteOut
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.includes('HEAD ->'))
+      .map((ref) => {
+        // ref is "origin/main" — strip the remote prefix for display, keep both.
+        const slashIdx = ref.indexOf('/')
+        const remoteName = slashIdx > 0 ? ref.slice(0, slashIdx) : null
+        const name = slashIdx > 0 ? ref.slice(slashIdx + 1) : ref
+        return { name, current: false, remote: true, remoteName }
+      })
+
+    return {
+      projectId: project.id,
+      current,
+      local,
+      remote,
+      checkedAt: new Date().toISOString(),
+    }
+  }
+
+  async createBranch(project: ProjectRecord, name: string): Promise<CreateBranchResult> {
+    const trimmed = name.trim()
+    if (!isValidGitBranchName(trimmed)) {
+      throw new InvalidBranchNameError('Invalid branch name')
+    }
+    const base = this.readGitBranch(project.path) ?? 'HEAD'
+    // checkout -b creates and switches in one step; argv form prevents injection.
+    try {
+      this.runGit(project.path, ['checkout', '-b', trimmed], [0])
+    } catch (err) {
+      const stderr = (err as { stderr?: string }).stderr ?? ''
+      if (stderr.includes('already exists')) {
+        throw new GitOperationError(`Branch already exists: ${trimmed}`)
+      }
+      throw new GitOperationError(`Failed to create branch: ${stderr.trim() || (err as Error).message}`)
+    }
+    return {
+      projectId: project.id,
+      branch: trimmed,
+      base,
+      checkedAt: new Date().toISOString(),
+    }
+  }
+
+  async checkoutBranch(project: ProjectRecord, name: string): Promise<CheckoutResult> {
+    const trimmed = name.trim()
+    if (!trimmed) throw new InvalidBranchNameError('Branch name is required')
+
+    const branches = await this.listBranches(project)
+    const isLocal = branches.local.some((b) => b.name === trimmed)
+    // Allow switching to a remote-tracking ref by its short name (e.g. "main"
+    // when only remotes/origin/main exists) — create a local tracking branch.
+    const remoteMatch = branches.remote.find((b) => b.name === trimmed)
+    if (!isLocal && !remoteMatch) {
+      throw new BranchNotFoundError(trimmed)
+    }
+
+    try {
+      if (!isLocal && remoteMatch && remoteMatch.remoteName) {
+        // Create a local branch tracking the remote ref, then check it out.
+        this.runGit(project.path, [
+          'checkout', '-b', trimmed, '--track', `${remoteMatch.remoteName}/${trimmed}`,
+        ], [0])
+      } else {
+        this.runGit(project.path, ['checkout', trimmed], [0])
+      }
+    } catch (err) {
+      const stderr = (err as { stderr?: string }).stderr ?? ''
+      if (stderr.includes('Your local changes') || stderr.includes('would be overwritten')) {
+        throw new GitOperationError('Local changes would be overwritten. Commit or stash before switching.')
+      }
+      if (stderr.includes('did not match')) {
+        throw new BranchNotFoundError(trimmed)
+      }
+      throw new GitOperationError(`Failed to switch branch: ${stderr.trim() || (err as Error).message}`)
+    }
+
+    return {
+      projectId: project.id,
+      branch: this.readGitBranch(project.path) ?? trimmed,
       checkedAt: new Date().toISOString(),
     }
   }

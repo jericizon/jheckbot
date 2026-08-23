@@ -65,6 +65,34 @@ interface CommitResult {
   checkedAt: string
 }
 
+interface BranchInfo {
+  name: string
+  current: boolean
+  remote: boolean
+  remoteName: string | null
+}
+
+interface ListBranchesResult {
+  projectId: string
+  current: string | null
+  local: BranchInfo[]
+  remote: BranchInfo[]
+  checkedAt: string
+}
+
+interface CreateBranchResult {
+  projectId: string
+  branch: string
+  base: string
+  checkedAt: string
+}
+
+interface CheckoutResult {
+  projectId: string
+  branch: string
+  checkedAt: string
+}
+
 export function useProjects() {
   const api = useApi()
 
@@ -79,6 +107,11 @@ export function useProjects() {
     validate: (id: string) => api.post<{ valid: boolean; resolvedPath: string; error: string | null }>(`/api/projects/${id}/validate`),
     health: (id: string) => api.post<HealthResult>(`/api/projects/${id}/health`),
     branch: (id: string) => api.get<BranchResult>(`/api/projects/${id}/branch`),
+    branches: (id: string) => api.get<ListBranchesResult>(`/api/projects/${id}/branches`),
+    createBranch: (id: string, name: string) =>
+      api.post<CreateBranchResult>(`/api/projects/${id}/branches`, { name }),
+    checkout: (id: string, name: string) =>
+      api.post<CheckoutResult>(`/api/projects/${id}/checkout`, { name }),
     changes: (id: string) => api.get<ChangesResult>(`/api/projects/${id}/changes`),
     diff: (id: string, path: string) => api.get<FileDiffResult>(`/api/projects/${id}/diff`, { path }),
     generateCommit: (id: string) => api.post<GenerateCommitResult>(`/api/projects/${id}/commit/generate`),

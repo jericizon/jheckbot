@@ -55,7 +55,12 @@
           >
             <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
             <span class="truncate">{{ projectName }}</span>
-            <span v-if="projectBranch" class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5 shrink-0">
+            <span
+              v-if="projectBranch"
+              @click.stop="branchModalOpen = true"
+              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 shrink-0 cursor-pointer transition-colors"
+              title="Manage branches"
+            >
               <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
               <span class="font-mono truncate max-w-[12ch]">{{ projectBranch }}</span>
             </span>
@@ -332,6 +337,15 @@
 
     <!-- Skills picker -->
     <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
+
+    <!-- Branch manager -->
+    <BranchModal
+      :open="branchModalOpen"
+      :project-id="conversation?.project_id"
+      :current-branch="projectBranch"
+      @close="branchModalOpen = false"
+      @switched="handleBranchSwitched"
+    />
   </div>
 </template>
 
@@ -358,6 +372,7 @@ const agentRunning = ref(false)
 const agentStarting = ref(false)
 const sendError = ref('')
 const skillsPickerOpen = ref(false)
+const branchModalOpen = ref(false)
 const queue = ref<QueuedMessage[]>([])
 const editingQueueId = ref<string | null>(null)
 const { bypassMode } = useBypassMode()
@@ -504,6 +519,12 @@ async function loadProjectInfo(projectId: string) {
   } catch {
     projectBranch.value = null
   }
+}
+
+function handleBranchSwitched(branch: string) {
+  projectBranch.value = branch
+  // Working tree contents changed; refresh the changed-files panel.
+  changedFilesPanel.value?.refresh()
 }
 
 function connectSSE() {
