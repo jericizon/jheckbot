@@ -11,16 +11,18 @@
     <!-- Main chat area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
       <!-- Header -->
-      <header class="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
-        <button
-          @click="toggleSidebar"
-          class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
-          aria-label="Toggle sidebar"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
+      <AppHeader>
+        <template #leading>
+          <button
+            @click="toggleSidebar"
+            class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
+            aria-label="Toggle sidebar"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+        </template>
         <!-- Title + project subtitle -->
-        <div class="flex-1 min-w-0 flex flex-col">
+        <div class="flex flex-col">
           <div class="flex items-center gap-1 min-w-0">
             <input
               v-if="editingTitle"
@@ -45,7 +47,7 @@
               Active
             </span>
           </div>
-          <!-- Project + branch as compact tappable subtitle (replaces separate back arrow) -->
+          <!-- Project + branch as compact tappable subtitle -->
           <button
             v-if="projectName"
             @click="navigateTo('/projects/' + conversation?.project_id)"
@@ -59,19 +61,14 @@
             </span>
           </button>
         </div>
-        <ProjectSwitcher
-          :current-id="conversation?.project_id"
-          :current-label="projectName || undefined"
-        />
-        <button
-          @click="toggleTheme"
-          class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle shrink-0"
-          :title="theme === 'dark' ? 'Switch to light' : 'Switch to dark'"
-        >
-          <svg v-if="theme === 'dark'" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-        </button>
-      </header>
+        <template #actions>
+          <ProjectSwitcher
+            :current-id="conversation?.project_id"
+            :current-label="projectName || undefined"
+            class="hidden sm:block"
+          />
+        </template>
+      </AppHeader>
 
       <!-- Messages -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto">
@@ -163,42 +160,12 @@
         </div>
       </div>
 
-      <!-- Activity log panel -->
+      <!-- Changed files panel -->
       <ChangedFilesPanel ref="changedFilesPanel" :project-id="conversation?.project_id" />
-      <div v-if="agentRunning || agentStarting || activityLog" class="shrink-0 border-t border-border">
-        <button
-          @click="activityOpen = !activityOpen"
-          class="w-full flex items-center gap-2 px-4 py-2 text-xs font-medium text-content-muted hover:text-content transition-colors"
-        >
-          <svg
-            class="w-3.5 h-3.5 transition-transform"
-            :class="activityOpen ? 'rotate-90' : ''"
-            fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
-          ><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
-          <span>Terminal activity</span>
-          <span v-if="agentRunning" class="flex items-center gap-1 ml-1">
-            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          </span>
-        </button>
-        <div v-show="activityOpen" class="px-4 pb-3 max-h-48 overflow-y-auto bg-surface-subtle/50">
-          <pre class="text-[11px] font-mono text-content-muted whitespace-pre-wrap break-all leading-relaxed">{{ activityLog || 'Waiting for output...' }}</pre>
-        </div>
-      </div>
 
       <!-- Input area -->
       <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div class="max-w-3xl mx-auto px-4">
-          <!-- Stop button -->
-          <div v-if="agentRunning" class="flex justify-center mb-3">
-            <button
-              @click="stopAgent"
-              class="flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors"
-            >
-              <span class="w-3 h-3 rounded-sm bg-current" />
-              Stop
-            </button>
-          </div>
-
           <!-- Input box -->
           <div class="relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle transition-colors">
             <textarea
@@ -206,61 +173,132 @@
               @keydown.enter.exact.prevent="sendMessage"
               @keydown.enter.shift.exact="input += '\n'"
               @input="autoResize"
-              placeholder="Message Devin..."
+              :placeholder="voice.listening.value ? 'Listening... speak now' : (agentStarting || agentRunning) ? 'Queue a message...' : 'Message Devin...'"
               rows="1"
               ref="inputEl"
-              :disabled="agentStarting || agentRunning"
-              class="w-full rounded-2xl px-4 py-3.5 pr-12 text-sm text-content placeholder-content-subtle focus:outline-none resize-none max-h-32 overflow-y-auto disabled:opacity-50"
+              class="w-full rounded-2xl px-4 py-3.5 pr-28 text-sm text-content placeholder-content-subtle focus:outline-none resize-none max-h-32 overflow-y-auto"
               style="min-height: 52px;"
             />
-            <button
-              @click="sendMessage"
-              :disabled="!input.trim() || agentStarting || agentRunning"
-              class="absolute right-2 bottom-2 rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
-              :class="input.trim() && !agentStarting && !agentRunning ? 'bg-content text-surface hover:opacity-80' : 'bg-surface-subtle text-content-subtle'"
+            <!-- Interim transcript shown as a subtle hint while listening -->
+            <span
+              v-if="voice.listening.value && voice.interim.value"
+              class="absolute left-4 bottom-2.5 text-sm text-content-subtle italic pointer-events-none max-w-[60%] truncate"
+            >{{ voice.interim.value }}</span>
+            <div class="absolute right-2 bottom-2 flex items-center gap-1 shrink-0">
+              <button
+                v-if="voice.supported.value"
+                @click="toggleVoice"
+                :title="voice.listening.value ? 'Stop voice input' : 'Voice input'"
+                :aria-pressed="voice.listening.value"
+                class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95"
+                :class="voice.listening.value
+                  ? 'bg-emerald-500/15 text-emerald-500'
+                  : 'text-content-subtle hover:text-content hover:bg-surface-subtle'"
+              >
+                <svg v-if="!voice.listening.value" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
+                <svg v-else class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9A2.25 2.25 0 0118.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 8.386 10.343 7.5 12 7.5s3 .886 3 2.063v4.875c0 1.177-1.343 2.062-3 2.062s-3-.885-3-2.062V9.563z" /></svg>
+              </button>
+              <button
+                v-if="agentRunning"
+                @click="stopModalOpen = true"
+                class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95 bg-red-500/15 text-red-500 hover:bg-red-500/25 shrink-0"
+                title="Stop agent"
+                aria-label="Stop agent"
+              >
+                <span class="w-3 h-3 rounded-[3px] bg-current" />
+              </button>
+              <button
+                @click="sendMessage"
+                :disabled="!input.trim()"
+                class="rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
+                :class="input.trim() ? 'bg-content text-surface hover:opacity-80' : 'bg-surface-subtle text-content-subtle'"
+                :title="(agentStarting || agentRunning) && input.trim() ? 'Queue message' : 'Send message'"
+              >
+                <svg v-if="agentStarting || agentRunning" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Queued messages -->
+          <div v-if="queue.length > 0" class="mt-2 space-y-1.5">
+            <div class="text-[10px] font-medium uppercase tracking-wide text-content-subtle px-1 flex items-center gap-1.5">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span>Queued ({{ queue.length }})</span>
+            </div>
+            <div
+              v-for="(item, idx) in queue"
+              :key="item.id"
+              class="rounded-lg border border-border bg-surface-subtle/50 px-3 py-2 animate-slide-up"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+              <div class="flex items-start gap-2">
+                <span class="text-[10px] font-mono text-content-subtle shrink-0 mt-0.5">{{ idx + 1 }}</span>
+                <div class="flex-1 min-w-0">
+                  <template v-if="editingQueueId === item.id">
+                    <textarea
+                      v-model="item.content"
+                      rows="1"
+                      class="w-full text-sm text-content bg-transparent focus:outline-none resize-none"
+                      style="min-height: 20px;"
+                    />
+                  </template>
+                  <p v-else class="text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3">{{ item.content }}</p>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button
+                    v-if="editingQueueId === item.id"
+                    @click="saveEditQueueItem(item.id)"
+                    class="text-content-subtle hover:text-emerald-500 transition-colors p-0.5"
+                    title="Save"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  </button>
+                  <button
+                    v-else
+                    @click="startEditQueueItem(item.id)"
+                    class="text-content-subtle hover:text-content transition-colors p-0.5"
+                    title="Edit"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  </button>
+                  <button
+                    @click="removeQueueItem(item.id)"
+                    class="text-content-subtle hover:text-red-500 transition-colors p-0.5"
+                    title="Remove"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Voice listening indicator -->
+          <div v-if="voice.listening.value" class="flex items-center justify-center gap-2 mt-1.5 text-xs text-emerald-500 animate-fade-in">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span>Listening — speak now, tap the mic again when done</span>
+          </div>
+
+          <!-- Voice error (dismissible) -->
+          <div v-if="voice.error.value" class="flex items-start gap-2 mt-1.5 px-1 text-xs text-red-500 animate-fade-in">
+            <svg class="w-3.5 h-3.5 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span class="flex-1">{{ voice.error.value }}</span>
+            <button @click="voice.clearError()" class="shrink-0 text-red-400 hover:text-red-500">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
 
           <!-- Model selector + bypass toggle + hint -->
-          <div class="flex items-center gap-2 mt-2 px-1 overflow-x-auto">
-            <select
-              v-model="selectedModel"
-              :disabled="agentStarting || agentRunning"
-              class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50 shrink-0"
-            >
-              <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
-                <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
-                  {{ m.label }}{{ m.free ? ' (Free)' : '' }}
-                </option>
-              </optgroup>
-            </select>
-            <button
-              @click="skillsPickerOpen = true"
-              :disabled="agentStarting || agentRunning"
-              class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-              title="Browse and insert skills"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-              <span>Skills</span>
-            </button>
-            <button
-              @click="toggleBypass"
-              :disabled="agentStarting || agentRunning"
-              class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-              :class="bypassMode
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
-                : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
-              :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
-              :aria-pressed="bypassMode"
-            >
-              <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
-              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-              <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
-            </button>
-            <p class="text-xs text-content-subtle shrink-0 ml-auto hidden sm:block">Enter to send, Shift+Enter for new line</p>
-          </div>
+          <MessageToolbar
+            v-model="selectedModel"
+            :models="availableModels"
+            v-model:bypass-mode="bypassMode"
+            :disabled="agentStarting || agentRunning"
+            @open-skills="skillsPickerOpen = true"
+          />
         </div>
       </div>
     </div>
@@ -280,23 +318,37 @@
       @cancel="closeDeleteModal"
     />
 
+    <!-- Stop agent modal -->
+    <ConfirmModal
+      :open="stopModalOpen"
+      title="Stop Agent"
+      message="Stop the running agent? Any in-progress work will be interrupted. Queued messages will still be sent after the agent stops."
+      confirm-label="Yes, stop"
+      loading-label="Stopping..."
+      :loading="stoppingAgent"
+      @confirm="confirmStopAgent"
+      @cancel="stopModalOpen = false"
+    />
+
     <!-- Skills picker -->
     <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
   </div>
 </template>
 
 <script setup lang="ts">
+import type { ModelOption } from '~/components/MessageToolbar.vue'
+
 const route = useRoute()
 const convApi = useConversations()
 const projectApi = useProjects()
 const sse = useSSE()
-const { theme, toggle: toggleTheme } = useTheme()
+const { toggle: toggleSidebar } = useSidebar()
 
 const id = computed(() => route.params.id as string)
 
 interface Conversation { id: string; project_id: string; title: string; agent_status: string }
 interface Message { id: string; role: string; content: string; message_type: string; model?: string | null }
-interface ModelOption { id: string; label: string; family: string; context: string; pricing: string; free: boolean }
+interface QueuedMessage { id: string; content: string }
 
 const conversation = ref<Conversation | null>(null)
 const messages = ref<Message[]>([])
@@ -305,10 +357,11 @@ const input = ref('')
 const agentRunning = ref(false)
 const agentStarting = ref(false)
 const sendError = ref('')
-const activityLog = ref('')
-const activityOpen = ref(false)
 const skillsPickerOpen = ref(false)
-const { bypassMode, toggle: toggleBypass } = useBypassMode()
+const queue = ref<QueuedMessage[]>([])
+const editingQueueId = ref<string | null>(null)
+const { bypassMode } = useBypassMode()
+const voice = useVoiceInput(input)
 const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
@@ -317,7 +370,6 @@ const inputEl = ref<HTMLTextAreaElement | null>(null)
 const changedFilesPanel = ref<{ refresh: () => void } | null>(null)
 const projectName = ref('')
 const projectBranch = ref<string | null>(null)
-const { sidebarOpen, toggle: toggleSidebar } = useSidebar()
 const sidebarConversations = ref<Conversation[]>([])
 let eventSource: EventSource | null = null
 
@@ -367,27 +419,18 @@ useConversationPolling(
 const availableModels = ref<ModelOption[]>([])
 const selectedModel = ref('glm-5-2')
 
-const modelGroups = computed(() => {
-  const groups: { label: string; models: ModelOption[] }[] = [
-    { label: 'Free', models: [] },
-    { label: 'Budget', models: [] },
-    { label: 'Mid-range', models: [] },
-    { label: 'Premium', models: [] },
-  ]
-  for (const m of availableModels.value) {
-    if (m.free) groups[0].models.push(m)
-    else if (m.pricing.includes('$0.') || m.pricing.includes('$1.')) groups[1].models.push(m)
-    else if (m.pricing.includes('$2.') || m.pricing.includes('$3.')) groups[2].models.push(m)
-    else groups[3].models.push(m)
-  }
-  return groups.filter((g) => g.models.length > 0)
-})
-
 function autoResize() {
   const el = inputEl.value
   if (!el) return
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+}
+
+function toggleVoice() {
+  voice.toggle()
+  if (voice.listening.value) {
+    nextTick(() => inputEl.value?.focus())
+  }
 }
 
 // Insert a selected skill slash command into the input and focus it so the
@@ -488,6 +531,8 @@ function connectSSE() {
             url: `/conversations/${id.value}`,
           })
         }
+        // Drain the next queued message, if any.
+        drainQueue()
       } else {
         setSidebarStatus(id.value, data.status)
       }
@@ -497,13 +542,10 @@ function connectSSE() {
       liveOutput.value = data.content
       await nextTick()
       scrollToBottom()
-    } else if (event.type === 'log') {
-      const data = JSON.parse(event.data)
-      activityLog.value = data.content
-    } else if (event.type === 'screenshot') {
-      // The screenshot is also injected into the output buffer as markdown,
+    } else if (event.type === 'media') {
+      // The media file is also injected into the output buffer as markdown,
       // so it renders inline in the live output. This event signals a new
-      // screenshot arrived — scroll to reveal it immediately.
+      // image/video arrived — scroll to reveal it immediately.
       await nextTick()
       scrollToBottom()
     }
@@ -588,6 +630,8 @@ const deleteModalOpen = ref(false)
 const deleteTarget = ref<string | null>(null)
 const deletingConv = ref(false)
 const deleteConvError = ref('')
+const stopModalOpen = ref(false)
+const stoppingAgent = ref(false)
 
 const deleteTargetTitle = computed(() =>
   sidebarConversations.value.find((c) => c.id === deleteTarget.value)?.title
@@ -631,10 +675,24 @@ async function confirmDeleteConversation() {
   }
 }
 
-async function sendMessage() {
+function sendMessage() {
   const prompt = input.value.trim()
-  if (!prompt || agentStarting.value || agentRunning.value) return
+  if (!prompt) return
 
+  input.value = ''
+  autoResize()
+
+  // While the agent is busy, queue the message instead of blocking input.
+  if (agentStarting.value || agentRunning.value) {
+    queue.value.push({ id: `q-${Date.now()}-${queue.value.length}`, content: prompt })
+    return
+  }
+
+  sendNow(prompt)
+}
+
+async function sendNow(prompt: string) {
+  voice.stop()
   sendError.value = ''
 
   const tempId = `temp-${Date.now()}`
@@ -644,8 +702,6 @@ async function sendMessage() {
     content: prompt,
     message_type: 'prompt',
   })
-  input.value = ''
-  autoResize()
   await nextTick()
   scrollToBottom()
 
@@ -665,8 +721,6 @@ async function sendMessage() {
 
     agentRunning.value = true
     liveOutput.value = ''
-    activityLog.value = ''
-    activityOpen.value = true
     agentStarting.value = true
     setSidebarStatus(id.value, 'starting')
     connectSSE()
@@ -682,18 +736,50 @@ async function sendMessage() {
     agentRunning.value = false
     agentStarting.value = false
     setSidebarStatus(id.value, 'idle')
+
+    // If the send failed but there are queued messages, drain the next one
+    // so the user isn't stuck with a dead queue.
+    drainQueue()
   }
 }
 
-async function stopAgent() {
+// Process the next queued message after an agent run completes.
+function drainQueue() {
+  if (queue.value.length === 0) return
+  const next = queue.value.shift()!
+  editingQueueId.value = null
+  sendNow(next.content)
+}
+
+function removeQueueItem(itemId: string) {
+  queue.value = queue.value.filter((q) => q.id !== itemId)
+  if (editingQueueId.value === itemId) editingQueueId.value = null
+}
+
+function startEditQueueItem(itemId: string) {
+  editingQueueId.value = itemId
+}
+
+function saveEditQueueItem(itemId: string) {
+  editingQueueId.value = null
+}
+
+async function confirmStopAgent() {
+  stoppingAgent.value = true
   try {
     await convApi.stopAgent(id.value)
+    stopModalOpen.value = false
+    // Don't close the SSE here — let the 'stopped' status event arrive and
+    // trigger the completion handler (which reloads messages and drains the
+    // queue). Closing early would race with the backend's stopped event.
+  } catch {
     agentRunning.value = false
     agentStarting.value = false
     setSidebarStatus(id.value, 'idle')
     eventSource?.close()
-  } catch {
-    // ignore
+    stopModalOpen.value = false
+  } finally {
+    stoppingAgent.value = false
   }
 }
 
@@ -702,8 +788,13 @@ watch([messages, liveOutput], async () => {
   scrollToBottom()
 })
 
+// Keep textarea height in sync when voice input mutates `input` without a
+// DOM input event.
+watch(input, () => autoResize())
+
 onMounted(load)
 onUnmounted(() => {
+  voice.stop()
   eventSource?.close()
 })
 </script>

@@ -11,49 +11,46 @@
     <!-- Main content area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
       <!-- Header -->
-      <header class="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
-        <button
-          @click="toggleSidebar"
-          class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
-        <button
-          @click="navigateTo('/projects')"
-          class="text-content-subtle hover:text-content transition-colors p-1 rounded-md hover:bg-surface-subtle"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        </button>
+      <AppHeader>
+        <template #leading>
+          <button
+            @click="toggleSidebar"
+            class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
+            aria-label="Toggle sidebar"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <button
+            @click="navigateTo('/projects')"
+            class="hidden sm:block text-content-subtle hover:text-content transition-colors p-1 rounded-md hover:bg-surface-subtle shrink-0"
+            aria-label="Back to projects"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          </button>
+        </template>
         <ProjectSwitcher
           :current-id="project?.id"
           :current-label="project?.name || 'Project'"
-          class="flex-1 min-w-0"
         />
-        <button
-          v-if="project && !editing && !confirmingDelete"
-          @click="startEdit"
-          class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
-          title="Edit project"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-        </button>
-        <button
-          v-if="project && !editing && !confirmingDelete"
-          @click="confirmingDelete = true"
-          class="text-content-muted hover:text-red-500 transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
-          title="Delete project"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-        </button>
-        <button
-          @click="toggleTheme"
-          class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
-          :title="theme === 'dark' ? 'Switch to light' : 'Switch to dark'"
-        >
-          <svg v-if="theme === 'dark'" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-        </button>
-      </header>
+        <template #actions>
+          <button
+            v-if="project && !editing && !confirmingDelete"
+            @click="startEdit"
+            class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
+            title="Edit project"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+          </button>
+          <button
+            v-if="project && !editing && !confirmingDelete"
+            @click="confirmingDelete = true"
+            class="text-content-muted hover:text-red-500 transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
+            title="Delete project"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
+        </template>
+      </AppHeader>
 
       <!-- Content -->
       <div class="flex-1 overflow-y-auto">
@@ -126,41 +123,23 @@
             </div>
 
             <!-- Model selector + bypass toggle + hint -->
-            <div class="w-full flex items-center gap-2 mt-2 px-1 overflow-x-auto">
-              <select
-                v-model="selectedModel"
-                :disabled="sending"
-                class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50 shrink-0"
-              >
-                <optgroup v-for="group in modelGroups" :key="group.label" :label="group.label">
-                  <option v-for="m in group.models" :key="m.id" :value="m.id" class="bg-surface-elevated text-content">
-                    {{ m.label }}{{ m.free ? ' (Free)' : '' }}
-                  </option>
-                </optgroup>
-              </select>
-              <button
-                @click="toggleBypass"
-                :disabled="sending"
-                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                :class="bypassMode
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
-                  : 'bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle'"
-                :title="bypassMode ? 'Bypass mode ON: Devin will auto-approve all tools without asking' : 'Bypass mode OFF: Devin will ask for permission on risky actions'"
-                :aria-pressed="bypassMode"
-              >
-                <svg v-if="bypassMode" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 4v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
-                <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
-              </button>
-              <button
-                @click="checkHealth"
-                :disabled="healthLoading"
-                class="text-xs text-content-muted hover:text-content transition-colors disabled:opacity-50 shrink-0"
-              >
-                {{ healthLoading ? 'Checking...' : 'Health' }}
-              </button>
-              <p class="text-xs text-content-subtle shrink-0 ml-auto hidden sm:block">Enter to send, Shift+Enter for new line</p>
-            </div>
+            <MessageToolbar
+              v-model="selectedModel"
+              :models="availableModels"
+              v-model:bypass-mode="bypassMode"
+              :disabled="sending"
+              @open-skills="skillsPickerOpen = true"
+            >
+              <template #actions>
+                <button
+                  @click="checkHealth"
+                  :disabled="healthLoading"
+                  class="text-xs text-content-muted hover:text-content transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {{ healthLoading ? 'Checking...' : 'Health' }}
+                </button>
+              </template>
+            </MessageToolbar>
 
             <p v-if="sendError" class="mt-3 text-sm text-red-500">{{ sendError }}</p>
 
@@ -207,15 +186,19 @@
       @confirm="confirmDeleteConversation"
       @cancel="closeConvDeleteModal"
     />
+
+    <!-- Skills picker -->
+    <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
   </div>
 </template>
 
 <script setup lang="ts">
+import type { ModelOption } from '~/components/MessageToolbar.vue'
+
 const route = useRoute()
 const projectsApi = useProjects()
 const convApi = useConversations()
-const { theme, toggle: toggleTheme } = useTheme()
-const { sidebarOpen, toggle: toggleSidebar } = useSidebar()
+const { toggle: toggleSidebar } = useSidebar()
 
 const id = computed(() => route.params.id as string)
 
@@ -249,33 +232,27 @@ const input = ref('')
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 const sending = ref(false)
 const sendError = ref('')
-const { bypassMode, toggle: toggleBypass } = useBypassMode()
+const skillsPickerOpen = ref(false)
+const { bypassMode } = useBypassMode()
 
-interface ModelOption { id: string; label: string; family: string; context: string; pricing: string; free: boolean }
 const availableModels = ref<ModelOption[]>([])
 const selectedModel = ref('glm-5-2')
-
-const modelGroups = computed(() => {
-  const groups: { label: string; models: ModelOption[] }[] = [
-    { label: 'Free', models: [] },
-    { label: 'Budget', models: [] },
-    { label: 'Mid-range', models: [] },
-    { label: 'Premium', models: [] },
-  ]
-  for (const m of availableModels.value) {
-    if (m.free) groups[0].models.push(m)
-    else if (m.pricing.includes('$0.') || m.pricing.includes('$1.')) groups[1].models.push(m)
-    else if (m.pricing.includes('$2.') || m.pricing.includes('$3.')) groups[2].models.push(m)
-    else groups[3].models.push(m)
-  }
-  return groups.filter((g) => g.models.length > 0)
-})
 
 function autoResize() {
   const el = inputEl.value
   if (!el) return
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+}
+
+// Insert a selected skill slash command into the input and focus it so the
+// user can immediately append their prompt.
+function insertSkill(command: string) {
+  input.value = input.value ? `${input.value} ${command}`.trim() : command
+  nextTick(() => {
+    inputEl.value?.focus()
+    autoResize()
+  })
 }
 
 async function load() {

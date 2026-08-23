@@ -211,18 +211,18 @@ describe('loadEnv — optional defaults and parsing', () => {
     expect(loadEnv(source).trustProxy).toBe(1)
   })
 
-  it('defaults SCREENSHOTS_DIR to <cwd>/data/screenshots', () => {
+  it('defaults MEDIA_DIR to <cwd>/data/media', () => {
     const source = validSource()
-    delete source.SCREENSHOTS_DIR
+    delete source.MEDIA_DIR
     const env = loadEnv(source)
-    expect(env.screenshotsDir).toContain('data/screenshots')
+    expect(env.mediaDir).toContain('data/media')
   })
 
-  it('respects an explicit SCREENSHOTS_DIR', () => {
+  it('respects an explicit MEDIA_DIR', () => {
     const source = validSource()
-    source.SCREENSHOTS_DIR = '/tmp/my-shots'
+    source.MEDIA_DIR = '/tmp/my-media'
     const env = loadEnv(source)
-    expect(env.screenshotsDir).toBe('/tmp/my-shots')
+    expect(env.mediaDir).toBe('/tmp/my-media')
   })
 
   it('falls back for a negative TRUST_PROXY', () => {

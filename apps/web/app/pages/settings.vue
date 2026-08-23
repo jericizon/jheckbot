@@ -1,8 +1,8 @@
 <template>
   <div class="pb-20">
-    <header class="sticky top-0 bg-surface-elevated border-b border-border px-4 py-3 z-40">
+    <AppHeader sticky>
       <h1 class="text-lg font-semibold">Settings</h1>
-    </header>
+    </AppHeader>
 
     <div class="px-4 py-4 max-w-2xl mx-auto space-y-4">
       <div v-if="user" class="rounded-lg border border-border bg-surface-elevated p-4">

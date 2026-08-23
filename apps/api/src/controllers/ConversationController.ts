@@ -9,7 +9,7 @@ import {
   PromptExecutionService,
   PromptExecutionError,
 } from '../services/PromptExecutionService.js'
-import { ScreenshotService } from '../services/ScreenshotService.js'
+import { MediaService } from '../services/MediaService.js'
 import { AgentManagerError } from '../agent/AgentManager.js'
 
 function getParam(req: Request, name: string): string {
@@ -31,7 +31,7 @@ export class ConversationController {
     private conversationService: ConversationService,
     private messageService: MessageService,
     private promptExecutionService?: PromptExecutionService,
-    private screenshotService?: ScreenshotService,
+    private mediaService?: MediaService,
   ) {}
 
   async listByProject(req: Request, res: Response): Promise<void> {
@@ -117,11 +117,11 @@ export class ConversationController {
       res.status(404).json({ error: 'Conversation not found' })
       return
     }
-    // Best-effort screenshot cleanup; DB row is already gone.
+    // Best-effort media cleanup; DB row is already gone.
     try {
-      this.screenshotService?.deleteConversationScreenshots(id)
+      this.mediaService?.deleteConversationMedia(id)
     } catch {
-      // non-fatal — screenshots may linger and can be cleaned manually
+      // non-fatal — media may linger and can be cleaned manually
     }
     res.status(204).send()
   }

@@ -1,8 +1,8 @@
 <template>
   <div class="pb-20">
-    <header class="sticky top-0 bg-surface-elevated border-b border-border px-4 py-3 z-40">
+    <AppHeader sticky>
       <h1 class="text-lg font-semibold">Projects</h1>
-    </header>
+    </AppHeader>
 
     <div class="px-4 py-4 max-w-2xl mx-auto">
       <button

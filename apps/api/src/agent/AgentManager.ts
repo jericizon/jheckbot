@@ -7,7 +7,7 @@ import { MessageRepository } from '../repositories/MessageRepository.js'
 import { AgentEventRepository, type AgentEventRecord } from '../repositories/AgentEventRepository.js'
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
 import type { PushService } from '../services/PushService.js'
-import type { ScreenshotService } from '../services/ScreenshotService.js'
+import type { MediaService } from '../services/MediaService.js'
 import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 
 export type AgentStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'stopped'
@@ -68,8 +68,8 @@ interface ManagedAgentRun {
   stopRequested: boolean
   lastFlushAt: number
   sessionIdPersisted: boolean
-  knownScreenshots: Set<string>
-  screenshotMarkdown: string[]
+  knownMedia: Set<string>
+  mediaMarkdown: string[]
 }
 
 interface ActiveConversationRepository {
@@ -138,7 +138,7 @@ export class AgentManager {
   private readonly eventRepo?: AgentEventRepository
   private readonly tmux?: TmuxManager
   private readonly pushService?: PushService
-  screenshotService?: ScreenshotService
+  mediaService?: MediaService
 
   constructor(
     devin: DevinAdapter,
@@ -214,12 +214,12 @@ export class AgentManager {
     const startedAt = new Date().toISOString()
     let sessionInfo
 
-    // Expose the screenshot directory + conversation id to the agent so its
-    // browser automation tool (Playwright/Puppeteer MCP) can save PNGs that
-    // JheckBot surfaces inline in the chat.
-    const screenshotEnv: Record<string, string> = this.screenshotService
+    // Expose the media directory + conversation id to the agent so its
+    // browser automation tool (Playwright/Puppeteer MCP) can save images
+    // and videos that JheckBot surfaces inline in the chat.
+    const mediaEnv: Record<string, string> = this.mediaService
       ? {
-          JHECKBOT_SCREENSHOTS_DIR: this.screenshotService.conversationDir(options.conversationId),
+          JHECKBOT_MEDIA_DIR: this.mediaService.conversationDir(options.conversationId),
           JHECKBOT_CONVERSATION_ID: options.conversationId,
         }
       : {}
@@ -232,7 +232,7 @@ export class AgentManager {
         resumeSessionId: options.devinSessionId,
         model: options.model || DEFAULT_DEVIN_MODEL,
         bypass: options.bypass,
-        env: screenshotEnv,
+        env: mediaEnv,
       })
     } catch (error) {
       // A failed create is not assumed to have created a session. Killing here
@@ -612,8 +612,8 @@ export class AgentManager {
       stopRequested: false,
       lastFlushAt: Date.now(),
       sessionIdPersisted: false,
-      knownScreenshots: new Set(),
-      screenshotMarkdown: [],
+      knownMedia: new Set(),
+      mediaMarkdown: [],
     }
   }
 
@@ -682,11 +682,11 @@ export class AgentManager {
       captureError = error instanceof Error ? error.message : String(error)
     }
 
-    // Surface any new screenshots the agent's browser tool has written.
+    // Surface any new media (images/videos) the agent's browser tool has written.
     try {
-      await this.scanScreenshots(state)
+      await this.scanMedia(state)
     } catch {
-      // screenshot scanning is best-effort; never block the run on it
+      // media scanning is best-effort; never block the run on it
     }
 
     let alive = false
@@ -897,17 +897,17 @@ export class AgentManager {
     const newOutput = normalized.join('\n')
     state.run.normalizedSnapshot = normalized
 
-    // Append any screenshot markdown so images persist in the assistant
+    // Append any media markdown so images/videos persist in the assistant
     // message. Re-applied each tick because outputBuffer is overwritten
     // with the fresh tmux capture above.
-    const screenshotBlock = state.screenshotMarkdown.join('\n\n')
-    const outputWithScreenshots = screenshotBlock
-      ? `${newOutput}${newOutput.endsWith('\n') ? '' : '\n\n'}${screenshotBlock}`
+    const mediaBlock = state.mediaMarkdown.join('\n\n')
+    const outputWithMedia = mediaBlock
+      ? `${newOutput}${newOutput.endsWith('\n') ? '' : '\n\n'}${mediaBlock}`
       : newOutput
 
-    if (outputWithScreenshots !== state.run.outputBuffer) {
-      state.run.outputBuffer = outputWithScreenshots
-      state.pendingOutput = [outputWithScreenshots]
+    if (outputWithMedia !== state.run.outputBuffer) {
+      state.run.outputBuffer = outputWithMedia
+      state.pendingOutput = [outputWithMedia]
     }
 
     // Capture raw ANSI-stripped terminal output for the activity log.
@@ -922,25 +922,26 @@ export class AgentManager {
   }
 
   /**
-   * Detect new PNGs in the conversation's screenshot directory and emit a
-   * `screenshot` agent event for each, plus inject a markdown image link
-   * into the run output so it lands in the persisted assistant message.
+   * Detect new media files (images/videos) in the conversation's media
+   * directory and emit a `media` agent event for each, plus inject a
+   * markdown link into the run output so it lands in the persisted
+   * assistant message.
    */
-  private async scanScreenshots(state: ManagedAgentRun): Promise<void> {
-    if (!this.screenshotService || !this.eventRepo) return
+  private async scanMedia(state: ManagedAgentRun): Promise<void> {
+    if (!this.mediaService || !this.eventRepo) return
     const conversationId = state.run.conversationId
-    const fresh = this.screenshotService.scanForNew(conversationId, state.knownScreenshots)
+    const fresh = this.mediaService.scanForNew(conversationId, state.knownMedia)
     if (fresh.length === 0) return
 
     for (const filename of fresh) {
-      state.knownScreenshots.add(filename)
-      const markdown = this.screenshotService.markdownImage(conversationId, filename)
-      state.screenshotMarkdown.push(markdown)
+      state.knownMedia.add(filename)
+      const markdown = this.mediaService.markdownFor(conversationId, filename)
+      state.mediaMarkdown.push(markdown)
       const event = await this.eventRepo.create({
         conversationId,
-        eventType: 'screenshot',
+        eventType: 'media',
         content: JSON.stringify({
-          url: this.screenshotService.publicUrl(conversationId, filename),
+          url: this.mediaService.publicUrl(conversationId, filename),
           filename,
         }),
       })

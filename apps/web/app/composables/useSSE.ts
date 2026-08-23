@@ -22,8 +22,8 @@ export function useSSE() {
       onEvent({ type: 'log', data: (e as MessageEvent).data })
     })
 
-    es.addEventListener('screenshot', (e) => {
-      onEvent({ type: 'screenshot', data: (e as MessageEvent).data })
+    es.addEventListener('media', (e) => {
+      onEvent({ type: 'media', data: (e as MessageEvent).data })
     })
 
     es.onerror = () => {

@@ -20,7 +20,7 @@ export interface RuntimeEnv {
   vapidPublicKey?: string
   vapidPrivateKey?: string
   vapidSubject?: string
-  screenshotsDir: string
+  mediaDir: string
 }
 
 const PLACEHOLDER_VALUES = new Set([
@@ -180,10 +180,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
     warn('VAPID_KEYS', 'not set — push notifications disabled. Generate with: npx web-push generate-vapid-keys')
   }
 
-  // SCREENSHOTS_DIR — where agent screenshots are stored, served back to the chat.
-  // Defaults to <repo-root>/data/screenshots so previews work without configuration.
-  const screenshotsDir = resolve(
-    optString(source, 'SCREENSHOTS_DIR', resolve(process.cwd(), 'data/screenshots')),
+  // MEDIA_DIR — where agent-captured images/videos are stored, served back to the chat.
+  // Defaults to <repo-root>/data/media so previews work without configuration.
+  const mediaDir = resolve(
+    optString(source, 'MEDIA_DIR', resolve(process.cwd(), 'data/media')),
   )
 
   flushWarnings()
@@ -206,6 +206,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
     vapidPublicKey: vapidPublicKey && vapidPrivateKey ? vapidPublicKey : undefined,
     vapidPrivateKey: vapidPublicKey && vapidPrivateKey ? vapidPrivateKey : undefined,
     vapidSubject,
-    screenshotsDir,
+    mediaDir,
   }
 }

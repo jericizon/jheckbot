@@ -1,10 +1,10 @@
 import type { Request, Response } from 'express'
 import { readFile } from 'node:fs/promises'
 import { isValidUuid } from '@jheckbot/shared'
-import { ScreenshotService } from '../services/ScreenshotService.js'
+import { MediaService, mimeTypeFor } from '../services/MediaService.js'
 
-export class ScreenshotController {
-  constructor(private screenshotService: ScreenshotService) {}
+export class MediaController {
+  constructor(private mediaService: MediaService) {}
 
   async list(req: Request, res: Response): Promise<void> {
     const conversationId = req.params.id
@@ -12,8 +12,8 @@ export class ScreenshotController {
       res.status(400).json({ error: 'Invalid conversation ID format' })
       return
     }
-    const screenshots = this.screenshotService.listScreenshots(conversationId)
-    res.json({ screenshots })
+    const media = this.mediaService.listMedia(conversationId)
+    res.json({ media })
   }
 
   async serve(req: Request, res: Response): Promise<void> {
@@ -28,19 +28,19 @@ export class ScreenshotController {
       return
     }
 
-    const safePath = this.screenshotService.resolveSafePath(conversationId, filename)
+    const safePath = this.mediaService.resolveSafePath(conversationId, filename)
     if (!safePath) {
-      res.status(404).json({ error: 'Screenshot not found' })
+      res.status(404).json({ error: 'Media file not found' })
       return
     }
 
     try {
       const buffer = await readFile(safePath)
-      res.setHeader('Content-Type', 'image/png')
+      res.setHeader('Content-Type', mimeTypeFor(filename))
       res.setHeader('Cache-Control', 'private, max-age=3600')
       res.send(buffer)
     } catch {
-      res.status(404).json({ error: 'Screenshot not found' })
+      res.status(404).json({ error: 'Media file not found' })
     }
   }
 }

@@ -176,6 +176,7 @@ const emit = defineEmits<{
 }>()
 
 const skillsApi = useSkills()
+const { record: recordSkillUsage, getCount: getSkillUsageCount } = useSkillUsage()
 const skills = ref<Skill[]>([])
 const loading = ref(false)
 const cached = ref(false)
@@ -184,10 +185,14 @@ const activeIndex = ref(0)
 const overlayEl = ref<HTMLElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
 
+const sortedSkills = computed(() =>
+  [...skills.value].sort((a, b) => getSkillUsageCount(b.display_name) - getSkillUsageCount(a.display_name)),
+)
+
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return skills.value
-  return skills.value.filter(
+  if (!q) return sortedSkills.value
+  return sortedSkills.value.filter(
     (s) =>
       s.display_name.toLowerCase().includes(q) ||
       s.name.toLowerCase().includes(q) ||
@@ -219,6 +224,7 @@ function close() {
 }
 
 function select(skill: Skill) {
+  recordSkillUsage(skill.display_name)
   emit('select', `/${skill.display_name} `)
   emit('close')
 }

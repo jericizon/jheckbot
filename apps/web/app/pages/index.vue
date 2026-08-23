@@ -1,17 +1,19 @@
 <template>
   <div class="pb-20">
-    <header class="sticky top-0 bg-surface-elevated border-b border-border px-4 py-3 z-40 space-y-3">
-      <h1 class="text-lg font-semibold">JheckBot</h1>
-      <div class="relative">
-        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-subtle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-        <input
-          v-model="query"
-          @input="onSearchInput"
-          placeholder="Search conversations..."
-          class="w-full rounded-lg border border-border bg-surface pl-9 pr-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:ring-2 focus:ring-content-subtle/20 focus:outline-none transition-all"
-        />
+    <AppHeader sticky>
+      <div class="w-full space-y-2.5">
+        <h1 class="text-lg font-semibold">JheckBot</h1>
+        <div class="relative">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-subtle" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <input
+            v-model="query"
+            @input="onSearchInput"
+            placeholder="Search conversations..."
+            class="w-full rounded-lg border border-border bg-surface pl-9 pr-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:ring-2 focus:ring-content-subtle/20 focus:outline-none transition-all"
+          />
+        </div>
       </div>
-    </header>
+    </AppHeader>
 
     <div class="px-4 py-4 max-w-2xl mx-auto">
       <h2 class="text-[11px] font-medium text-content-subtle uppercase tracking-wide mb-3">

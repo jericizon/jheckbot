@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { ScreenshotController } from '../controllers/ScreenshotController.js'
+import { MediaController } from '../controllers/MediaController.js'
 
 /**
- * Routes under /api/conversations/:id/screenshots.
+ * Routes under /api/conversations/:id/media.
  * Mounted after the global auth middleware, so all endpoints require auth.
  */
-export function createScreenshotRouter(controller: ScreenshotController): Router {
+export function createMediaRouter(controller: MediaController): Router {
   const router = Router({ mergeParams: true })
 
   router.get('/', (req, res) => controller.list(req, res))

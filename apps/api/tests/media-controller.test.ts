@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { ScreenshotService } from '../src/services/ScreenshotService.js'
-import { ScreenshotController } from '../src/controllers/ScreenshotController.js'
+import { MediaService } from '../src/services/MediaService.js'
+import { MediaController } from '../src/controllers/MediaController.js'
 import type { Request, Response } from 'express'
 
-const TMP = join(tmpdir(), 'jheckbot-test-screenshot-controller')
+const TMP = join(tmpdir(), 'jheckbot-test-media-controller')
 const CONV_ID = '00000000-0000-0000-0000-000000000001'
 
 function mockReq(params: Record<string, string> = {}): Request {
@@ -37,14 +37,14 @@ function mockRes(): Response & {
   }
 }
 
-describe('ScreenshotController', () => {
-  let service: ScreenshotService
-  let controller: ScreenshotController
+describe('MediaController', () => {
+  let service: MediaService
+  let controller: MediaController
 
   beforeEach(() => {
     rmSync(TMP, { recursive: true, force: true })
-    service = new ScreenshotService(TMP)
-    controller = new ScreenshotController(service)
+    service = new MediaService(TMP)
+    controller = new MediaController(service)
   })
 
   afterEach(() => {
@@ -59,23 +59,24 @@ describe('ScreenshotController', () => {
       expect(res.statusCode).toBe(400)
     })
 
-    it('returns an empty list for a conversation with no screenshots', async () => {
+    it('returns an empty list for a conversation with no media', async () => {
       const req = mockReq({ id: CONV_ID })
       const res = mockRes()
       await controller.list(req, res)
       expect(res.statusCode).toBe(200)
-      expect((res.body as { screenshots: unknown[] }).screenshots).toEqual([])
+      expect((res.body as { media: unknown[] }).media).toEqual([])
     })
 
-    it('returns screenshots that exist', async () => {
+    it('returns media files that exist', async () => {
       const dir = service.ensureConversationDir(CONV_ID)
       writeFileSync(join(dir, 'shot.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+      writeFileSync(join(dir, 'clip.mp4'), Buffer.from([0x00, 0x00]))
       const req = mockReq({ id: CONV_ID })
       const res = mockRes()
       await controller.list(req, res)
-      const screenshots = (res.body as { screenshots: { filename: string }[] }).screenshots
-      expect(screenshots).toHaveLength(1)
-      expect(screenshots[0].filename).toBe('shot.png')
+      const media = (res.body as { media: { filename: string; kind: string }[] }).media
+      expect(media).toHaveLength(2)
+      expect(media.map((m) => m.filename).sort()).toEqual(['clip.mp4', 'shot.png'])
     })
   })
 
@@ -87,7 +88,7 @@ describe('ScreenshotController', () => {
       expect(res.statusCode).toBe(400)
     })
 
-    it('returns 404 for a missing screenshot', async () => {
+    it('returns 404 for a missing file', async () => {
       const req = mockReq({ id: CONV_ID, filename: 'missing.png' })
       const res = mockRes()
       await controller.serve(req, res)
@@ -111,6 +112,27 @@ describe('ScreenshotController', () => {
       expect(res.statusCode).toBe(200)
       expect(res.headers['Content-Type']).toBe('image/png')
       expect(res.sent).toEqual(pngBytes)
+    })
+
+    it('serves an MP4 with the correct content type', async () => {
+      const dir = service.ensureConversationDir(CONV_ID)
+      const mp4Bytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70])
+      writeFileSync(join(dir, 'clip.mp4'), mp4Bytes)
+      const req = mockReq({ id: CONV_ID, filename: 'clip.mp4' })
+      const res = mockRes()
+      await controller.serve(req, res)
+      expect(res.statusCode).toBe(200)
+      expect(res.headers['Content-Type']).toBe('video/mp4')
+      expect(res.sent).toEqual(mp4Bytes)
+    })
+
+    it('returns 404 for an unsupported file extension', async () => {
+      const dir = service.ensureConversationDir(CONV_ID)
+      writeFileSync(join(dir, 'notes.txt'), 'hi')
+      const req = mockReq({ id: CONV_ID, filename: 'notes.txt' })
+      const res = mockRes()
+      await controller.serve(req, res)
+      expect(res.statusCode).toBe(404)
     })
   })
 })

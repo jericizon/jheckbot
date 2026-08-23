@@ -35,9 +35,9 @@ Thumbs.db
 # Docker
 docker/data/
 
-# Agent screenshots (keep the directory, ignore contents)
-data/screenshots/*
-!data/screenshots/.gitkeep
+# Agent media (keep the directory, ignore contents)
+data/media/*
+!data/media/.gitkeep
 
 # Temp
 tmp/
