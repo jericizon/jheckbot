@@ -54,6 +54,8 @@ describe('AgentManager', () => {
       findActive: vi.fn().mockResolvedValue<ConversationRecord[]>([]),
       updateAgentStatus: vi.fn().mockResolvedValue(undefined),
       updateAgentSessionId: vi.fn().mockResolvedValue(undefined),
+      clearAgentSessionId: vi.fn().mockResolvedValue(undefined),
+      findByAgentSessionId: vi.fn().mockResolvedValue<ConversationRecord[]>([]),
       touchLastMessage: vi.fn().mockResolvedValue(undefined),
     } as unknown as ConversationRepository
 
@@ -198,7 +200,10 @@ describe('AgentManager', () => {
 
     expect(run?.status).toBe('completed')
     expect(run?.devinSessionId).toBe('healthy-dollar')
-    expect(conversationRepo.updateAgentSessionId).toHaveBeenCalledWith('conv-1', 'healthy-dollar')
+    // Collision check is async; flush microtasks before asserting DB call
+    await vi.waitFor(() => {
+      expect(conversationRepo.updateAgentSessionId).toHaveBeenCalledWith('conv-1', 'healthy-dollar')
+    })
   })
 
   it('syncRunState marks a run as failed on non-zero exit code', async () => {
@@ -539,6 +544,214 @@ describe('AgentManager', () => {
       expect(types).toContain('status')
       expect(types.filter((t) => t === 'status')).toHaveLength(1)
       expect(types.filter((t) => t === 'output')).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Regression: a --resume that fails because the target Devin session is
+  // locked by another process ("failed to start ACP agent session") must
+  // clear the stale session ID and retry once as a fresh (non-resume) run.
+  it('retries without --resume when a session-locked error is detected', async () => {
+    vi.useFakeTimers()
+    try {
+      // Conversation has a prior session ID so start() passes --resume
+      vi.mocked(conversationRepo.findById).mockResolvedValue({
+        id: 'conv-1',
+        project_id: 'proj-1',
+        title: 'Test',
+        status: 'active',
+        agent_type: 'devin',
+        agent_session_id: 'locked-session',
+        agent_status: 'idle',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        last_message_at: null,
+      })
+
+      let alive = true
+      let startCallCount = 0
+      vi.mocked(devin.isRunning).mockImplementation(() => alive)
+      vi.mocked(devin.getExitCode).mockReturnValue(1)
+      vi.mocked(devin.captureOutput).mockReturnValue(['Error: failed to start ACP agent session'])
+      vi.mocked(devin.start).mockImplementation(() => {
+        startCallCount++
+        // First call (resume) fails immediately; second call (retry) stays alive
+        alive = startCallCount === 1 ? false : true
+        return {
+          sessionName: 'jheckbot-test-project-conv-1',
+          devinSessionId: startCallCount === 1 ? 'locked-session' : undefined,
+          status: 'starting',
+          startedAt: new Date().toISOString(),
+        }
+      })
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'retry me' })
+
+      // First watcher tick: process is dead, output contains session-locked error
+      await vi.advanceTimersByTimeAsync(100)
+
+      // Should have retried: start called twice, second time without resumeSessionId
+      expect(startCallCount).toBe(2)
+      const secondCall = vi.mocked(devin.start).mock.calls[1][0]
+      expect(secondCall.resumeSessionId).toBeUndefined()
+
+      // Stale session ID should be cleared
+      expect(conversationRepo.clearAgentSessionId).toHaveBeenCalledWith('conv-1')
+
+      // Run should still be active (retry is running)
+      expect(manager.isConversationActive('conv-1')).toBe(true)
+      expect(manager.getStatus('conv-1')?.status).toBe('running')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not retry when the failure is not a session-locked error', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(conversationRepo.findById).mockResolvedValue({
+        id: 'conv-1',
+        project_id: 'proj-1',
+        title: 'Test',
+        status: 'active',
+        agent_type: 'devin',
+        agent_session_id: 'prior-session',
+        agent_status: 'idle',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        last_message_at: null,
+      })
+
+      let alive = true
+      vi.mocked(devin.isRunning).mockImplementation(() => alive)
+      vi.mocked(devin.getExitCode).mockReturnValue(1)
+      // Generic error, not session-locked
+      vi.mocked(devin.captureOutput).mockReturnValue(['Error: model server unreachable'])
+      vi.mocked(devin.start).mockImplementation(() => {
+        alive = false
+        return {
+          sessionName: 'jheckbot-test-project-conv-1',
+          devinSessionId: 'prior-session',
+          status: 'starting',
+          startedAt: new Date().toISOString(),
+        }
+      })
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'fail me' })
+      await vi.advanceTimersByTimeAsync(100)
+
+      // Should NOT retry — only one start call
+      expect(devin.start).toHaveBeenCalledOnce()
+      expect(manager.getStatus('conv-1')?.status).toBe('failed')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not retry a second time after a session-locked retry', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(conversationRepo.findById).mockResolvedValue({
+        id: 'conv-1',
+        project_id: 'proj-1',
+        title: 'Test',
+        status: 'active',
+        agent_type: 'devin',
+        agent_session_id: 'locked-session',
+        agent_status: 'idle',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        last_message_at: null,
+      })
+
+      let startCallCount = 0
+      vi.mocked(devin.isRunning).mockImplementation(() => false)
+      vi.mocked(devin.getExitCode).mockReturnValue(1)
+      vi.mocked(devin.captureOutput).mockReturnValue(['Error: failed to start ACP agent session'])
+      vi.mocked(devin.start).mockImplementation(() => {
+        startCallCount++
+        return {
+          sessionName: 'jheckbot-test-project-conv-1',
+          devinSessionId: startCallCount === 1 ? 'locked-session' : undefined,
+          status: 'starting',
+          startedAt: new Date().toISOString(),
+        }
+      })
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'retry twice' })
+      // First tick: retry triggered
+      await vi.advanceTimersByTimeAsync(100)
+      // Second tick: retry also fails, but should NOT retry again
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(startCallCount).toBe(2)
+      expect(manager.getStatus('conv-1')?.status).toBe('failed')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Regression: discoverSessionId returns a per-directory session ID that may
+  // belong to another conversation. The manager must not persist it if another
+  // conversation already claims it.
+  it('does not persist a discovered session ID claimed by another conversation', async () => {
+    vi.useFakeTimers()
+    try {
+      let alive = true
+      vi.mocked(devin.isRunning).mockImplementation(() => alive)
+      vi.mocked(devin.captureOutput).mockReturnValue(['Task complete'])
+      vi.mocked(devin.getExitCode).mockReturnValue(0)
+      // Scraping fails (as in --print mode); discovery returns a shared ID
+      vi.mocked(devin.getDevinSessionId).mockReturnValue(undefined)
+      vi.mocked(devin.getLatestSessionId).mockReturnValue('shared-session')
+      // Another conversation already has this session ID
+      vi.mocked(conversationRepo.findByAgentSessionId).mockResolvedValue([
+        {
+          id: 'other-conv',
+          project_id: 'proj-1',
+          title: 'Other',
+          status: 'active',
+          agent_type: 'devin',
+          agent_session_id: 'shared-session',
+          agent_status: 'idle',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          last_message_at: null,
+        },
+      ])
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'discover me' })
+      alive = false
+      await vi.advanceTimersByTimeAsync(100)
+
+      // The shared session ID must NOT be persisted to this conversation
+      expect(conversationRepo.updateAgentSessionId).not.toHaveBeenCalledWith(
+        'conv-1',
+        'shared-session',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('persists a discovered session ID when no other conversation claims it', async () => {
+    vi.useFakeTimers()
+    try {
+      let alive = true
+      vi.mocked(devin.isRunning).mockImplementation(() => alive)
+      vi.mocked(devin.captureOutput).mockReturnValue(['Task complete'])
+      vi.mocked(devin.getExitCode).mockReturnValue(0)
+      vi.mocked(devin.getDevinSessionId).mockReturnValue(undefined)
+      vi.mocked(devin.getLatestSessionId).mockReturnValue('unique-session')
+      // No other conversation has this session ID
+      vi.mocked(conversationRepo.findByAgentSessionId).mockResolvedValue([])
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'discover me' })
+      alive = false
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(conversationRepo.updateAgentSessionId).toHaveBeenCalledWith('conv-1', 'unique-session')
     } finally {
       vi.useRealTimers()
     }

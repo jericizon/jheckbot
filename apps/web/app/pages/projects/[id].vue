@@ -2,6 +2,8 @@
   <div class="flex h-[100dvh] overflow-hidden bg-surface text-content">
     <ConversationSidebar
       :conversations="conversations"
+      :active-conversations="activeConversations"
+      :current-project-id="id"
       :loading="convLoading"
       @new="newConversation"
       @delete="deleteConversation"
@@ -190,7 +192,7 @@
             <button
               v-if="projectBranch"
               @click="branchModalOpen = true"
-              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 mb-6 cursor-pointer transition-colors"
+              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 mb-6 max-w-full cursor-pointer transition-colors"
               title="Manage branches"
             >
               <svg
@@ -205,7 +207,7 @@
                 <circle cx="18" cy="6" r="3" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" />
               </svg>
-              <span class="font-mono truncate max-w-[20ch]">{{ projectBranch }}</span>
+              <span class="font-mono truncate min-w-0">{{ projectBranch }}</span>
             </button>
             <p v-else class="mb-6"></p>
 
@@ -258,12 +260,16 @@
               v-model:bypass-mode="bypassMode"
               :disabled="sending"
               @open-skills="skillsPickerOpen = true"
+              @open-models="modelPickerOpen = true"
             />
 
             <p v-if="sendError" class="mt-3 text-sm text-red-500">{{ sendError }}</p>
           </div>
         </div>
       </div>
+
+      <!-- Changed files panel (list, diff preview, commit) -->
+      <ChangedFilesPanel :project-id="project?.id" />
     </div>
 
     <!-- Delete conversation modal -->
@@ -290,6 +296,15 @@
       @close="skillsPickerOpen = false"
     />
 
+    <!-- Model picker -->
+    <ModelPicker
+      :open="modelPickerOpen"
+      :families="availableFamilies"
+      :current="selectedModel"
+      @select="selectedModel = $event"
+      @close="modelPickerOpen = false"
+    />
+
     <!-- Branch manager -->
     <BranchModal
       :open="branchModalOpen"
@@ -308,6 +323,7 @@ const route = useRoute()
 const projectsApi = useProjects()
 const convApi = useConversations()
 const { toggle: toggleSidebar } = useSidebar()
+const { activeConversations } = useActiveConversations()
 
 const id = computed(() => route.params.id as string)
 
@@ -355,6 +371,7 @@ const inputEl = ref<HTMLTextAreaElement | null>(null)
 const sending = ref(false)
 const sendError = ref('')
 const skillsPickerOpen = ref(false)
+const modelPickerOpen = ref(false)
 const { bypassMode } = useBypassMode()
 
 const availableFamilies = ref<ModelFamily[]>([])

@@ -22,9 +22,14 @@ export function useSelectedModel() {
   if (hasLocalStorage()) init()
 
   // Set the default only if the user hasn't explicitly chosen a model.
+  // Also persist to localStorage so the guard works on subsequent calls even
+  // when the value equals the initial ref — the watcher only fires on value
+  // changes, so without this explicit write the key may never be set (e.g.
+  // when the API default is also 'glm-5-2', the initial ref value).
   function ensureDefault(value: string) {
     if (hasLocalStorage() && localStorage.getItem('selectedModel')) return
     selectedModel.value = value
+    if (hasLocalStorage()) localStorage.setItem('selectedModel', value)
   }
 
   return {

@@ -69,6 +69,9 @@ interface ManagedAgentRun {
   stopRequested: boolean
   lastFlushAt: number
   sessionIdPersisted: boolean
+  retriedAfterSessionLock: boolean
+  prompt: string
+  bypass: boolean
   knownMedia: Set<string>
   mediaMarkdown: string[]
 }
@@ -79,10 +82,24 @@ interface ActiveConversationRepository {
   findActiveAgentConversations?: () => Promise<ConversationRecord[]>
 }
 
+interface SessionIdRepository {
+  updateAgentSessionId?(id: string, sessionId: string): Promise<void>
+  clearAgentSessionId?(id: string): Promise<void>
+  findByAgentSessionId?(sessionId: string, excludeId: string): Promise<ConversationRecord[]>
+}
+
 const MAX_CONCURRENT_SESSIONS = 3
 const WATCH_INTERVAL_MS = 100
 const OUTPUT_FLUSH_INTERVAL_MS = 500
 const OUTPUT_FLUSH_BYTES = 4 * 1024
+const SESSION_LOCK_RETRY_DEADLINE_MS = 15_000
+
+// Devin CLI prints these when a --resume targets a session already locked by
+// another process. The error surfaces as "failed to start ACP agent session".
+const SESSION_LOCKED_PATTERNS = [
+  /already open in another process/i,
+  /failed to start ACP agent session/i,
+]
 
 /**
  * A prepared external process is deliberately not visible to the manager until
@@ -259,7 +276,7 @@ export class AgentManager {
       outputBuffer: '',
       normalizedSnapshot: [],
     }
-    const state = this.createManagedRun(run)
+    const state = this.createManagedRun(run, options.prompt, options.bypass)
     this.pendingRuns.set(options.conversationId, state)
     return new PreparedAgentRun(this, state)
   }
@@ -609,7 +626,7 @@ export class AgentManager {
     }
   }
 
-  private createManagedRun(run: AgentRun): ManagedAgentRun {
+  private createManagedRun(run: AgentRun, prompt = '', bypass = false): ManagedAgentRun {
     return {
       run,
       pendingOutput: [],
@@ -619,6 +636,9 @@ export class AgentManager {
       stopRequested: false,
       lastFlushAt: Date.now(),
       sessionIdPersisted: false,
+      retriedAfterSessionLock: false,
+      prompt,
+      bypass,
       knownMedia: new Set(),
       mediaMarkdown: [],
     }
@@ -718,9 +738,98 @@ export class AgentManager {
 
     const exitCode = this.readExitCode(state.run.sessionName)
     const failed = captureError !== undefined || (exitCode !== null && exitCode !== 0)
+
+    // A --resume that fails immediately because the target session is locked
+    // by another process surfaces as "failed to start ACP agent session".
+    // Clear the stale session ID and retry once as a fresh (non-resume) run.
+    if (failed && this.shouldRetryAfterSessionLock(state)) {
+      if (this.retryRunWithoutResume(state)) return
+    }
+
     const status: AgentStatus = failed ? 'failed' : 'completed'
     const error = captureError ?? (failed ? `Devin exited with code ${exitCode}` : undefined)
     await this.finishRun(state, status, error, false)
+  }
+
+  /**
+   * Determine whether a failed run should be retried without --resume. The
+   * process must have died quickly with a session-locked error, the run must
+   * have been a resume attempt, and the retry must not have already happened.
+   */
+  private shouldRetryAfterSessionLock(state: ManagedAgentRun): boolean {
+    if (state.retriedAfterSessionLock) return false
+    if (!state.run.devinSessionId) return false
+    const elapsed = Date.now() - Date.parse(state.run.startedAt)
+    if (Number.isNaN(elapsed) || elapsed > SESSION_LOCK_RETRY_DEADLINE_MS) return false
+    return this.isSessionLockedOutput(state.run.outputBuffer)
+  }
+
+  private isSessionLockedOutput(output: string): boolean {
+    return SESSION_LOCKED_PATTERNS.some((p) => p.test(output))
+  }
+
+  /**
+   * Restart a failed resume run as a fresh session without --resume. Kills the
+   * dead tmux session, clears the stale agent_session_id, creates a new tmux
+   * session, and restarts the watcher. Returns true if the retry was started.
+   */
+  private retryRunWithoutResume(state: ManagedAgentRun): boolean {
+    try {
+      this.devin.forceKill(state.run.sessionName)
+    } catch {
+      // Best-effort; the pane is already dead.
+    }
+
+    // Clear the stale session ID so future prompts start fresh.
+    void this.conversationRepo?.clearAgentSessionId?.(state.run.conversationId).catch(() => {})
+
+    const newSessionName = this.buildSessionName(
+      state.run.projectSlug,
+      state.run.conversationId,
+    )
+    const mediaEnabled = !!this.mediaService
+    const mediaEnv: Record<string, string> = this.mediaService
+      ? {
+          JHECKBOT_MEDIA_DIR: this.mediaService.conversationDir(state.run.conversationId),
+          JHECKBOT_CONVERSATION_ID: state.run.conversationId,
+        }
+      : {}
+    const agentPrompt = augmentPromptForMedia(state.prompt, mediaEnabled)
+
+    try {
+      this.devin.start({
+        sessionName: newSessionName,
+        cwd: state.run.cwd,
+        prompt: agentPrompt,
+        model: state.run.model,
+        bypass: state.bypass,
+        env: mediaEnv,
+      })
+    } catch {
+      // If the retry start itself fails, fall through to normal failure.
+      return false
+    }
+
+    state.retriedAfterSessionLock = true
+    state.run.sessionName = newSessionName
+    state.run.devinSessionId = undefined
+    state.run.status = 'running'
+    state.run.startedAt = new Date().toISOString()
+    state.run.endedAt = undefined
+    state.run.error = undefined
+    state.run.outputBuffer = ''
+    state.run.normalizedSnapshot = []
+    state.pendingOutput = []
+    state.pendingLog = []
+    state.lastLogSnapshot = ''
+    state.sessionIdPersisted = false
+    state.stopRequested = false
+    state.terminalizing = false
+    state.lastFlushAt = Date.now()
+
+    this.clearWatcher(state)
+    this.startWatcher(state)
+    return true
   }
 
   private async finishRun(
@@ -968,11 +1077,34 @@ export class AgentManager {
 
   private captureSessionIdWithoutWaiting(state: ManagedAgentRun): void {
     if (state.run.devinSessionId || state.sessionIdPersisted) return
-    const sessionId = this.readSessionId(state.run.sessionName) ?? this.discoverSessionId(state)
-    if (!sessionId) return
-    state.run.devinSessionId = sessionId
-    if (!this.conversationRepo?.updateAgentSessionId) return
+    const scraped = this.readSessionId(state.run.sessionName)
+    if (scraped) {
+      // Scraped IDs come from this run's own tmux output — always safe.
+      state.run.devinSessionId = scraped
+      this.persistSessionIdAsync(state, scraped)
+      return
+    }
+    const discovered = this.discoverSessionId(state)
+    if (!discovered) return
+    // Discovered IDs come from `devin list` (per-directory, not per-conversation)
+    // and may belong to another conversation. Check before claiming.
+    state.run.devinSessionId = discovered
+    void this.isSessionIdClaimedByOther(discovered, state.run.conversationId)
+      .then((claimed) => {
+        if (claimed) {
+          state.run.devinSessionId = undefined
+          return
+        }
+        this.persistSessionIdAsync(state, discovered)
+      })
+      .catch(() => {
+        // On lookup failure, don't persist a potentially shared ID.
+        state.run.devinSessionId = undefined
+      })
+  }
 
+  private persistSessionIdAsync(state: ManagedAgentRun, sessionId: string): void {
+    if (!this.conversationRepo?.updateAgentSessionId) return
     void this.conversationRepo
       .updateAgentSessionId(state.run.conversationId, sessionId)
       .then(() => {
@@ -985,11 +1117,11 @@ export class AgentManager {
 
   private async persistSessionId(state: ManagedAgentRun): Promise<void> {
     if (state.sessionIdPersisted) return
-    const sessionId = state.run.devinSessionId ?? this.readSessionId(state.run.sessionName)
-    if (sessionId) {
-      state.run.devinSessionId = sessionId
+    const scraped = state.run.devinSessionId ?? this.readSessionId(state.run.sessionName)
+    if (scraped) {
+      state.run.devinSessionId = scraped
       if (this.conversationRepo?.updateAgentSessionId) {
-        await this.conversationRepo.updateAgentSessionId(state.run.conversationId, sessionId)
+        await this.conversationRepo.updateAgentSessionId(state.run.conversationId, scraped)
         state.sessionIdPersisted = true
       }
       return
@@ -999,12 +1131,30 @@ export class AgentManager {
     // scraping fails. Fall back to `devin list --format json` to discover
     // the session ID from the project's working directory.
     const discovered = this.discoverSessionId(state)
-    if (discovered) {
-      state.run.devinSessionId = discovered
-      if (this.conversationRepo?.updateAgentSessionId) {
-        await this.conversationRepo.updateAgentSessionId(state.run.conversationId, discovered)
-        state.sessionIdPersisted = true
-      }
+    if (!discovered) return
+    // Discovered IDs are per-directory and may belong to another conversation.
+    if (await this.isSessionIdClaimedByOther(discovered, state.run.conversationId)) {
+      state.run.devinSessionId = undefined
+      return
+    }
+    state.run.devinSessionId = discovered
+    if (this.conversationRepo?.updateAgentSessionId) {
+      await this.conversationRepo.updateAgentSessionId(state.run.conversationId, discovered)
+      state.sessionIdPersisted = true
+    }
+  }
+
+  private async isSessionIdClaimedByOther(
+    sessionId: string,
+    conversationId: string,
+  ): Promise<boolean> {
+    const repo = this.conversationRepo as SessionIdRepository | undefined
+    if (!repo?.findByAgentSessionId) return false
+    try {
+      const others = await repo.findByAgentSessionId(sessionId, conversationId)
+      return others.length > 0
+    } catch {
+      return false
     }
   }
 

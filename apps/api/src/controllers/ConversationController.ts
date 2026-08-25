@@ -41,6 +41,11 @@ export class ConversationController {
     res.json(conversations)
   }
 
+  async listActive(_req: Request, res: Response): Promise<void> {
+    const conversations = await this.conversationService.listActive()
+    res.json(conversations)
+  }
+
   async create(req: Request, res: Response): Promise<void> {
     try {
       const projectId = validateIdParam(req, res, 'projectId')

@@ -1,6 +1,7 @@
 import {
   ConversationRepository,
   type ConversationRecord,
+  type ActiveConversationRecord,
   type SearchResult,
 } from '../repositories/ConversationRepository.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
@@ -29,6 +30,10 @@ export class ConversationService {
 
   async listByProject(projectId: string): Promise<ConversationRecord[]> {
     return this.conversationRepo.findByProject(projectId)
+  }
+
+  async listActive(): Promise<ActiveConversationRecord[]> {
+    return this.conversationRepo.findActiveWithProject()
   }
 
   async get(id: string): Promise<ConversationRecord | null> {

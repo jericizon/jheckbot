@@ -23,6 +23,10 @@ export function createConversationRouter(
 ): Router {
   const router = Router()
 
+  // Active conversations across all projects (must be before /:id to avoid
+  // the UUID param matching the literal "active" segment).
+  router.get('/active', (req, res) => controller.listActive(req, res))
+
   router.get('/:id', (req, res) => controller.get(req, res))
   router.patch('/:id', (req, res) => controller.update(req, res))
   router.delete('/:id', (req, res) => controller.delete(req, res))

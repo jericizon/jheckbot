@@ -679,6 +679,7 @@
             :families="availableFamilies"
             v-model:bypass-mode="bypassMode"
             @open-skills="skillsPickerOpen = true"
+            @open-models="modelPickerOpen = true"
           />
         </div>
       </div>
@@ -718,6 +719,15 @@
       :open="skillsPickerOpen"
       @select="insertSkill"
       @close="skillsPickerOpen = false"
+    />
+
+    <!-- Model picker -->
+    <ModelPicker
+      :open="modelPickerOpen"
+      :families="availableFamilies"
+      :current="selectedModel"
+      @select="selectedModel = $event"
+      @close="modelPickerOpen = false"
     />
 
     <!-- Branch manager -->
@@ -779,6 +789,7 @@ const elapsedLabel = computed(() => {
 })
 const sendError = ref('')
 const skillsPickerOpen = ref(false)
+const modelPickerOpen = ref(false)
 const branchModalOpen = ref(false)
 const queue = ref<QueuedMessage[]>([])
 const editingQueueId = ref<string | null>(null)

@@ -22,6 +22,10 @@ export interface SearchResult {
   created_at: string
 }
 
+export interface ActiveConversationRecord extends ConversationRecord {
+  project_name: string
+}
+
 export class ConversationRepository {
   async findByProject(
     projectId: string,
@@ -154,6 +158,26 @@ export class ConversationRepository {
     )
   }
 
+  async clearAgentSessionId(id: string, executor: DbExecutor = pool): Promise<void> {
+    await executor.query(
+      'UPDATE conversations SET agent_session_id = NULL, updated_at = NOW() WHERE id = $1',
+      [id],
+    )
+  }
+
+  async findByAgentSessionId(
+    sessionId: string,
+    excludeId: string,
+    executor: DbExecutor = pool,
+  ): Promise<ConversationRecord[]> {
+    const { rows } = await executor.query<ConversationRecord>(
+      `SELECT * FROM conversations
+       WHERE agent_session_id = $1 AND id != $2`,
+      [sessionId, excludeId],
+    )
+    return rows
+  }
+
   async countActiveAgents(executor: DbExecutor = pool): Promise<number> {
     const { rows } = await executor.query<{ count: string }>(
       `SELECT COUNT(*) as count FROM conversations
@@ -167,6 +191,19 @@ export class ConversationRepository {
       `SELECT * FROM conversations
        WHERE agent_status IN ('starting', 'running', 'stopping')
        ORDER BY updated_at ASC`,
+    )
+    return rows
+  }
+
+  async findActiveWithProject(
+    executor: DbExecutor = pool,
+  ): Promise<ActiveConversationRecord[]> {
+    const { rows } = await executor.query<ActiveConversationRecord>(
+      `SELECT c.*, p.name AS project_name
+       FROM conversations c
+       JOIN projects p ON c.project_id = p.id
+       WHERE c.agent_status IN ('starting', 'running', 'stopping')
+       ORDER BY c.updated_at ASC`,
     )
     return rows
   }

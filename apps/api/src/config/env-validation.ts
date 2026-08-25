@@ -21,6 +21,9 @@ export interface RuntimeEnv {
   vapidPrivateKey?: string
   vapidSubject?: string
   mediaDir: string
+  rateLimitWindowMs: number
+  rateLimitMax: number
+  messageRateLimitMax: number
 }
 
 const PLACEHOLDER_VALUES = new Set([
@@ -186,6 +189,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
     optString(source, 'MEDIA_DIR', resolve(process.cwd(), 'data/media')),
   )
 
+  // Rate limits — tunable so the frontend's polling of /api/models and
+  // /api/conversations/active doesn't exhaust the shared bucket.
+  const rateLimitWindowMs = parsePositiveInt(source, 'RATE_LIMIT_WINDOW_MS', 60 * 1000)
+  const rateLimitMax = parsePositiveInt(source, 'RATE_LIMIT_MAX', 600)
+  const messageRateLimitMax = parsePositiveInt(source, 'MESSAGE_RATE_LIMIT_MAX', 60)
+
   flushWarnings()
 
   return {
@@ -207,5 +216,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
     vapidPrivateKey: vapidPublicKey && vapidPrivateKey ? vapidPrivateKey : undefined,
     vapidSubject,
     mediaDir,
+    rateLimitWindowMs,
+    rateLimitMax,
+    messageRateLimitMax,
   }
 }

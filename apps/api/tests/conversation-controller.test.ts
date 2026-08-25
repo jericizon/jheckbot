@@ -122,3 +122,43 @@ describe('ConversationController.createMessage (atomic path)', () => {
     await expect(controller.createMessage(req, res)).rejects.toThrow('unexpected')
   })
 })
+
+describe('ConversationController.listActive', () => {
+  let conversationService: ConversationService
+  let messageService: MessageService
+  let controller: ConversationController
+
+  beforeEach(() => {
+    conversationService = {
+      listActive: vi.fn(),
+    } as unknown as ConversationService
+    messageService = {} as unknown as MessageService
+    controller = new ConversationController(conversationService, messageService)
+  })
+
+  it('returns active conversations from the service', async () => {
+    const active = [
+      { id: 'conv-1', project_id: 'proj-1', project_name: 'Alpha', title: 'Task A', agent_status: 'running' },
+      { id: 'conv-2', project_id: 'proj-2', project_name: 'Beta', title: 'Task B', agent_status: 'starting' },
+    ]
+    vi.mocked(conversationService.listActive).mockResolvedValue(active as any)
+
+    const req = mockReq()
+    const res = mockRes()
+    await controller.listActive(req, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toEqual(active)
+  })
+
+  it('returns empty array when no active conversations exist', async () => {
+    vi.mocked(conversationService.listActive).mockResolvedValue([])
+
+    const req = mockReq()
+    const res = mockRes()
+    await controller.listActive(req, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toEqual([])
+  })
+})

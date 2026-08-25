@@ -77,4 +77,49 @@ describe('useSelectedModel persistence', () => {
 
     expect(selectedModel.value).toBe('glm-5-2')
   })
+
+  it('ensureDefault persists to localStorage even when value equals initial ref', async () => {
+    // Regression: when the API default is 'glm-5-2' (same as the initial ref),
+    // the watcher does not fire because the value doesn't change. Without an
+    // explicit localStorage write in ensureDefault, the key stays empty and
+    // a subsequent ensureDefault call on another page overwrites the user's
+    // selection with the default.
+    const { useSelectedModel } = await import('../app/composables/useSelectedModel')
+    const { selectedModel, ensureDefault } = useSelectedModel()
+
+    ensureDefault('glm-5-2')
+    expect(localStorage.getItem('selectedModel')).toBe('glm-5-2')
+
+    // Simulate navigation to conversation page
+    vi.resetModules()
+    const { useSelectedModel: useSelectedModel2 } = await import('../app/composables/useSelectedModel')
+    const convPage = useSelectedModel2()
+    convPage.ensureDefault('glm-5-2')
+
+    // User's choice (glm-5-2 in this case) must survive
+    expect(convPage.selectedModel.value).toBe('glm-5-2')
+    expect(localStorage.getItem('selectedModel')).toBe('glm-5-2')
+  })
+
+  it('ensureDefault persists default so user choice survives navigation on first visit', async () => {
+    // Full first-visit flow: projects page sets default, user picks a model,
+    // navigates to conversation page — the picked model must survive.
+    const { useSelectedModel } = await import('../app/composables/useSelectedModel')
+    const projectsPage = useSelectedModel()
+    projectsPage.ensureDefault('glm-5-2')
+    // localStorage is now set even though value === initial ref
+    expect(localStorage.getItem('selectedModel')).toBe('glm-5-2')
+
+    // User picks a different model
+    projectsPage.selectedModel.value = 'claude-opus-4'
+    expect(localStorage.getItem('selectedModel')).toBe('claude-opus-4')
+
+    // Navigate to conversation page
+    vi.resetModules()
+    const { useSelectedModel: useSelectedModel2 } = await import('../app/composables/useSelectedModel')
+    const convPage = useSelectedModel2()
+    convPage.ensureDefault('glm-5-2')
+
+    expect(convPage.selectedModel.value).toBe('claude-opus-4')
+  })
 })

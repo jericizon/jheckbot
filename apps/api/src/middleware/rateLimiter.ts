@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit'
+import { env } from '../config/env.js'
 
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -9,16 +10,16 @@ export const loginLimiter = rateLimit({
 })
 
 export const apiLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  windowMs: env.rateLimitWindowMs,
+  max: env.rateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests' },
 })
 
 export const messageLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 30, // 30 messages per minute
+  windowMs: env.rateLimitWindowMs,
+  max: env.messageRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many messages, slow down' },

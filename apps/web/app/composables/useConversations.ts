@@ -36,6 +36,14 @@ interface SendMessageResponse {
   run: AgentRun
 }
 
+interface ActiveConversation {
+  id: string
+  project_id: string
+  project_name: string
+  title: string
+  agent_status: string
+}
+
 interface SearchResult {
   conversation_id: string
   project_id: string
@@ -70,6 +78,7 @@ export function useConversations() {
   return {
     listByProject: (projectId: string) =>
       api.get<Conversation[]>(`/api/projects/${projectId}/conversations`),
+    listActive: () => api.get<ActiveConversation[]>('/api/conversations/active'),
     create: (projectId: string, title?: string) =>
       api.post<Conversation>(`/api/projects/${projectId}/conversations`, { title }),
     get: (id: string) => api.get<Conversation>(`/api/conversations/${id}`),
