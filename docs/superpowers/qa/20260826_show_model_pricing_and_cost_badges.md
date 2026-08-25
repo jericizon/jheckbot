@@ -6,14 +6,14 @@
 
 ## Summary
 
-Added pricing visibility to the model chip in `MessageToolbar.vue` and tier/cost badges to `ModelPicker.vue` so users can see whether a model is free, paid, or premium before selecting it.
+Added `FREE`/`PAID` visibility and tier/cost badges to `MessageToolbar.vue` and `ModelPicker.vue` so users can see whether a model is free, paid, or premium before selecting it.
 
 ## Acceptance Criteria
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | Toolbar model chip shows `Family · Level · Price` | Pass |
-| 2 | Toolbar chip uses a colored dot for the model tier (free/paid/premium) | Pass |
+| 1 | Toolbar model chip shows `Family · Level · FREE` or `Family · Level · PAID` | Pass |
+| 2 | Toolbar chip uses a colored dot and a colored background for paid tiers | Pass |
 | 3 | `ModelPicker` family rows show the cheapest paid price or `Free` | Pass |
 | 4 | `ModelPicker` level rows color the price by cost tier and show `Paid`/`Premium` badges | Pass |
 | 5 | `ModelPicker` footer shows the selected model's price | Pass |
@@ -22,8 +22,8 @@ Added pricing visibility to the model chip in `MessageToolbar.vue` and tier/cost
 ## Implementation
 
 - **Updated:** `apps/web/app/components/MessageToolbar.vue`
-  - Added `currentModel`, `currentPricing`, `currentTier`, tier dot, and tier-colored price text to the model chip.
-  - Updated `title` and `aria-label` to include the full model, pricing, and tier.
+  - Added `currentModel`, `currentCostLabel`, `currentTier`, tier dot, tier-colored cost label, and a tier-colored background for paid models.
+  - Updated `title` and `aria-label` to include the full model, cost status, and tier.
 
 - **Updated:** `apps/web/app/components/ModelPicker.vue`
   - Added tier color maps (`TIER_TEXT`, `TIER_DOT`, `TIER_BG`).

@@ -3,7 +3,8 @@
     <button
       @click="$emit('openModels')"
       :disabled="disabled"
-      class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+      class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+      :class="chipClass"
       :title="chipTitle"
       :aria-label="chipTitle"
     >
@@ -24,13 +25,12 @@
       <span v-if="!currentModel">Models</span>
       <template v-else>
         <span
-          v-if="tierDot"
           class="w-2 h-2 rounded-full shrink-0"
-          :class="tierDot"
+          :class="tierStyle?.dot"
           aria-hidden="true"
         />
         <span class="shrink-0">{{ currentLabel }}</span>
-        <span :class="['font-normal', tierTextClass]">· {{ currentPricing }}</span>
+        <span :class="['font-normal', tierStyle?.costText]">· {{ currentCostLabel }}</span>
       </template>
     </button>
     <button
@@ -129,11 +129,33 @@ defineEmits<{
   (e: 'openModels'): void
 }>()
 
-const TIER_STYLES: Record<ModelFamily['tier'], { dot: string; text: string }> = {
-  free: { dot: 'bg-emerald-500', text: 'text-emerald-500' },
-  budget: { dot: 'bg-amber-500', text: 'text-amber-500' },
-  mid: { dot: 'bg-orange-500', text: 'text-orange-500' },
-  premium: { dot: 'bg-rose-500', text: 'text-rose-500' },
+interface TierStyle {
+  dot: string
+  costText: string
+  chip: string
+}
+
+const TIER_STYLES: Record<ModelFamily['tier'], TierStyle> = {
+  free: {
+    dot: 'bg-emerald-500',
+    costText: 'text-emerald-500',
+    chip: 'bg-transparent border-border text-content hover:text-content-muted hover:border-content-subtle',
+  },
+  budget: {
+    dot: 'bg-amber-500',
+    costText: 'text-amber-500',
+    chip: 'bg-amber-500/15 border-amber-500/40 text-amber-500 hover:bg-amber-500/25',
+  },
+  mid: {
+    dot: 'bg-orange-500',
+    costText: 'text-orange-500',
+    chip: 'bg-orange-500/15 border-orange-500/40 text-orange-500 hover:bg-orange-500/25',
+  },
+  premium: {
+    dot: 'bg-rose-500',
+    costText: 'text-rose-500',
+    chip: 'bg-rose-500/15 border-rose-500/40 text-rose-500 hover:bg-rose-500/25',
+  },
 }
 
 function levelLabel(level: ThinkingLevel) {
@@ -154,17 +176,22 @@ const currentLabel = computed(() => {
   return `${m.family.label} · ${levelLabel(m.variant.level)}`
 })
 
-const currentPricing = computed(() => currentModel.value?.variant.pricing ?? '')
+const currentCostLabel = computed(() => (currentModel.value?.variant.free ? 'FREE' : 'PAID'))
 
 const currentTier = computed(() => currentModel.value?.family.tier ?? null)
 
-const tierDot = computed(() => (currentTier.value ? TIER_STYLES[currentTier.value].dot : ''))
+const chipClass = computed(() => {
+  if (!currentModel.value) {
+    return 'border-border text-content-subtle hover:text-content-muted hover:border-content-subtle bg-transparent'
+  }
+  return TIER_STYLES[currentModel.value.family.tier].chip
+})
 
-const tierTextClass = computed(() => (currentTier.value ? TIER_STYLES[currentTier.value].text : ''))
+const tierStyle = computed(() => (currentTier.value ? TIER_STYLES[currentTier.value] : null))
 
 const chipTitle = computed(() => {
   if (!currentModel.value) return 'Choose model'
   const { family, variant } = currentModel.value
-  return `Model: ${family.label} · ${levelLabel(variant.level)} · ${variant.pricing} (${family.tier})`
+  return `Model: ${family.label} · ${levelLabel(variant.level)} · ${currentCostLabel.value} (${family.tier})`
 })
 </script>
