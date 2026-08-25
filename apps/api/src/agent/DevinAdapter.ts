@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import type { Skill } from '@jheckbot/shared'
-import { DEFAULT_DEVIN_MODEL, DEVIN_MODELS } from '@jheckbot/shared'
+import { DEFAULT_DEVIN_MODEL, DEVIN_MODEL_FAMILIES } from '@jheckbot/shared'
 import { TmuxManager, type TmuxSession } from './TmuxManager.js'
 import {
   AgentAdapterError,
@@ -44,7 +44,7 @@ export class DevinAdapter implements AgentAdapter {
   }
 
   supportedModels() {
-    return DEVIN_MODELS
+    return DEVIN_MODEL_FAMILIES
   }
 
   hasSkills(): boolean {
@@ -81,12 +81,7 @@ export class DevinAdapter implements AgentAdapter {
       throw new AgentAdapterError('tmux is not available')
     }
 
-    this.tmux.createSession(
-      opts.sessionName,
-      opts.cwd,
-      this.buildCommand(opts),
-      opts.env,
-    )
+    this.tmux.createSession(opts.sessionName, opts.cwd, this.buildCommand(opts), opts.env)
 
     return {
       sessionName: opts.sessionName,

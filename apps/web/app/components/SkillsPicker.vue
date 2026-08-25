@@ -200,6 +200,11 @@ const filtered = computed(() => {
   )
 })
 
+// Keep keyboard highlight in sync as the filter narrows
+watch(query, () => {
+  activeIndex.value = 0
+})
+
 async function load(refresh = false) {
   loading.value = true
   try {

@@ -73,6 +73,36 @@ Or for video:
 The agent will save the file to the directory JheckBot watches, and it
 will appear inline in the chat within a few hundred milliseconds.
 
+## Automatic media-path injection
+
+You do not have to specify `$JHECKBOT_MEDIA_DIR` manually. JheckBot inspects
+each prompt (initial and follow-up) for capture intent and, when detected,
+appends a save instruction to the prompt sent to the agent. The stored user
+message is left untouched — only the agent sees the augmented prompt.
+
+Detected as a **screenshot** (image):
+
+- "screenshot", "screen shot", "snapshot"
+- "take a screenshot/shot/snapshot of ..."
+- "capture the screen/page/homepage/site/app/ui/view"
+- "preview of the homepage/page/site/app/ui/view/screen/landing"
+- "show me a preview/screenshot/snapshot of ..."
+- "homepage/page/... preview"
+
+Detected as a **video recording** (video):
+
+- "record a video", "video recording", "screen recording", "screencast"
+- "record the homepage/page/site/app/screen/flow/demo"
+- "capture a video"
+- "N-second video"
+
+If the prompt already references `$JHECKBOT_MEDIA_DIR`, no instruction is
+appended (the explicit path wins). Detection is conservative on purpose:
+phrasing like "show me the code" or "what does the config look like" is not
+treated as a capture request. If a capture is not surfaced inline, either
+name the file explicitly with `$JHECKBOT_MEDIA_DIR/<name>.<ext>` or confirm
+a browser-automation MCP server is configured.
+
 ## Security
 
 - Media routes require the same session auth as all other API routes.

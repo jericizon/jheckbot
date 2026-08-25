@@ -1,5 +1,4 @@
-import type { Skill } from '@jheckbot/shared'
-import type { ModelOption } from '@jheckbot/shared'
+import type { Skill, ModelFamily } from '@jheckbot/shared'
 import type { TmuxSession } from './TmuxManager.js'
 
 export type AgentSessionStatus = 'starting' | 'running' | 'stopped' | 'failed'
@@ -35,7 +34,7 @@ export interface AgentAdapter {
 
   isAvailable(): boolean
   defaultModel(): string
-  supportedModels(): ModelOption[]
+  supportedModels(): ModelFamily[]
   hasSkills(): boolean
   listSkills?(): Skill[] | Promise<Skill[]>
 

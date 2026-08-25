@@ -18,20 +18,33 @@
             class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
             aria-label="Toggle sidebar"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           </button>
           <button
             @click="navigateTo('/projects')"
             class="hidden sm:block text-content-subtle hover:text-content transition-colors p-1 rounded-md hover:bg-surface-subtle shrink-0"
             aria-label="Back to projects"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
         </template>
-        <ProjectSwitcher
-          :current-id="project?.id"
-          :current-label="project?.name || 'Project'"
-        />
+        <ProjectSwitcher :current-id="project?.id" :current-label="project?.name || 'Project'" />
         <template #actions>
           <button
             v-if="project && !editing && !confirmingDelete"
@@ -39,7 +52,19 @@
             class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
             title="Edit project"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
           </button>
           <button
             v-if="project && !editing && !confirmingDelete"
@@ -47,7 +72,19 @@
             class="text-content-muted hover:text-red-500 transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
             title="Delete project"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
           </button>
         </template>
       </AppHeader>
@@ -56,16 +93,38 @@
       <div class="flex-1 overflow-y-auto">
         <div class="max-w-2xl mx-auto px-4 py-8 space-y-6">
           <!-- Edit form -->
-          <div v-if="project && editing" class="rounded-lg border border-border bg-surface-elevated p-4 space-y-3 animate-slide-up">
+          <div
+            v-if="project && editing"
+            class="rounded-lg border border-border bg-surface-elevated p-4 space-y-3 animate-slide-up"
+          >
             <div class="text-sm font-semibold">Edit Project</div>
-            <input v-model="editForm.name" placeholder="Project name" class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors" />
-            <input v-model="editForm.description" placeholder="Description (optional)" class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors" />
-            <p class="text-xs text-content-subtle">Path cannot be changed after creation: <span class="font-mono break-all">{{ project.path }}</span></p>
+            <input
+              v-model="editForm.name"
+              placeholder="Project name"
+              class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
+            />
+            <input
+              v-model="editForm.description"
+              placeholder="Description (optional)"
+              class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
+            />
+            <p class="text-xs text-content-subtle">
+              Path cannot be changed after creation:
+              <span class="font-mono break-all">{{ project.path }}</span>
+            </p>
             <div class="flex gap-2">
-              <button @click="cancelEdit" :disabled="saving" class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50">
+              <button
+                @click="cancelEdit"
+                :disabled="saving"
+                class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50"
+              >
                 Cancel
               </button>
-              <button @click="saveEdit" :disabled="saving" class="flex-1 rounded-lg bg-content text-surface py-2 text-sm font-medium hover:opacity-80 disabled:opacity-50 transition-opacity active:scale-[0.98]">
+              <button
+                @click="saveEdit"
+                :disabled="saving"
+                class="flex-1 rounded-lg bg-content text-surface py-2 text-sm font-medium hover:opacity-80 disabled:opacity-50 transition-opacity active:scale-[0.98]"
+              >
                 {{ saving ? 'Saving...' : 'Save' }}
               </button>
             </div>
@@ -73,16 +132,28 @@
           </div>
 
           <!-- Delete confirmation -->
-          <div v-else-if="project && confirmingDelete" class="rounded-lg border border-red-500/30 bg-surface-elevated p-4 space-y-3">
+          <div
+            v-else-if="project && confirmingDelete"
+            class="rounded-lg border border-red-500/30 bg-surface-elevated p-4 space-y-3"
+          >
             <div class="text-sm font-semibold text-red-500">Delete Project</div>
             <div class="text-xs text-content-subtle">
-              Delete <span class="font-medium text-content">{{ project.name }}</span> and all its conversations. This cannot be undone.
+              Delete <span class="font-medium text-content">{{ project.name }}</span> and all its
+              conversations. This cannot be undone.
             </div>
             <div class="flex gap-2">
-              <button @click="confirmingDelete = false" :disabled="deleting" class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50">
+              <button
+                @click="confirmingDelete = false"
+                :disabled="deleting"
+                class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50"
+              >
                 Cancel
               </button>
-              <button @click="handleDelete" :disabled="deleting" class="flex-1 rounded-lg bg-red-500 text-white py-2 text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">
+              <button
+                @click="handleDelete"
+                :disabled="deleting"
+                class="flex-1 rounded-lg bg-red-500 text-white py-2 text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
                 {{ deleting ? 'Deleting...' : 'Yes, delete' }}
               </button>
             </div>
@@ -90,12 +161,31 @@
           </div>
 
           <!-- Conversation box -->
-          <div v-else-if="project" class="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-            <div class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4">
-              <svg class="w-6 h-6 text-content-subtle" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z" /></svg>
+          <div
+            v-else-if="project"
+            class="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in"
+          >
+            <div
+              class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4"
+            >
+              <svg
+                class="w-6 h-6 text-content-subtle"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z"
+                />
+              </svg>
             </div>
             <p class="text-content text-sm font-medium mb-1">{{ project.name }}</p>
-            <p v-if="project.description" class="text-content-muted text-xs mb-1">{{ project.description }}</p>
+            <p v-if="project.description" class="text-content-muted text-xs mb-1">
+              {{ project.description }}
+            </p>
             <p class="text-content-subtle text-xs font-mono break-all mb-2">{{ project.path }}</p>
             <button
               v-if="projectBranch"
@@ -103,13 +193,26 @@
               class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 mb-6 cursor-pointer transition-colors"
               title="Manage branches"
             >
-              <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
+              <svg
+                class="w-3 h-3 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="6" r="3" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" />
+              </svg>
               <span class="font-mono truncate max-w-[20ch]">{{ projectBranch }}</span>
             </button>
             <p v-else class="mb-6"></p>
 
             <!-- Input box -->
-            <div class="w-full relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle transition-colors">
+            <div
+              class="w-full relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle transition-colors"
+            >
               <textarea
                 v-model="input"
                 @keydown.enter.exact.prevent="sendMessage"
@@ -120,22 +223,38 @@
                 ref="inputEl"
                 :disabled="sending"
                 class="w-full rounded-2xl px-4 py-3.5 pr-12 text-sm text-content placeholder-content-subtle focus:outline-none resize-none max-h-32 overflow-y-auto disabled:opacity-50"
-                style="min-height: 52px;"
+                style="min-height: 52px"
               />
               <button
                 @click="sendMessage"
                 :disabled="!input.trim() || sending"
                 class="absolute right-2 bottom-2 rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
-                :class="input.trim() && !sending ? 'bg-content text-surface hover:opacity-80' : 'bg-surface-subtle text-content-subtle'"
+                :class="
+                  input.trim() && !sending
+                    ? 'bg-content text-surface hover:opacity-80'
+                    : 'bg-surface-subtle text-content-subtle'
+                "
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M5 10l7-7m0 0l7 7m-7-7v18"
+                  />
+                </svg>
               </button>
             </div>
 
             <!-- Model selector + bypass toggle + hint -->
             <MessageToolbar
               v-model="selectedModel"
-              :models="availableModels"
+              :families="availableFamilies"
               v-model:bypass-mode="bypassMode"
               :disabled="sending"
               @open-skills="skillsPickerOpen = true"
@@ -155,25 +274,46 @@
 
             <!-- Health details -->
             <div v-if="health" class="w-full mt-4 grid grid-cols-2 gap-2 text-xs">
-              <div class="flex items-center gap-2" :class="health.directory ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.directory ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.directory ? '✓' : '○' }}</span> Directory
               </div>
-              <div class="flex items-center gap-2" :class="health.accessible ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.accessible ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.accessible ? '✓' : '○' }}</span> Accessible
               </div>
-              <div class="flex items-center gap-2" :class="health.gitRepository ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.gitRepository ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.gitRepository ? '✓' : '○' }}</span> Git
               </div>
-              <div class="flex items-center gap-2" :class="health.nodeProject ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.nodeProject ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.nodeProject ? '✓' : '○' }}</span> Node
               </div>
-              <div class="flex items-center gap-2" :class="health.pnpmProject ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.pnpmProject ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.pnpmProject ? '✓' : '○' }}</span> pnpm
               </div>
-              <div class="flex items-center gap-2" :class="health.dockerProject ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.dockerProject ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.dockerProject ? '✓' : '○' }}</span> Docker
               </div>
-              <div class="flex items-center gap-2" :class="health.devinCli ? 'text-emerald-500' : 'text-content-subtle'">
+              <div
+                class="flex items-center gap-2"
+                :class="health.devinCli ? 'text-emerald-500' : 'text-content-subtle'"
+              >
                 <span>{{ health.devinCli ? '✓' : '○' }}</span> Devin CLI
               </div>
             </div>
@@ -186,9 +326,11 @@
     <ConfirmModal
       :open="convDeleteModalOpen"
       title="Delete Conversation"
-      :message="convDeleteTarget
-        ? `Delete \u201C${convDeleteTargetTitle}\u201D? This cannot be undone.`
-        : 'Delete this conversation? This cannot be undone.'"
+      :message="
+        convDeleteTarget
+          ? `Delete \u201C${convDeleteTargetTitle}\u201D? This cannot be undone.`
+          : 'Delete this conversation? This cannot be undone.'
+      "
       confirm-label="Yes, delete"
       loading-label="Deleting..."
       :loading="deletingConv"
@@ -198,7 +340,11 @@
     />
 
     <!-- Skills picker -->
-    <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
+    <SkillsPicker
+      :open="skillsPickerOpen"
+      @select="insertSkill"
+      @close="skillsPickerOpen = false"
+    />
 
     <!-- Branch manager -->
     <BranchModal
@@ -212,7 +358,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ModelOption } from '~/components/MessageToolbar.vue'
+import type { ModelFamily } from '~/components/MessageToolbar.vue'
 
 const route = useRoute()
 const projectsApi = useProjects()
@@ -221,9 +367,29 @@ const { toggle: toggleSidebar } = useSidebar()
 
 const id = computed(() => route.params.id as string)
 
-interface Project { id: string; name: string; path: string; description: string | null; enabled: boolean }
-interface Conversation { id: string; title: string; agent_status: string; last_message_at: string | null; created_at: string }
-interface HealthResult { directory: boolean; accessible: boolean; gitRepository: boolean; nodeProject: boolean; pnpmProject: boolean; dockerProject: boolean; devinCli: boolean }
+interface Project {
+  id: string
+  name: string
+  path: string
+  description: string | null
+  enabled: boolean
+}
+interface Conversation {
+  id: string
+  title: string
+  agent_status: string
+  last_message_at: string | null
+  created_at: string
+}
+interface HealthResult {
+  directory: boolean
+  accessible: boolean
+  gitRepository: boolean
+  nodeProject: boolean
+  pnpmProject: boolean
+  dockerProject: boolean
+  devinCli: boolean
+}
 
 const project = ref<Project | null>(null)
 const conversations = ref<Conversation[]>([])
@@ -237,7 +403,9 @@ const branchModalOpen = ref(false)
 // conversation of this project surface without a manual reload.
 useConversationPolling(
   () => project.value?.id,
-  (convs) => { conversations.value = convs },
+  (convs) => {
+    conversations.value = convs
+  },
 )
 
 const editing = ref(false)
@@ -256,7 +424,7 @@ const sendError = ref('')
 const skillsPickerOpen = ref(false)
 const { bypassMode } = useBypassMode()
 
-const availableModels = ref<ModelOption[]>([])
+const availableFamilies = ref<ModelFamily[]>([])
 const selectedModel = ref('glm-5-2')
 
 function autoResize() {
@@ -285,10 +453,17 @@ async function load() {
     ])
     project.value = proj
     conversations.value = convs
-    availableModels.value = modelsRes.models
+    availableFamilies.value = modelsRes.families
     selectedModel.value = modelsRes.default
     // Load branch best-effort; non-git projects just leave it null.
-    projectsApi.branch(id.value).then((r) => { projectBranch.value = r.branch }).catch(() => { projectBranch.value = null })
+    projectsApi
+      .branch(id.value)
+      .then((r) => {
+        projectBranch.value = r.branch
+      })
+      .catch(() => {
+        projectBranch.value = null
+      })
   } catch {
     // ignore
   } finally {
@@ -336,7 +511,8 @@ async function saveEdit() {
     project.value = updated
     editing.value = false
   } catch (err: unknown) {
-    editError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to save project'
+    editError.value =
+      (err as { data?: { error?: string } })?.data?.error || 'Failed to save project'
   } finally {
     saving.value = false
   }
@@ -350,7 +526,8 @@ async function handleDelete() {
     await projectsApi.delete(project.value.id)
     await navigateTo('/projects')
   } catch (err: unknown) {
-    deleteError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to delete project'
+    deleteError.value =
+      (err as { data?: { error?: string } })?.data?.error || 'Failed to delete project'
   } finally {
     deleting.value = false
   }
@@ -381,9 +558,9 @@ const convDeleteTarget = ref<string | null>(null)
 const deletingConv = ref(false)
 const convDeleteError = ref('')
 
-const convDeleteTargetTitle = computed(() =>
-  conversations.value.find((c) => c.id === convDeleteTarget.value)?.title
-  ?? 'this conversation',
+const convDeleteTargetTitle = computed(
+  () =>
+    conversations.value.find((c) => c.id === convDeleteTarget.value)?.title ?? 'this conversation',
 )
 
 function deleteConversation(convId: string) {
@@ -410,7 +587,8 @@ async function confirmDeleteConversation() {
     convDeleteModalOpen.value = false
     convDeleteTarget.value = null
   } catch (err: unknown) {
-    convDeleteError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to delete conversation'
+    convDeleteError.value =
+      (err as { data?: { error?: string } })?.data?.error || 'Failed to delete conversation'
   } finally {
     deletingConv.value = false
   }
@@ -427,9 +605,12 @@ async function sendMessage() {
     await convApi.sendMessage(conv.id, prompt, selectedModel.value, bypassMode.value)
     await navigateTo(`/conversations/${conv.id}`)
   } catch (err: unknown) {
-    const message = err && typeof err === 'object' && 'data' in err
-      ? (err as { data?: { error?: string } }).data?.error
-      : err instanceof Error ? err.message : 'Failed to start conversation'
+    const message =
+      err && typeof err === 'object' && 'data' in err
+        ? (err as { data?: { error?: string } }).data?.error
+        : err instanceof Error
+          ? err.message
+          : 'Failed to start conversation'
     sendError.value = message ?? 'Failed to start conversation'
     sending.value = false
   }

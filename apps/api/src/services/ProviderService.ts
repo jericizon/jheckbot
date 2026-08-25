@@ -1,4 +1,4 @@
-import type { ModelOption } from '@jheckbot/shared'
+import type { ModelFamily } from '@jheckbot/shared'
 import type { AgentProviderRegistry } from '../agent/AgentProviderRegistry.js'
 
 export interface ProviderInfo {
@@ -11,7 +11,7 @@ export interface ProviderInfo {
 }
 
 export interface ProviderModels {
-  models: ModelOption[]
+  families: ModelFamily[]
   default: string
 }
 
@@ -28,7 +28,7 @@ export class ProviderService {
     }
     const adapter = this.registry.get(providerId)
     return {
-      models: adapter.supportedModels(),
+      families: adapter.supportedModels(),
       default: adapter.defaultModel(),
     }
   }

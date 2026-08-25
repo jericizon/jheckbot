@@ -5,14 +5,15 @@
 @layer base {
   :root {
     /* Light theme */
-    --surface: 255 255 255;
+    color-scheme: light;
+    --surface: 248 249 250;
     --surface-elevated: 255 255 255;
-    --surface-subtle: 249 250 251;
+    --surface-subtle: 243 244 246;
     --content: 17 24 39;
     --content-muted: 75 85 99;
-    --content-subtle: 156 163 175;
-    --border: 229 231 235;
-    --border-subtle: 243 244 246;
+    --content-subtle: 107 114 128;
+    --border: 226 229 235;
+    --border-subtle: 237 239 243;
     --accent: 17 24 39;
     --accent-hover: 31 41 55;
     --accent-muted: 243 244 246;
@@ -20,14 +21,15 @@
 
   .dark {
     /* Dark theme */
-    --surface: 23 23 27;
-    --surface-elevated: 32 32 36;
-    --surface-subtle: 28 28 32;
-    --content: 229 229 232;
-    --content-muted: 163 163 170;
-    --content-subtle: 113 113 122;
-    --border: 39 39 42;
-    --border-subtle: 32 32 36;
+    color-scheme: dark;
+    --surface: 18 18 21;
+    --surface-elevated: 58 58 64;
+    --surface-subtle: 48 48 54;
+    --content: 235 235 238;
+    --content-muted: 185 185 194;
+    --content-subtle: 158 158 168;
+    --border: 72 72 80;
+    --border-subtle: 64 64 70;
     --accent: 244 244 245;
     --accent-hover: 228 228 231;
     --accent-muted: 39 39 42;

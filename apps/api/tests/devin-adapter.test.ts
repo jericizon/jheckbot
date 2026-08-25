@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
-import { DEVIN_MODELS } from '@jheckbot/shared'
+import { DEVIN_MODEL_FAMILIES } from '@jheckbot/shared'
 import { DevinAdapter } from '../src/agent/DevinAdapter.js'
 import type { TmuxManager } from '../src/agent/TmuxManager.js'
 
@@ -50,7 +50,7 @@ describe('DevinAdapter', () => {
 
   it('exposes Devin models and default', () => {
     expect(adapter.defaultModel()).toBe('glm-5-2')
-    expect(adapter.supportedModels()).toEqual(DEVIN_MODELS)
+    expect(adapter.supportedModels()).toEqual(DEVIN_MODEL_FAMILIES)
   })
 
   it('reports skills are available', () => {
@@ -62,7 +62,9 @@ describe('DevinAdapter', () => {
   })
 
   it('reports unavailable when the Devin command is not on PATH', () => {
-    mockExecFileSync.mockImplementation(() => { throw new Error('not found') })
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not found')
+    })
     expect(adapter.isAvailable()).toBe(false)
   })
 
@@ -96,12 +98,9 @@ describe('DevinAdapter', () => {
       env: { DEVIN_TEST_FLAG: 'enabled' },
     })
 
-    expect(tmux.createSession).toHaveBeenCalledWith(
-      'jheckbot-test-1',
-      cwd,
-      expect.any(String),
-      { DEVIN_TEST_FLAG: 'enabled' },
-    )
+    expect(tmux.createSession).toHaveBeenCalledWith('jheckbot-test-1', cwd, expect.any(String), {
+      DEVIN_TEST_FLAG: 'enabled',
+    })
     const command = vi.mocked(tmux.createSession).mock.calls[0][2]
     expect(command).toContain("'devin'")
     expect(command).toContain("'--model' 'glm-5-2'")
@@ -164,7 +163,9 @@ describe('DevinAdapter', () => {
 
   it('fails closed when Devin or tmux is unavailable', () => {
     // Devin unavailable: PATH lookup fails.
-    mockExecFileSync.mockImplementation(() => { throw new Error('not found') })
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not found')
+    })
     expect(() => adapter.start({ sessionName: 'test', cwd: '/tmp', prompt: 'hello' })).toThrow(
       'Devin binary not found',
     )
@@ -204,10 +205,7 @@ describe('DevinAdapter', () => {
   })
 
   it('extracts slug-style Devin session IDs (e.g. brisk-otter)', () => {
-    vi.mocked(tmux.captureOutput).mockReturnValue([
-      'starting work',
-      'session: healthy-dollar',
-    ])
+    vi.mocked(tmux.captureOutput).mockReturnValue(['starting work', 'session: healthy-dollar'])
 
     expect(adapter.getDevinSessionId('test-session')).toBe('healthy-dollar')
     expect(adapter.captureSessionId('test-session')).toBe('healthy-dollar')
@@ -243,7 +241,9 @@ describe('DevinAdapter', () => {
   })
 
   it('returns undefined when devin list fails', () => {
-    mockExecFileSync.mockImplementation(() => { throw new Error('failed') })
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('failed')
+    })
 
     expect(adapter.getLatestSessionId('/tmp')).toBeUndefined()
     expect(adapter.discoverSessionId('/tmp')).toBeUndefined()
@@ -288,8 +288,6 @@ describe('DevinAdapter', () => {
   it('throws if a follow-up session does not exist', () => {
     vi.mocked(tmux.sessionExists).mockReturnValue(false)
 
-    expect(() => adapter.sendPrompt('missing-session', 'hello')).toThrow(
-      'Session does not exist',
-    )
+    expect(() => adapter.sendPrompt('missing-session', 'hello')).toThrow('Session does not exist')
   })
 })

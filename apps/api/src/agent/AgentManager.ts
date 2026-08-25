@@ -8,6 +8,7 @@ import { AgentEventRepository, type AgentEventRecord } from '../repositories/Age
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
 import type { PushService } from '../services/PushService.js'
 import type { MediaService } from '../services/MediaService.js'
+import { augmentPromptForMedia } from '../services/MediaPromptDetector.js'
 import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 
 export type AgentStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'stopped'
@@ -217,6 +218,7 @@ export class AgentManager {
     // Expose the media directory + conversation id to the agent so its
     // browser automation tool (Playwright/Puppeteer MCP) can save images
     // and videos that JheckBot surfaces inline in the chat.
+    const mediaEnabled = !!this.mediaService
     const mediaEnv: Record<string, string> = this.mediaService
       ? {
           JHECKBOT_MEDIA_DIR: this.mediaService.conversationDir(options.conversationId),
@@ -224,11 +226,15 @@ export class AgentManager {
         }
       : {}
 
+    // If the prompt asks for a screenshot/video and doesn't already reference
+    // the media dir, append a save instruction so the capture surfaces inline.
+    const agentPrompt = augmentPromptForMedia(options.prompt, mediaEnabled)
+
     try {
       sessionInfo = this.devin.start({
         sessionName,
         cwd: options.cwd,
-        prompt: options.prompt,
+        prompt: agentPrompt,
         resumeSessionId: options.devinSessionId,
         model: options.model || DEFAULT_DEVIN_MODEL,
         bypass: options.bypass,
@@ -376,7 +382,8 @@ export class AgentManager {
     if (!this.isActiveStatus(state.run.status)) {
       throw new AgentManagerError('Agent is not running', 409)
     }
-    this.devin.sendPrompt(state.run.sessionName, prompt)
+    const agentPrompt = augmentPromptForMedia(prompt, !!this.mediaService)
+    this.devin.sendPrompt(state.run.sessionName, agentPrompt)
   }
 
   getOutput(conversationId: string, startLine?: number): string[] {

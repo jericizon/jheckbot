@@ -18,7 +18,15 @@
             class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
             aria-label="Toggle sidebar"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           </button>
         </template>
         <!-- Title + project subtitle -->
@@ -39,10 +47,27 @@
               class="flex items-center gap-1 min-w-0 group"
               :disabled="agentRunning"
             >
-              <span class="text-sm font-semibold truncate text-content">{{ conversation?.title || 'Conversation' }}</span>
-              <svg class="w-3 h-3 text-content-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              <span class="text-sm font-semibold truncate text-content">{{
+                conversation?.title || 'Conversation'
+              }}</span>
+              <svg
+                class="w-3 h-3 text-content-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
             </button>
-            <span v-if="agentRunning" class="flex items-center gap-1 text-xs text-emerald-500 font-medium shrink-0">
+            <span
+              v-if="agentRunning"
+              class="flex items-center gap-1 text-xs text-emerald-500 font-medium shrink-0"
+            >
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Active
             </span>
@@ -53,7 +78,15 @@
             @click="navigateTo('/projects/' + conversation?.project_id)"
             class="flex items-center gap-1 mt-0.5 text-xs text-content-subtle hover:text-content-muted transition-colors min-w-0"
           >
-            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            <svg
+              class="w-3 h-3 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
             <span class="truncate">{{ projectName }}</span>
             <span
               v-if="projectBranch"
@@ -61,7 +94,18 @@
               class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 shrink-0 cursor-pointer transition-colors"
               title="Manage branches"
             >
-              <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" /></svg>
+              <svg
+                class="w-3 h-3 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="6" r="3" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" />
+              </svg>
               <span class="font-mono truncate max-w-[12ch]">{{ projectBranch }}</span>
             </span>
           </button>
@@ -79,9 +123,26 @@
       <div ref="messagesContainer" class="flex-1 overflow-y-auto">
         <div class="max-w-3xl mx-auto px-4 py-8 space-y-6">
           <!-- Empty state -->
-          <div v-if="messages.length === 0 && !liveOutput && !agentStarting" class="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in">
-            <div class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4">
-              <svg class="w-6 h-6 text-content-subtle" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z" /></svg>
+          <div
+            v-if="messages.length === 0 && !liveOutput && !agentStarting"
+            class="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in"
+          >
+            <div
+              class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4"
+            >
+              <svg
+                class="w-6 h-6 text-content-subtle"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z"
+                />
+              </svg>
             </div>
             <p class="text-content-muted text-sm">Send a message to start working with Devin.</p>
           </div>
@@ -90,19 +151,38 @@
           <template v-for="msg in messages" :key="msg.id">
             <!-- User message -->
             <div v-if="msg.role === 'user'" class="flex justify-end animate-slide-up">
-              <div class="max-w-[80%] rounded-2xl rounded-br-md bg-accent-muted px-4 py-2.5 text-sm text-content whitespace-pre-wrap break-words">
+              <div
+                class="max-w-[80%] rounded-2xl rounded-br-md bg-accent-muted px-4 py-2.5 text-sm text-content whitespace-pre-wrap break-words"
+              >
                 {{ msg.content }}
               </div>
             </div>
 
             <!-- Assistant message -->
             <div v-else-if="msg.role === 'assistant'" class="flex gap-3 animate-slide-up">
-              <div class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5">
-                <svg class="w-3.5 h-3.5 text-surface" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              <div
+                class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
+              >
+                <svg
+                  class="w-3.5 h-3.5 text-surface"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
               </div>
               <div class="flex-1 min-w-0 pt-1">
                 <div v-if="msg.model" class="flex items-center gap-1 mb-1">
-                  <span class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">{{ msg.model }}</span>
+                  <span
+                    class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5"
+                    >{{ msg.model }}</span
+                  >
                 </div>
                 <div class="text-sm text-content leading-relaxed min-w-0">
                   <Markdown :content="msg.content" />
@@ -112,8 +192,22 @@
 
             <!-- System message -->
             <div v-else class="flex gap-3 animate-slide-up">
-              <div class="w-7 h-7 rounded-full bg-surface-subtle flex items-center justify-center shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-content-subtle" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <div
+                class="w-7 h-7 rounded-full bg-surface-subtle flex items-center justify-center shrink-0 mt-0.5"
+              >
+                <svg
+                  class="w-4 h-4 text-content-subtle"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
               </div>
               <div class="flex-1 text-sm text-content-muted whitespace-pre-wrap break-words pt-1">
                 {{ msg.content }}
@@ -123,18 +217,38 @@
 
           <!-- Live output -->
           <div v-if="liveOutput" class="flex gap-3 animate-fade-in">
-            <div class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5">
-              <svg class="w-3.5 h-3.5 text-surface" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <div
+              class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
+            >
+              <svg
+                class="w-3.5 h-3.5 text-surface"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
             </div>
             <div class="flex-1 min-w-0 pt-1">
               <div class="flex items-center gap-1 mb-1">
-                <span class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">{{ selectedModel }}</span>
+                <span
+                  class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5"
+                  >{{ selectedModel }}</span
+                >
               </div>
               <div class="text-sm text-content leading-relaxed min-w-0">
                 <Markdown :content="liveOutput" />
               </div>
               <!-- Background processing indicator -->
-              <div v-if="agentRunning" class="flex items-center gap-1.5 mt-2 text-xs text-content-subtle animate-fade-in">
+              <div
+                v-if="agentRunning"
+                class="flex items-center gap-1.5 mt-2 text-xs text-content-subtle animate-fade-in"
+              >
                 <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Processing...</span>
               </div>
@@ -143,22 +257,55 @@
 
           <!-- Typing indicator -->
           <div v-if="agentStarting" class="flex gap-3 animate-fade-in">
-            <div class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5">
-              <svg class="w-3.5 h-3.5 text-surface" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <div
+              class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
+            >
+              <svg
+                class="w-3.5 h-3.5 text-surface"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
             </div>
             <div class="flex items-center gap-1 pt-2.5">
-              <span class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce" style="animation-delay: 0ms" />
-              <span class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce" style="animation-delay: 150ms" />
-              <span class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce" style="animation-delay: 300ms" />
+              <span
+                class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+                style="animation-delay: 0ms"
+              />
+              <span
+                class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+                style="animation-delay: 150ms"
+              />
+              <span
+                class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+                style="animation-delay: 300ms"
+              />
             </div>
           </div>
 
           <!-- Error -->
           <div v-if="sendError" class="flex justify-center animate-fade-in">
-            <div class="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-sm text-red-500 flex items-center gap-2">
+            <div
+              class="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-sm text-red-500 flex items-center gap-2"
+            >
               {{ sendError }}
               <button @click="sendError = ''" class="text-red-400 hover:text-red-500">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
           </div>
@@ -172,36 +319,84 @@
       <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div class="max-w-3xl mx-auto px-4">
           <!-- Input box -->
-          <div class="relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle transition-colors">
+          <div
+            class="relative rounded-2xl border border-border bg-white focus-within:border-content-subtle/60 focus-within:ring-1 focus-within:ring-content-subtle/30 transition-all"
+          >
             <textarea
               v-model="input"
               @keydown.enter.exact.prevent="sendMessage"
               @keydown.enter.shift.exact="input += '\n'"
               @input="autoResize"
-              :placeholder="voice.listening.value ? 'Listening... speak now' : (agentStarting || agentRunning) ? 'Queue a message...' : 'Message Devin...'"
+              :placeholder="
+                voice.listening.value
+                  ? 'Listening... speak now'
+                  : agentStarting || agentRunning
+                    ? 'Queue a message...'
+                    : 'Message Devin...'
+              "
               rows="1"
               ref="inputEl"
-              class="w-full rounded-2xl px-4 py-3.5 pr-28 text-sm text-content placeholder-content-subtle focus:outline-none resize-none max-h-32 overflow-y-auto"
-              style="min-height: 52px;"
+              class="w-full rounded-2xl px-4 py-3 pr-28 text-sm text-content placeholder-content-subtle dark:text-gray-900 dark:placeholder-gray-400 bg-transparent focus:outline-none resize-none max-h-32 overflow-y-auto min-h-[52px]"
             />
             <!-- Interim transcript shown as a subtle hint while listening -->
             <span
               v-if="voice.listening.value && voice.interim.value"
-              class="absolute left-4 bottom-2.5 text-sm text-content-subtle italic pointer-events-none max-w-[60%] truncate"
-            >{{ voice.interim.value }}</span>
+              class="absolute left-4 bottom-2.5 text-sm text-content-subtle dark:text-gray-500 italic pointer-events-none max-w-[60%] truncate"
+              >{{ voice.interim.value }}</span
+            >
             <div class="absolute right-2 bottom-2 flex items-center gap-1 shrink-0">
               <button
-                v-if="voice.supported.value"
                 @click="toggleVoice"
-                :title="voice.listening.value ? 'Stop voice input' : 'Voice input'"
+                :title="
+                  !voice.supported.value
+                    ? 'Voice input not available in this browser'
+                    : voice.listening.value
+                      ? 'Stop voice input'
+                      : 'Voice input'
+                "
                 :aria-pressed="voice.listening.value"
                 class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95"
-                :class="voice.listening.value
-                  ? 'bg-emerald-500/15 text-emerald-500'
-                  : 'text-content-subtle hover:text-content hover:bg-surface-subtle'"
+                :class="
+                  voice.listening.value
+                    ? 'bg-emerald-500/15 text-emerald-500'
+                    : voice.supported.value
+                      ? 'text-content-subtle hover:text-content hover:bg-surface-subtle dark:text-gray-500 dark:hover:text-gray-900 dark:hover:bg-gray-100'
+                      : 'text-content-subtle/40 dark:text-gray-400 cursor-not-allowed'
+                "
               >
-                <svg v-if="!voice.listening.value" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
-                <svg v-else class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9A2.25 2.25 0 0118.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 8.386 10.343 7.5 12 7.5s3 .886 3 2.063v4.875c0 1.177-1.343 2.062-3 2.062s-3-.885-3-2.062V9.563z" /></svg>
+                <svg
+                  v-if="!voice.listening.value"
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  class="w-4 h-4 animate-pulse"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9A2.25 2.25 0 0118.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 9.563C9 8.386 10.343 7.5 12 7.5s3 .886 3 2.063v4.875c0 1.177-1.343 2.062-3 2.062s-3-.885-3-2.062V9.563z"
+                  />
+                </svg>
               </button>
               <button
                 v-if="agentRunning"
@@ -216,19 +411,65 @@
                 @click="sendMessage"
                 :disabled="!input.trim()"
                 class="rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
-                :class="input.trim() ? 'bg-content text-surface hover:opacity-80' : 'bg-surface-subtle text-content-subtle'"
-                :title="(agentStarting || agentRunning) && input.trim() ? 'Queue message' : 'Send message'"
+                :class="
+                  input.trim()
+                    ? 'bg-content text-surface hover:opacity-80 dark:bg-gray-900 dark:text-white'
+                    : 'bg-surface-subtle text-content-subtle dark:bg-gray-100 dark:text-gray-400'
+                "
+                :title="
+                  (agentStarting || agentRunning) && input.trim() ? 'Queue message' : 'Send message'
+                "
               >
-                <svg v-if="agentStarting || agentRunning" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                <svg
+                  v-if="agentStarting || agentRunning"
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M5 10l7-7m0 0l7 7m-7-7v18"
+                  />
+                </svg>
               </button>
             </div>
           </div>
 
           <!-- Queued messages -->
           <div v-if="queue.length > 0" class="mt-2 space-y-1.5">
-            <div class="text-[10px] font-medium uppercase tracking-wide text-content-subtle px-1 flex items-center gap-1.5">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div
+              class="text-[10px] font-medium uppercase tracking-wide text-content-subtle px-1 flex items-center gap-1.5"
+            >
+              <svg
+                class="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
               <span>Queued ({{ queue.length }})</span>
             </div>
             <div
@@ -237,17 +478,24 @@
               class="rounded-lg border border-border bg-surface-subtle/50 px-3 py-2 animate-slide-up"
             >
               <div class="flex items-start gap-2">
-                <span class="text-[10px] font-mono text-content-subtle shrink-0 mt-0.5">{{ idx + 1 }}</span>
+                <span class="text-[10px] font-mono text-content-subtle shrink-0 mt-0.5">{{
+                  idx + 1
+                }}</span>
                 <div class="flex-1 min-w-0">
                   <template v-if="editingQueueId === item.id">
                     <textarea
                       v-model="item.content"
                       rows="1"
                       class="w-full text-sm text-content bg-transparent focus:outline-none resize-none"
-                      style="min-height: 20px;"
+                      style="min-height: 20px"
                     />
                   </template>
-                  <p v-else class="text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3">{{ item.content }}</p>
+                  <p
+                    v-else
+                    class="text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3"
+                  >
+                    {{ item.content }}
+                  </p>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   <button
@@ -256,7 +504,15 @@
                     class="text-content-subtle hover:text-emerald-500 transition-colors p-0.5"
                     title="Save"
                   >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <svg
+                      class="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
                   </button>
                   <button
                     v-else
@@ -264,42 +520,91 @@
                     class="text-content-subtle hover:text-content transition-colors p-0.5"
                     title="Edit"
                   >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    <svg
+                      class="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      />
+                    </svg>
                   </button>
                   <button
                     @click="removeQueueItem(item.id)"
                     class="text-content-subtle hover:text-red-500 transition-colors p-0.5"
                     title="Remove"
                   >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    <svg
+                      class="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Voice listening indicator -->
-          <div v-if="voice.listening.value" class="flex items-center justify-center gap-2 mt-1.5 text-xs text-emerald-500 animate-fade-in">
-            <span class="relative flex h-2 w-2">
-              <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-            </span>
-            <span>Listening — speak now, tap the mic again when done</span>
+          <!-- Voice listening indicator with live soundwave -->
+          <div
+            v-if="voice.listening.value"
+            class="flex items-center justify-center gap-2 mt-2 animate-fade-in"
+          >
+            <VoiceWaveform :active="voice.listening.value" />
+            <span class="text-xs text-emerald-500 whitespace-nowrap"
+              >Listening — tap mic when done</span
+            >
           </div>
 
           <!-- Voice error (dismissible) -->
-          <div v-if="voice.error.value" class="flex items-start gap-2 mt-1.5 px-1 text-xs text-red-500 animate-fade-in">
-            <svg class="w-3.5 h-3.5 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <div
+            v-if="voice.error.value"
+            class="flex items-start gap-2 mt-2 px-1 text-xs text-red-500 animate-fade-in"
+          >
+            <svg
+              class="w-3.5 h-3.5 mt-0.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
             <span class="flex-1">{{ voice.error.value }}</span>
             <button @click="voice.clearError()" class="shrink-0 text-red-400 hover:text-red-500">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <svg
+                class="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
 
           <!-- Model selector + bypass toggle + hint -->
           <MessageToolbar
             v-model="selectedModel"
-            :models="availableModels"
+            :families="availableFamilies"
             v-model:bypass-mode="bypassMode"
             :disabled="agentStarting || agentRunning"
             @open-skills="skillsPickerOpen = true"
@@ -312,9 +617,11 @@
     <ConfirmModal
       :open="deleteModalOpen"
       title="Delete Conversation"
-      :message="deleteTarget
-        ? `Delete \u201C${deleteTargetTitle}\u201D? This cannot be undone.`
-        : 'Delete this conversation? This cannot be undone.'"
+      :message="
+        deleteTarget
+          ? `Delete \u201C${deleteTargetTitle}\u201D? This cannot be undone.`
+          : 'Delete this conversation? This cannot be undone.'
+      "
       confirm-label="Yes, delete"
       loading-label="Deleting..."
       :loading="deletingConv"
@@ -336,7 +643,11 @@
     />
 
     <!-- Skills picker -->
-    <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
+    <SkillsPicker
+      :open="skillsPickerOpen"
+      @select="insertSkill"
+      @close="skillsPickerOpen = false"
+    />
 
     <!-- Branch manager -->
     <BranchModal
@@ -350,7 +661,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ModelOption } from '~/components/MessageToolbar.vue'
+import type { ModelFamily } from '~/components/MessageToolbar.vue'
 
 const route = useRoute()
 const convApi = useConversations()
@@ -360,9 +671,23 @@ const { toggle: toggleSidebar } = useSidebar()
 
 const id = computed(() => route.params.id as string)
 
-interface Conversation { id: string; project_id: string; title: string; agent_status: string }
-interface Message { id: string; role: string; content: string; message_type: string; model?: string | null }
-interface QueuedMessage { id: string; content: string }
+interface Conversation {
+  id: string
+  project_id: string
+  title: string
+  agent_status: string
+}
+interface Message {
+  id: string
+  role: string
+  content: string
+  message_type: string
+  model?: string | null
+}
+interface QueuedMessage {
+  id: string
+  content: string
+}
 
 const conversation = ref<Conversation | null>(null)
 const messages = ref<Message[]>([])
@@ -403,7 +728,12 @@ useConversationPolling(
       const activeId = id.value
       sidebarConversations.value = convs.map((c) =>
         c.id === activeId
-          ? { ...c, agent_status: sidebarConversations.value.find((s) => s.id === activeId)?.agent_status ?? c.agent_status }
+          ? {
+              ...c,
+              agent_status:
+                sidebarConversations.value.find((s) => s.id === activeId)?.agent_status ??
+                c.agent_status,
+            }
           : c,
       )
     } else {
@@ -416,7 +746,9 @@ useConversationPolling(
     const nextRunning = new Set<string>()
     for (const c of convs) {
       const isActive = c.id === id.value
-      const wasRunning = prevBackgroundRunning.value.has(c.id) || (!isActive && (c.agent_status === 'running' || c.agent_status === 'starting'))
+      const wasRunning =
+        prevBackgroundRunning.value.has(c.id) ||
+        (!isActive && (c.agent_status === 'running' || c.agent_status === 'starting'))
       const isRunning = c.agent_status === 'running' || c.agent_status === 'starting'
       if (isRunning && !isActive) nextRunning.add(c.id)
       if (wasRunning && !isRunning && !isActive) {
@@ -431,7 +763,7 @@ useConversationPolling(
   },
 )
 
-const availableModels = ref<ModelOption[]>([])
+const availableFamilies = ref<ModelFamily[]>([])
 const selectedModel = ref('glm-5-2')
 
 function autoResize() {
@@ -483,7 +815,7 @@ async function load() {
     ])
     conversation.value = conv
     messages.value = msgs
-    availableModels.value = modelsRes.models
+    availableFamilies.value = modelsRes.families
     selectedModel.value = modelsRes.default
 
     loadSidebarConversations()
@@ -534,7 +866,12 @@ function connectSSE() {
       if (data.status === 'running') {
         agentRunning.value = true
       }
-      if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed' || data.status === 'idle') {
+      if (
+        data.status === 'completed' ||
+        data.status === 'stopped' ||
+        data.status === 'failed' ||
+        data.status === 'idle'
+      ) {
         agentRunning.value = false
         agentStarting.value = false
         setSidebarStatus(id.value, 'idle')
@@ -545,9 +882,17 @@ function connectSSE() {
         if (data.status !== 'idle') {
           const { notify } = useNotifications()
           const title = conversation.value?.title || 'Conversation'
-          const verb = data.status === 'completed' ? 'completed' : data.status === 'failed' ? 'failed' : 'stopped'
+          const verb =
+            data.status === 'completed'
+              ? 'completed'
+              : data.status === 'failed'
+                ? 'failed'
+                : 'stopped'
           notify(`${title} — task ${verb}`, {
-            body: data.status === 'failed' && data.error ? data.error : `Devin finished working on "${title}"`,
+            body:
+              data.status === 'failed' && data.error
+                ? data.error
+                : `Devin finished working on "${title}"`,
             tag: `conv-${id.value}`,
             url: `/conversations/${id.value}`,
           })
@@ -654,10 +999,11 @@ const deleteConvError = ref('')
 const stopModalOpen = ref(false)
 const stoppingAgent = ref(false)
 
-const deleteTargetTitle = computed(() =>
-  sidebarConversations.value.find((c) => c.id === deleteTarget.value)?.title
-  ?? conversation.value?.title
-  ?? 'this conversation',
+const deleteTargetTitle = computed(
+  () =>
+    sidebarConversations.value.find((c) => c.id === deleteTarget.value)?.title ??
+    conversation.value?.title ??
+    'this conversation',
 )
 
 function deleteConversation(convId: string) {
@@ -690,7 +1036,8 @@ async function confirmDeleteConversation() {
       await navigateTo(projectId ? `/projects/${projectId}` : '/projects')
     }
   } catch (err: unknown) {
-    deleteConvError.value = (err as { data?: { error?: string } })?.data?.error || 'Failed to delete conversation'
+    deleteConvError.value =
+      (err as { data?: { error?: string } })?.data?.error || 'Failed to delete conversation'
   } finally {
     deletingConv.value = false
   }
@@ -727,7 +1074,12 @@ async function sendNow(prompt: string) {
   scrollToBottom()
 
   try {
-    const result = await convApi.sendMessage(id.value, prompt, selectedModel.value, bypassMode.value)
+    const result = await convApi.sendMessage(
+      id.value,
+      prompt,
+      selectedModel.value,
+      bypassMode.value,
+    )
 
     const idx = messages.value.findIndex((m) => m.id === tempId)
     if (idx >= 0) {
@@ -749,9 +1101,12 @@ async function sendNow(prompt: string) {
     const idx = messages.value.findIndex((m) => m.id === tempId)
     if (idx >= 0) messages.value.splice(idx, 1)
 
-    const message = err && typeof err === 'object' && 'data' in err
-      ? (err as { data?: { error?: string } }).data?.error
-      : err instanceof Error ? err.message : 'Failed to send message'
+    const message =
+      err && typeof err === 'object' && 'data' in err
+        ? (err as { data?: { error?: string } }).data?.error
+        : err instanceof Error
+          ? err.message
+          : 'Failed to send message'
     sendError.value = message ?? 'Failed to send message'
 
     agentRunning.value = false

@@ -44,17 +44,23 @@ interface SearchResult {
   created_at: string
 }
 
-interface ModelOption {
+interface ModelVariant {
   id: string
-  label: string
-  family: string
-  context: string
+  level: string
   pricing: string
   free: boolean
 }
 
+interface ModelFamily {
+  id: string
+  label: string
+  context: string
+  tier: 'free' | 'budget' | 'mid' | 'premium'
+  variants: ModelVariant[]
+}
+
 interface ModelsResponse {
-  models: ModelOption[]
+  families: ModelFamily[]
   default: string
 }
 
@@ -73,7 +79,11 @@ export function useConversations() {
     delete: (id: string) => api.delete<void>(`/api/conversations/${id}`),
     messages: (id: string) => api.get<Message[]>(`/api/conversations/${id}/messages`),
     sendMessage: (id: string, content: string, model?: string, bypass?: boolean) =>
-      api.post<SendMessageResponse>(`/api/conversations/${id}/messages`, { content, model, bypass }),
+      api.post<SendMessageResponse>(`/api/conversations/${id}/messages`, {
+        content,
+        model,
+        bypass,
+      }),
     stopAgent: (id: string) => api.post(`/api/conversations/${id}/agent/stop`),
     agentStatus: (id: string) => api.get(`/api/conversations/${id}/agent`),
     search: (q: string) => api.get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),
