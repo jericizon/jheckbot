@@ -4,7 +4,7 @@
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
-    <InstallBanner :open="showInstallBanner" @dismiss="dismissInstallBanner" />
+    <InstallModal :open="showInstallModal" @close="dismissInstallModal" />
   </div>
 </template>
 
@@ -12,17 +12,12 @@
 // Show the splash during initial hydration, then fade it out once mounted.
 const showSplash = ref(true)
 
-// Install banner: shown on mobile when the app is installable. Dismissal is
-// persisted with a cooldown so it doesn't nag on every visit.
-const DISMISS_KEY = 'pwa:install-dismissed'
+// Install modal: shown when the app is installable. Dismissal is persisted with
+// a cooldown so it doesn't nag on every visit.
+const DISMISS_KEY = 'pwa:install-modal-dismissed'
 const COOLDOWN_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
-const showInstallBanner = ref(false)
+const showInstallModal = ref(false)
 const pwa = usePWA()
-
-function isMobile(): boolean {
-  if (!import.meta.client) return false
-  return window.matchMedia('(max-width: 768px)').matches
-}
 
 function recentlyDismissed(): boolean {
   if (!import.meta.client) return false
@@ -30,9 +25,15 @@ function recentlyDismissed(): boolean {
   return ts > 0 && Date.now() - ts < COOLDOWN_MS
 }
 
-function dismissInstallBanner() {
-  showInstallBanner.value = false
+function dismissInstallModal() {
+  showInstallModal.value = false
   if (import.meta.client) localStorage.setItem(DISMISS_KEY, String(Date.now()))
+}
+
+function isIOS(): boolean {
+  if (!import.meta.client) return false
+  const ua = navigator.userAgent
+  return /iPad|iPhone|iPod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream
 }
 
 onMounted(() => {
@@ -41,20 +42,18 @@ onMounted(() => {
     showSplash.value = false
   }, 350)
 
-  // Show the install banner once the beforeinstallprompt event has fired
-  // (Android/Chrome) or on iOS where we show manual steps. Only on mobile,
-  // only if not already installed, and only if not recently dismissed.
+  // Show the install modal once the beforeinstallprompt event has fired
+  // (Android/Chrome/desktop Edge) or on iOS where we show manual steps.
+  // Only if not already installed and not recently dismissed.
   const eligible = () =>
-    isMobile() && !pwa.isInstalled.value && !recentlyDismissed()
+    !pwa.isInstalled.value && !recentlyDismissed()
 
   const tryShow = () => {
     if (!eligible()) return
-    // Android/Chrome: canInstall becomes true after beforeinstallprompt.
+    // Android/Chrome/desktop: canInstall becomes true after beforeinstallprompt.
     // iOS: canInstall stays false, but we still show manual steps.
-    const ua = navigator.userAgent
-    const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream
-    if (pwa.canInstall.value || isIOS) {
-      showInstallBanner.value = true
+    if (pwa.canInstall.value || isIOS()) {
+      showInstallModal.value = true
     }
   }
 
@@ -63,7 +62,7 @@ onMounted(() => {
 
   // Re-check when canInstall flips to true (event may fire later).
   watch(pwa.canInstall, (can) => {
-    if (can && eligible()) showInstallBanner.value = true
+    if (can && eligible()) showInstallModal.value = true
   })
 })
 </script>

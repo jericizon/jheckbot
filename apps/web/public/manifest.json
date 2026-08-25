@@ -1,9 +1,9 @@
 {
-  "id": "/?source=pwa",
+  "id": "/",
   "name": "JheckBot",
   "short_name": "JheckBot",
   "description": "Self-hosted mobile development assistant for Devin CLI",
-  "start_url": "/?source=pwa",
+  "start_url": "/login?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["fullscreen", "standalone", "minimal-ui"],
@@ -51,12 +51,6 @@
       "name": "Projects",
       "short_name": "Projects",
       "url": "/projects?source=pwa",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Settings",
-      "short_name": "Settings",
-      "url": "/settings?source=pwa",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
