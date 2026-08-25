@@ -2,13 +2,36 @@
   <div ref="rootEl" class="relative shrink-0">
     <button
       @click="open = !open"
-      class="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-content hover:bg-surface-subtle transition-colors max-w-[40vw]"
+      class="flex items-center gap-1.5 hover:bg-surface-subtle transition-colors"
+      :class="[
+        bare
+          ? 'text-inherit w-full min-w-0 p-0 rounded-none'
+          : 'text-sm font-medium text-content rounded-md px-2 py-1 max-w-[40vw]',
+      ]"
       :title="'Switch project'"
       :aria-expanded="open"
     >
-      <svg class="w-3.5 h-3.5 text-content-subtle shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z M3 7l2-2h12l2 2" /></svg>
-      <span class="truncate">{{ currentLabel }}</span>
-      <svg class="w-3 h-3 text-content-subtle shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
+      <svg
+        v-if="!bare"
+        class="w-3.5 h-3.5 text-content-subtle shrink-0"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        viewBox="0 0 24 24"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z M3 7l2-2h12l2 2" />
+      </svg>
+      <span class="truncate" :class="bare ? 'font-semibold' : 'font-medium'">{{ currentLabel }}</span>
+      <svg
+        class="w-3 h-3 text-content-subtle shrink-0 transition-transform"
+        :class="open ? 'rotate-180' : ''"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
     </button>
 
     <div
@@ -54,9 +77,11 @@ const props = withDefaults(
     currentId?: string
     currentLabel?: string
     align?: 'left' | 'right'
+    bare?: boolean
   }>(),
   {
     align: 'left',
+    bare: false,
   },
 )
 
