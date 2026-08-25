@@ -5,13 +5,22 @@ export function useApi() {
     path: string,
     options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: Record<string, unknown>; query?: Record<string, string> } = {},
   ): Promise<T> {
+    const method = options.method ?? 'GET'
+    const tag = `%c[${method}] ${path}`
+    const tagStyle = 'color: #6366f1; font-weight: 600'
+
+    if (options.body) console.log(tag, tagStyle, 'payload →', options.body)
+    else console.log(tag, tagStyle)
+
     const res = await $fetch<T>(path, {
-      method: options.method ?? 'GET',
+      method,
       body: options.body as Record<string, unknown> | undefined,
       query: options.query,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
     })
+
+    console.log(`%c[${method}] ${path} ✓`, 'color: #22c55e; font-weight: 600', 'response ←', res)
     return res
   }
 

@@ -70,6 +70,52 @@ export function createApp(): express.Express {
   app.use(express.json())
   app.use(cookieParser())
 
+  // Request/response activity logger — logs every API action, payload, and
+  // response to the terminal for activity tracking.
+  app.use((req, res, next) => {
+    const start = Date.now()
+    const { method, originalUrl } = req
+
+    // Skip health checks and static assets to avoid noise.
+    if (originalUrl === '/health') return next()
+
+    // Capture the response body so we can log it.
+    let bodyChunks: Buffer[] = []
+    const originalSend = res.send.bind(res)
+    res.send = (data?: unknown) => {
+      if (typeof data === 'string' || Buffer.isBuffer(data)) {
+        bodyChunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data))
+      }
+      return originalSend(data as never)
+    }
+
+    res.on('finish', () => {
+      const duration = Date.now() - start
+      const status = res.statusCode
+      const tag = status >= 400 ? '✗' : '✓'
+      const statusColor = status >= 500 ? '\x1b[31m' : status >= 400 ? '\x1b[33m' : '\x1b[32m'
+      const reset = '\x1b[0m'
+
+      console.log(
+        `${tag} ${statusColor}${method} ${originalUrl}${reset} ${status} ${duration}ms`,
+      )
+
+      // Log request payload (body) if present.
+      if (req.body && Object.keys(req.body).length > 0) {
+        console.log(`  → payload:`, JSON.stringify(req.body))
+      }
+
+      // Log response body (truncated for readability).
+      const resBody = Buffer.concat(bodyChunks).toString('utf8').slice(0, 500)
+      if (resBody) {
+        const truncated = resBody.length >= 500 ? '… (truncated)' : ''
+        console.log(`  ← response:${truncated}`, resBody)
+      }
+    })
+
+    next()
+  })
+
   // Global rate limiting
   app.use('/api', apiLimiter)
 
