@@ -1,5 +1,13 @@
 <template>
   <div class="flex items-center gap-2 mt-2 px-1 overflow-x-auto">
+    <input
+      v-model="filterQuery"
+      type="search"
+      :disabled="disabled"
+      placeholder="Search models..."
+      aria-label="Search models"
+      class="w-36 text-xs text-content-muted bg-transparent border border-border rounded-full px-2.5 py-1 placeholder-content-subtle focus:outline-none focus:border-content-subtle disabled:opacity-50 shrink-0"
+    />
     <select
       :value="currentFamilyId"
       @change="onFamilyChange(($event.target as HTMLSelectElement).value)"
@@ -7,7 +15,7 @@
       class="text-xs text-content-muted bg-transparent border-none focus:outline-none cursor-pointer disabled:opacity-50 shrink-0"
       aria-label="Model family"
     >
-      <optgroup v-for="group in familyGroups" :key="group.label" :label="group.label">
+      <optgroup v-for="group in filteredFamilyGroups" :key="group.label" :label="group.label">
         <option
           v-for="f in group.families"
           :key="f.id"
@@ -152,6 +160,20 @@ const familyGroups = computed(() => {
   }))
 })
 
+const filterQuery = ref('')
+const filteredFamilyGroups = computed(() => {
+  const q = filterQuery.value.trim().toLowerCase()
+  if (!q) return familyGroups.value
+  return familyGroups.value
+    .map((group) => ({
+      ...group,
+      families: group.families.filter((f) =>
+        [f.id, f.label, f.context, group.label].join(' ').toLowerCase().includes(q),
+      ),
+    }))
+    .filter((group) => group.families.length > 0)
+})
+
 // Locate the family + variant backing the current modelValue.
 const currentFamily = computed<ModelFamily | undefined>(() => {
   for (const f of props.families) {
@@ -186,6 +208,7 @@ function onFamilyChange(familyId: string) {
   const match = family.variants.find((v) => v.level === currentLevel)
   const fallback = levelOptionsFor(family)[0]
   emit('update:modelValue', (match ?? fallback)?.id ?? family.variants[0]?.id ?? props.modelValue)
+  filterQuery.value = ''
 }
 
 function levelOptionsFor(family: ModelFamily) {
