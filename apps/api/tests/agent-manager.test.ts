@@ -416,10 +416,11 @@ describe('AgentManager', () => {
     }
   })
 
-  it('flushes a 4KB normalized output buffer without waiting for the timer window', async () => {
+  it('flushes output as soon as it reaches the byte threshold', async () => {
     vi.useFakeTimers()
     try {
-      vi.mocked(devin.captureOutput).mockReturnValue(['x'.repeat(4096)])
+      // A payload larger than the 512-byte flush threshold should flush on the first tick.
+      vi.mocked(devin.captureOutput).mockReturnValue(['x'.repeat(600)])
 
       await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'flush this' })
       await vi.advanceTimersByTimeAsync(100)
@@ -430,7 +431,7 @@ describe('AgentManager', () => {
       expect(outputCall).toBeDefined()
       expect(outputCall![0]).toMatchObject({
         eventType: 'output',
-        content: JSON.stringify({ content: 'x'.repeat(4096) }),
+        content: JSON.stringify({ content: 'x'.repeat(600) }),
       })
     } finally {
       vi.useRealTimers()
@@ -523,6 +524,26 @@ describe('AgentManager', () => {
       content: expect.stringContaining('"status":"failed"'),
     }))
     expect(conversationRepo.updateAgentStatus).toHaveBeenCalledWith('conv-1', 'idle')
+  })
+
+  it('flushes small output within the real-time window after the run starts', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(devin.captureOutput).mockReturnValue(['small output'])
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'stream this' })
+
+      // Advance one watcher tick; with a 100 ms flush window the pending
+      // output should be persisted and published to subscribers.
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(eventRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+        conversationId: 'conv-1',
+        eventType: 'output',
+        content: expect.stringContaining('small output'),
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('publishes persisted output and terminal events to subscribers once', async () => {

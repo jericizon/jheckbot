@@ -90,8 +90,8 @@ interface SessionIdRepository {
 
 const MAX_CONCURRENT_SESSIONS = 3
 const WATCH_INTERVAL_MS = 100
-const OUTPUT_FLUSH_INTERVAL_MS = 500
-const OUTPUT_FLUSH_BYTES = 4 * 1024
+const OUTPUT_FLUSH_INTERVAL_MS = 100
+const OUTPUT_FLUSH_BYTES = 512
 const SESSION_LOCK_RETRY_DEADLINE_MS = 15_000
 
 // Devin CLI prints these when a --resume targets a session already locked by

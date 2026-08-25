@@ -15,7 +15,7 @@ function makeEvent(seq: number, type: string, content: string): AgentEventRecord
   }
 }
 
-function mockReqRes(lastEventId?: string): { req: Request; res: Response & { written: string[]; ended: boolean; statusCode: number } } {
+function mockReqRes(lastEventId?: string): { req: Request; res: Response & { written: string[]; ended: boolean; statusCode: number; flush: ReturnType<typeof vi.fn> } } {
   const written: string[] = []
   const res = {
     statusCode: 200,
@@ -23,6 +23,7 @@ function mockReqRes(lastEventId?: string): { req: Request; res: Response & { wri
     ended: false,
     writeHeadCalled: false as boolean,
     headers: {} as Record<string, string>,
+    flush: vi.fn(),
     writeHead(_status: number, headers: Record<string, string>) {
       this.writeHeadCalled = true
       this.headers = headers
@@ -41,7 +42,7 @@ function mockReqRes(lastEventId?: string): { req: Request; res: Response & { wri
     headers: lastEventId ? { 'last-event-id': lastEventId } : {},
     on: vi.fn(),
   }
-  return { req: req as unknown as Request, res: res as unknown as Response & { written: string[]; ended: boolean; statusCode: number } }
+  return { req: req as unknown as Request, res: res as unknown as Response & { written: string[]; ended: boolean; statusCode: number; flush: ReturnType<typeof vi.fn> } }
 }
 
 describe('AgentController.streamEvents (SSE)', () => {
@@ -220,5 +221,16 @@ describe('AgentController.streamEvents (SSE)', () => {
 
     // The controller should register a close handler on the request
     expect(req.on).toHaveBeenCalledWith('close', expect.any(Function))
+  })
+
+  it('flushes the response after each SSE event so data reaches the client immediately', async () => {
+    const { req, res } = mockReqRes()
+    await controller.streamEvents(req, res)
+
+    // Simulate a live event from the manager watcher
+    const liveEvent = makeEvent(1, 'output', '{"content":"hello"}')
+    subscribers.get('00000000-0000-0000-0000-000000000001')?.(liveEvent)
+
+    expect(res.flush).toHaveBeenCalled()
   })
 })

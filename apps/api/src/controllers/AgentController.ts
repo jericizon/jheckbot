@@ -105,6 +105,9 @@ export class AgentController {
       'X-Accel-Buffering': 'no',
     })
 
+    // Disable Nagle's algorithm so small SSE payloads leave the server immediately.
+    res.socket?.setNoDelay?.(true)
+
     // Buffer live events received during replay so none are lost or duplicated
     const buffer: AgentEventRecord[] = []
     let closed = false
@@ -198,5 +201,7 @@ export class AgentController {
     res.write(`id: ${event.event_sequence}\n`)
     res.write(`event: ${event.event_type}\n`)
     res.write(`data: ${event.content ?? ''}\n\n`)
+    // Flush through any compression/stream buffer so the client sees the event immediately.
+    ;(res as Response & { flush?: () => void }).flush?.()
   }
 }
