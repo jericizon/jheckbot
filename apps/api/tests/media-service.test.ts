@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync, symlinkSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync, symlinkSync, existsSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { MediaService, mediaKind, mimeTypeFor } from '../src/services/MediaService.js'
 
 const TMP = join(tmpdir(), 'jheckbot-test-media')
 const CONV_ID = '00000000-0000-0000-0000-000000000001'
+
+/** Backdate a file so it appears older than the stable-media age threshold. */
+function backdate(path: string, ageMs = 2000) {
+  const t = new Date(Date.now() - ageMs)
+  utimesSync(path, t, t)
+}
 
 describe('mediaKind', () => {
   it('identifies image extensions', () => {
@@ -161,27 +167,101 @@ describe('MediaService', () => {
   })
 
   describe('scanForNew', () => {
-    it('returns filenames not in the known set', () => {
+    it('returns candidates not in the known set', () => {
       const dir = service.ensureConversationDir(CONV_ID)
       writeFileSync(join(dir, 'first.png'), Buffer.from([0x89]))
       writeFileSync(join(dir, 'second.mp4'), Buffer.from([0x00]))
+      backdate(join(dir, 'first.png'))
+      backdate(join(dir, 'second.mp4'))
 
-      const known = new Set<string>(['first.png'])
+      const known = new Map<string, { mtimeMs: number; size: number }>()
+      const initial = service.scanForNew(CONV_ID, known)
+      const first = initial.find((c) => c.filename === 'first.png')!
+      known.set(first.filename, { mtimeMs: first.mtimeMs, size: first.size })
+
       const fresh = service.scanForNew(CONV_ID, known)
-      expect(fresh).toEqual(['second.mp4'])
+      expect(fresh.map((c) => c.filename)).toEqual(['second.mp4'])
     })
 
     it('ignores unsupported file types', () => {
       const dir = service.ensureConversationDir(CONV_ID)
       writeFileSync(join(dir, 'shot.png'), Buffer.from([0x89]))
       writeFileSync(join(dir, 'readme.md'), 'hi')
+      backdate(join(dir, 'shot.png'))
 
-      const fresh = service.scanForNew(CONV_ID, new Set())
-      expect(fresh).toEqual(['shot.png'])
+      const fresh = service.scanForNew(CONV_ID, new Map())
+      expect(fresh.map((c) => c.filename)).toEqual(['shot.png'])
     })
 
     it('returns empty when the directory does not exist', () => {
-      expect(service.scanForNew(CONV_ID, new Set())).toEqual([])
+      expect(service.scanForNew(CONV_ID, new Map())).toEqual([])
+    })
+
+    it('skips files that are still being written', () => {
+      const dir = service.ensureConversationDir(CONV_ID)
+      writeFileSync(join(dir, 'shot.png'), Buffer.from([0x89]))
+      // Do not backdate: mtime is now, so file is considered unstable
+      const fresh = service.scanForNew(CONV_ID, new Map())
+      expect(fresh).toEqual([])
+    })
+
+    it('detects an overwritten file by its new mtime/size', () => {
+      const dir = service.ensureConversationDir(CONV_ID)
+      const path = join(dir, 'capture.mp4')
+      writeFileSync(path, Buffer.from([0x00]))
+      backdate(path)
+
+      const known = new Map<string, { mtimeMs: number; size: number }>()
+      const first = service.scanForNew(CONV_ID, known)
+      expect(first).toHaveLength(1)
+      const firstCandidate = first[0]
+      known.set(firstCandidate.filename, { mtimeMs: firstCandidate.mtimeMs, size: firstCandidate.size })
+
+      // Overwrite with new content and a newer mtime
+      writeFileSync(path, Buffer.from([0x00, 0x00, 0x00, 0x18]))
+      backdate(path)
+
+      const second = service.scanForNew(CONV_ID, known)
+      expect(second).toHaveLength(1)
+      expect(second[0].filename).toBe('capture.mp4')
+      expect(second[0].size).not.toBe(firstCandidate.size)
+    })
+
+    it('does not return a stable file whose fingerprint is unchanged', () => {
+      const dir = service.ensureConversationDir(CONV_ID)
+      const path = join(dir, 'capture.mp4')
+      writeFileSync(path, Buffer.from([0x00]))
+      backdate(path)
+
+      const known = new Map<string, { mtimeMs: number; size: number }>()
+      const first = service.scanForNew(CONV_ID, known)
+      expect(first).toHaveLength(1)
+      known.set(first[0].filename, { mtimeMs: first[0].mtimeMs, size: first[0].size })
+
+      const second = service.scanForNew(CONV_ID, known)
+      expect(second).toEqual([])
+    })
+  })
+
+  describe('seedKnownMedia', () => {
+    it('seeds a map with all existing media files', () => {
+      const dir = service.ensureConversationDir(CONV_ID)
+      writeFileSync(join(dir, 'a.png'), Buffer.from([0x89]))
+      writeFileSync(join(dir, 'b.mp4'), Buffer.from([0x00]))
+      backdate(join(dir, 'a.png'))
+      backdate(join(dir, 'b.mp4'))
+
+      const known = new Map<string, { mtimeMs: number; size: number }>()
+      service.seedKnownMedia(CONV_ID, known)
+      expect(known.has('a.png')).toBe(true)
+      expect(known.has('b.mp4')).toBe(true)
+      expect(known.has('ignore.txt')).toBe(false)
+    })
+
+    it('ignores unsupported and missing directories', () => {
+      const known = new Map<string, { mtimeMs: number; size: number }>()
+      expect(() => service.seedKnownMedia(CONV_ID, known)).not.toThrow()
+      expect(known.size).toBe(0)
     })
   })
 
@@ -199,6 +279,13 @@ describe('MediaService', () => {
     it('produces a public url', () => {
       expect(service.publicUrl(CONV_ID, 'shot.png'))
         .toBe(`/api/conversations/${CONV_ID}/media/shot.png`)
+    })
+
+    it('adds a cache-busting query parameter when requested', () => {
+      expect(service.publicUrl(CONV_ID, 'clip.mp4', 1234567890))
+        .toBe(`/api/conversations/${CONV_ID}/media/clip.mp4?v=1234567890`)
+      expect(service.markdownFor(CONV_ID, 'clip.mp4', 1234567890))
+        .toBe(`![media](/api/conversations/${CONV_ID}/media/clip.mp4?v=1234567890)`)
     })
   })
 

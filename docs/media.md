@@ -24,10 +24,12 @@ the JheckBot API host and rendered inline in the assistant message.
 2. The agent's browser automation tool saves files into
    `JHECKBOT_MEDIA_DIR`.
 3. The JheckBot API watcher scans that directory on each tick. For every
-   new file it:
+   new or overwritten file it:
    - emits a `media` SSE event (`{ url, filename }`)
    - appends a markdown image link to the run's output buffer, so the
      media persists in the final assistant message
+   - overwrites are detected by mtime/size, so reusing `capture.mp4`
+     for a new demo updates the inline video instead of showing the old one
 4. The frontend renders the markdown. A custom marked renderer detects
    video URLs by extension and emits a `<video>` tag instead of `<img>`.
 5. Media files are served via
@@ -110,3 +112,6 @@ a browser-automation MCP server is configured.
   checks, so `..` traversal and symlink escapes are rejected.
 - Only recognized image and video extensions are served.
 - `Content-Type` is set from the extension; no content sniffing.
+- Media is served with `Cache-Control: no-cache` and a cache-busting
+  query parameter (`?v=<mtime>`) on the inline URL, so an overwritten
+  `capture.mp4` is never shown from browser cache.

@@ -7,7 +7,7 @@ import { MessageRepository } from '../repositories/MessageRepository.js'
 import { AgentEventRepository, type AgentEventRecord } from '../repositories/AgentEventRepository.js'
 import { PathValidator, type AllowedRoot } from '../services/PathValidator.js'
 import type { PushService } from '../services/PushService.js'
-import type { MediaService } from '../services/MediaService.js'
+import type { MediaService, MediaFingerprint } from '../services/MediaService.js'
 import { augmentPromptForMedia } from '../services/MediaPromptDetector.js'
 import { DEFAULT_DEVIN_MODEL } from '@jheckbot/shared'
 
@@ -72,8 +72,8 @@ interface ManagedAgentRun {
   retriedAfterSessionLock: boolean
   prompt: string
   bypass: boolean
-  knownMedia: Set<string>
-  mediaMarkdown: string[]
+  knownMedia: Map<string, MediaFingerprint>
+  mediaMarkdown: Map<string, string>
 }
 
 interface ActiveConversationRepository {
@@ -277,6 +277,10 @@ export class AgentManager {
       normalizedSnapshot: [],
     }
     const state = this.createManagedRun(run, options.prompt, options.bypass)
+    // Seed known media so files from a previous run are not re-emitted and
+    // re-shown in this run's responses. New or overwritten files are still
+    // detected by their mtime/size fingerprint.
+    this.mediaService?.seedKnownMedia(options.conversationId, state.knownMedia)
     this.pendingRuns.set(options.conversationId, state)
     return new PreparedAgentRun(this, state)
   }
@@ -400,6 +404,9 @@ export class AgentManager {
       throw new AgentManagerError('Agent is not running', 409)
     }
     const agentPrompt = augmentPromptForMedia(prompt, !!this.mediaService)
+    // Each new prompt is a fresh response: clear any media from a previous
+    // prompt so text-only follow-ups do not keep replaying prior videos.
+    state.mediaMarkdown.clear()
     this.devin.sendPrompt(state.run.sessionName, agentPrompt)
   }
 
@@ -639,8 +646,8 @@ export class AgentManager {
       retriedAfterSessionLock: false,
       prompt,
       bypass,
-      knownMedia: new Set(),
-      mediaMarkdown: [],
+      knownMedia: new Map(),
+      mediaMarkdown: new Map(),
     }
   }
 
@@ -826,6 +833,7 @@ export class AgentManager {
     state.stopRequested = false
     state.terminalizing = false
     state.lastFlushAt = Date.now()
+    state.mediaMarkdown.clear()
 
     this.clearWatcher(state)
     this.startWatcher(state)
@@ -1015,8 +1023,9 @@ export class AgentManager {
 
     // Append any media markdown so images/videos persist in the assistant
     // message. Re-applied each tick because outputBuffer is overwritten
-    // with the fresh tmux capture above.
-    const mediaBlock = state.mediaMarkdown.join('\n\n')
+    // with the fresh tmux capture above. mediaMarkdown is keyed by filename
+    // so overwrites replace the old URL instead of duplicating it.
+    const mediaBlock = Array.from(state.mediaMarkdown.values()).join('\n\n')
     const outputWithMedia = mediaBlock
       ? `${newOutput}${newOutput.endsWith('\n') ? '' : '\n\n'}${mediaBlock}`
       : newOutput
@@ -1049,16 +1058,25 @@ export class AgentManager {
     const fresh = this.mediaService.scanForNew(conversationId, state.knownMedia)
     if (fresh.length === 0) return
 
-    for (const filename of fresh) {
-      state.knownMedia.add(filename)
-      const markdown = this.mediaService.markdownFor(conversationId, filename)
-      state.mediaMarkdown.push(markdown)
+    for (const candidate of fresh) {
+      state.knownMedia.set(candidate.filename, {
+        mtimeMs: candidate.mtimeMs,
+        size: candidate.size,
+      })
+      const markdown = this.mediaService.markdownFor(
+        conversationId,
+        candidate.filename,
+        candidate.mtimeMs,
+      )
+      // Overwrites (e.g. capture.mp4 written again) replace the old markdown
+      // so the previous video URL is no longer rendered in the output.
+      state.mediaMarkdown.set(candidate.filename, markdown)
       const event = await this.eventRepo.create({
         conversationId,
         eventType: 'media',
         content: JSON.stringify({
-          url: this.mediaService.publicUrl(conversationId, filename),
-          filename,
+          url: this.mediaService.publicUrl(conversationId, candidate.filename, candidate.mtimeMs),
+          filename: candidate.filename,
         }),
       })
       if (event) this.publish(event)

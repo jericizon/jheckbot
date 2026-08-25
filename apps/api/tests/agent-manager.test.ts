@@ -7,9 +7,10 @@ import { ConversationRepository, type ConversationRecord } from '../src/reposito
 import { MessageRepository } from '../src/repositories/MessageRepository.js'
 import { AgentEventRepository, type AgentEventRecord } from '../src/repositories/AgentEventRepository.js'
 import { PathValidator, type AllowedRoot } from '../src/services/PathValidator.js'
+import { MediaService } from '../src/services/MediaService.js'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
 
 vi.mock('../db/pool.js', () => ({
   pool: { query: vi.fn(), on: vi.fn(), end: vi.fn() },
@@ -752,6 +753,108 @@ describe('AgentManager', () => {
       await vi.advanceTimersByTimeAsync(100)
 
       expect(conversationRepo.updateAgentSessionId).toHaveBeenCalledWith('conv-1', 'unique-session')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Regression: media files from a previous run (e.g. capture.mp4) were being
+  // re-detected and re-shown in every subsequent response.
+  it('seeds known media at run start so old captures are not re-shown', async () => {
+    const mediaDir = join(TMP, 'media-seed')
+    const mediaService = new MediaService(mediaDir)
+    manager.mediaService = mediaService
+
+    const convDir = mediaService.ensureConversationDir('conv-1')
+    const oldPath = join(convDir, 'capture.mp4')
+    writeFileSync(oldPath, Buffer.from([0x00, 0x00, 0x00, 0x18]))
+    const oldTime = new Date(Date.now() - 1000)
+    utimesSync(oldPath, oldTime, oldTime)
+
+    vi.useFakeTimers()
+    try {
+      let alive = true
+      vi.mocked(devin.isRunning).mockImplementation(() => alive)
+      vi.mocked(devin.captureOutput).mockReturnValue(['Working'])
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'text question' })
+      await vi.advanceTimersByTimeAsync(100)
+
+      // No media event should be emitted for the stale capture.mp4
+      const mediaEvents = vi.mocked(eventRepo.create).mock.calls
+        .filter((call) => call[0].eventType === 'media')
+      expect(mediaEvents).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Regression: when the agent overwrote capture.mp4 with a new video, the
+  // previous mtime/size was not detected, so the old video kept showing.
+  it('detects overwritten media and updates the rendered URL', async () => {
+    const mediaDir = join(TMP, 'media-overwrite')
+    const mediaService = new MediaService(mediaDir)
+    manager.mediaService = mediaService
+
+    const received: AgentEventRecord[] = []
+    manager.subscribe('conv-1', (event) => received.push(event))
+
+    vi.useFakeTimers()
+    try {
+      let alive = true
+      vi.mocked(devin.isRunning).mockImplementation(() => alive)
+      vi.mocked(devin.captureOutput).mockReturnValue(['First video done'])
+
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'record a video' })
+
+      // Write the first version after the run has started (so it is not seeded
+      // as already-known) and then let the watcher see it after it stabilizes.
+      const convDir = mediaService.ensureConversationDir('conv-1')
+      const path = join(convDir, 'capture.mp4')
+      writeFileSync(path, Buffer.from([0x00, 0x00, 0x00, 0x18]))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // First version is detected
+      const firstMedia = received.filter((e) => e.event_type === 'media')
+      expect(firstMedia).toHaveLength(1)
+      const firstUrl = firstMedia[0].content ? JSON.parse(firstMedia[0].content).url : ''
+      expect(firstUrl).toContain('capture.mp4')
+
+      // Simulate the agent overwriting capture.mp4 with new content
+      writeFileSync(path, Buffer.from([0x00, 0x00, 0x00, 0x20]))
+      vi.mocked(devin.captureOutput).mockReturnValue(['Second video done'])
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Overwrite is detected and a new URL (different cache-bust) is emitted
+      const mediaEvents = received.filter((e) => e.event_type === 'media')
+      expect(mediaEvents.length).toBeGreaterThanOrEqual(2)
+      const latest = mediaEvents[mediaEvents.length - 1]
+      const latestUrl = latest.content ? JSON.parse(latest.content).url : ''
+      expect(latestUrl).not.toBe(firstUrl)
+      expect(latestUrl).toContain('capture.mp4')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Regression: text follow-ups were replaying the previous prompt's video.
+  it('clears media markdown on sendPrompt', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(devin.isRunning).mockReturnValue(true)
+      vi.spyOn(devin, 'sendPrompt').mockImplementation(() => {})
+      await manager.start({ conversationId: 'conv-1', projectId: 'proj-1', prompt: 'record a video' })
+
+      const run = manager.getStatus('conv-1')
+      expect(run).not.toBeNull()
+
+      // Manually put a stale media entry in the map to simulate a prior capture
+      const state = (manager as unknown as { runs: Map<string, { mediaMarkdown: Map<string, string> }> }).runs.get('conv-1')!
+      state.mediaMarkdown.set('capture.mp4', '![media](/api/conversations/conv-1/media/capture.mp4)')
+      expect(state.mediaMarkdown.size).toBe(1)
+
+      manager.sendPrompt('conv-1', 'explain this code')
+      expect(state.mediaMarkdown.size).toBe(0)
     } finally {
       vi.useRealTimers()
     }

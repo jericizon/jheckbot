@@ -10,6 +10,22 @@ export interface MediaRecord {
   createdAt: string
 }
 
+export interface MediaCandidate {
+  filename: string
+  mtimeMs: number
+  size: number
+}
+
+export interface MediaFingerprint {
+  mtimeMs: number
+  size: number
+}
+
+/** Time a media file must remain unmodified before we treat it as complete.
+ * Browser automation tools may write the file incrementally, so we avoid
+ * emitting partial captures that then get overwritten in the next tick. */
+const STABLE_MEDIA_AGE_MS = 500
+
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'])
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.ogv', '.m4v'])
 
@@ -121,11 +137,13 @@ export class MediaService {
   }
 
   /**
-   * Scan for media files newer than the known set. Returns filenames that
-   * are not yet in `known`. Used by the agent watcher to detect new files
-   * written by the agent's browser automation tool.
+   * Scan for media files that are new or have been overwritten. Returns
+   * candidates whose fingerprint (mtime + size) is not in `known` and that
+   * have not been modified recently, so partially-written captures are not
+   * emitted prematurely. Used by the agent watcher to detect files written by
+   * the agent's browser automation tool.
    */
-  scanForNew(conversationId: string, known: Set<string>): string[] {
+  scanForNew(conversationId: string, known: Map<string, MediaFingerprint>): MediaCandidate[] {
     const dir = this.conversationDir(conversationId)
     if (!existsSync(dir)) return []
     let entries: string[]
@@ -134,24 +152,66 @@ export class MediaService {
     } catch {
       return []
     }
-    const fresh: string[] = []
+    const now = Date.now()
+    const fresh: MediaCandidate[] = []
     for (const name of entries) {
       if (mediaKind(name) === null) continue
-      if (known.has(name)) continue
-      fresh.push(name)
+      const abs = join(dir, name)
+      let stat: ReturnType<typeof statSync>
+      try {
+        stat = statSync(abs)
+      } catch {
+        continue
+      }
+      if (!stat.isFile()) continue
+      // Wait until the file has not been modified recently, so we don't emit
+      // partial files that are still being written.
+      if (now - stat.mtimeMs < STABLE_MEDIA_AGE_MS) continue
+      const fingerprint = known.get(name)
+      if (fingerprint && fingerprint.mtimeMs === stat.mtimeMs && fingerprint.size === stat.size) {
+        continue
+      }
+      fresh.push({ filename: name, mtimeMs: stat.mtimeMs, size: stat.size })
     }
-    return fresh.sort()
+    return fresh.sort((a, b) => a.filename.localeCompare(b.filename))
   }
 
-  /** Public URL path for a media file, served by the media route. */
-  publicUrl(conversationId: string, filename: string): string {
-    return `/api/conversations/${conversationId}/media/${filename}`
+  /** Seed a map with the current files in the conversation directory. This
+   * prevents a new run from re-surfacing media captured by a previous run. */
+  seedKnownMedia(conversationId: string, target: Map<string, MediaFingerprint>): void {
+    const dir = this.conversationDir(conversationId)
+    if (!existsSync(dir)) return
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const name of entries) {
+      if (mediaKind(name) === null) continue
+      const abs = join(dir, name)
+      try {
+        const stat = statSync(abs)
+        if (!stat.isFile()) continue
+        target.set(name, { mtimeMs: stat.mtimeMs, size: stat.size })
+      } catch {
+        // skip unreadable files
+      }
+    }
+  }
+
+  /** Public URL path for a media file, served by the media route. Optional
+   * `cacheBust` appends a cache-busting query parameter so browser players
+   * fetch the latest version when a capture file is overwritten in place. */
+  publicUrl(conversationId: string, filename: string, cacheBust?: number): string {
+    const url = `/api/conversations/${conversationId}/media/${filename}`
+    return cacheBust !== undefined ? `${url}?v=${cacheBust}` : url
   }
 
   /** Markdown image link for both images and videos. The frontend renderer
    * detects video URLs by extension and emits a <video> tag. */
-  markdownFor(conversationId: string, filename: string): string {
-    const url = this.publicUrl(conversationId, filename)
+  markdownFor(conversationId: string, filename: string, cacheBust?: number): string {
+    const url = this.publicUrl(conversationId, filename, cacheBust)
     return `![media](${url})`
   }
 

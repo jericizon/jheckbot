@@ -37,7 +37,10 @@ export class MediaController {
     try {
       const buffer = await readFile(safePath)
       res.setHeader('Content-Type', mimeTypeFor(filename))
-      res.setHeader('Cache-Control', 'private, max-age=3600')
+      // Media files may be overwritten in place by the agent (e.g. capture.mp4
+      // replaced with a new video), so never cache them. Cache-busting query
+      // parameters on the URL also force a fresh fetch per version.
+      res.setHeader('Cache-Control', 'no-cache')
       res.send(buffer)
     } catch {
       res.status(404).json({ error: 'Media file not found' })
