@@ -130,16 +130,43 @@
                             class="text-[10px] uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1 py-0.5 shrink-0"
                             >{{ item.family.context }}</span
                           >
-                          <svg
-                            v-if="currentFamilyId === item.family.id"
-                            class="w-3.5 h-3.5 text-accent shrink-0 ml-auto"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2.5"
-                            viewBox="0 0 24 24"
-                          >
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
+                          <span class="ml-auto shrink-0 flex items-center gap-1.5">
+                            <template v-if="item.priceSummary">
+                              <span
+                                class="w-1.5 h-1.5 rounded-full"
+                                :class="TIER_DOT[item.priceSummary.costTier]"
+                                aria-hidden="true"
+                              />
+                              <span
+                                class="text-[10px]"
+                                :class="TIER_TEXT[item.priceSummary.costTier]"
+                                >{{ item.priceSummary.variant.pricing }}</span
+                              >
+                              <span
+                                class="text-[9px] uppercase tracking-wide rounded px-1 py-0.5"
+                                :class="TIER_BG[item.priceSummary.costTier]"
+                                >{{ costLabel(item.family, item.priceSummary.variant) }}</span
+                              >
+                            </template>
+                            <template v-else>
+                              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                              <span class="text-[10px] text-emerald-500">Free</span>
+                              <span
+                                class="text-[9px] uppercase tracking-wide rounded px-1 py-0.5 bg-emerald-500/10 text-emerald-500"
+                                >Free</span
+                              >
+                            </template>
+                            <svg
+                              v-if="currentFamilyId === item.family.id"
+                              class="w-3.5 h-3.5 text-accent"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              viewBox="0 0 24 24"
+                            >
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
                         </div>
                       </button>
 
@@ -160,9 +187,20 @@
                               levelLabel(level.variant.level)
                             }}</span>
                             <span
-                              class="text-[10px] text-content-subtle shrink-0"
-                              :class="level.variant.free ? 'text-emerald-500' : ''"
+                              class="w-1.5 h-1.5 rounded-full shrink-0"
+                              :class="variantDotClass(item.family, level.variant)"
+                              aria-hidden="true"
+                            />
+                            <span
+                              class="text-[10px] shrink-0"
+                              :class="variantPricingClass(item.family, level.variant)"
                               >{{ level.variant.pricing }}</span
+                            >
+                            <span
+                              v-if="!level.variant.free"
+                              class="text-[9px] uppercase tracking-wide rounded px-1 py-0.5 shrink-0"
+                              :class="variantBadgeClass(item.family, level.variant)"
+                              >{{ costLabel(item.family, level.variant) }}</span
                             >
                             <svg
                               v-if="current === level.variant.id"
@@ -193,7 +231,7 @@
               class="px-3 py-2 border-t border-border text-[11px] text-content-subtle shrink-0 flex items-center justify-between"
             >
               <span>{{ totalVisible }} model{{ totalVisible === 1 ? '' : 's' }}</span>
-              <span v-if="currentLabel">Selected: {{ currentLabel }}</span>
+              <span v-if="currentLabel">Selected: {{ currentLabel }} · {{ currentPricing }}</span>
             </div>
           </div>
         </Transition>
@@ -231,6 +269,27 @@ const TIER_LABELS: Record<ModelFamily['tier'], string> = {
 }
 const TIER_ORDER: ModelFamily['tier'][] = ['free', 'budget', 'mid', 'premium']
 
+const TIER_TEXT: Record<ModelFamily['tier'], string> = {
+  free: 'text-emerald-500',
+  budget: 'text-amber-500',
+  mid: 'text-orange-500',
+  premium: 'text-rose-500',
+}
+
+const TIER_DOT: Record<ModelFamily['tier'], string> = {
+  free: 'bg-emerald-500',
+  budget: 'bg-amber-500',
+  mid: 'bg-orange-500',
+  premium: 'bg-rose-500',
+}
+
+const TIER_BG: Record<ModelFamily['tier'], string> = {
+  free: 'bg-emerald-500/10 text-emerald-500',
+  budget: 'bg-amber-500/10 text-amber-500',
+  mid: 'bg-orange-500/10 text-orange-500',
+  premium: 'bg-rose-500/10 text-rose-500',
+}
+
 type SortMode = 'default' | 'name' | 'context' | 'price'
 const query = ref('')
 const sortMode = ref<SortMode>('default')
@@ -265,6 +324,40 @@ function inputPrice(v: ModelVariant): number {
 
 function familyMinPrice(f: ModelFamily): number {
   return Math.min(...f.variants.map(inputPrice))
+}
+
+// Cost tier used for UI coloring. Non-free variants in an otherwise free family
+// are shown as budget so they don't appear free at a glance.
+function variantCostTier(family: ModelFamily, variant: ModelVariant): ModelFamily['tier'] {
+  if (variant.free) return 'free'
+  return family.tier === 'free' ? 'budget' : family.tier
+}
+
+function variantPricingClass(family: ModelFamily, variant: ModelVariant): string {
+  return TIER_TEXT[variantCostTier(family, variant)]
+}
+
+function variantDotClass(family: ModelFamily, variant: ModelVariant): string {
+  return TIER_DOT[variantCostTier(family, variant)]
+}
+
+function variantBadgeClass(family: ModelFamily, variant: ModelVariant): string {
+  return TIER_BG[variantCostTier(family, variant)]
+}
+
+function costLabel(family: ModelFamily, variant: ModelVariant): string {
+  const costTier = variantCostTier(family, variant)
+  if (costTier === 'free') return 'Free'
+  return costTier === 'premium' ? 'Premium' : 'Paid'
+}
+
+// Cheapest paid variant for the family-row price preview, or null if every
+// variant is free.
+function familyPriceSummary(family: ModelFamily): { variant: ModelVariant; costTier: ModelFamily['tier'] } | null {
+  const paid = family.variants.filter((v) => !v.free)
+  if (paid.length === 0) return null
+  const variant = [...paid].sort((a, b) => inputPrice(a) - inputPrice(b))[0]!
+  return { variant, costTier: variantCostTier(family, variant) }
 }
 
 const sortedFamilies = computed(() => {
@@ -304,6 +397,14 @@ const currentLabel = computed(() => {
   return ''
 })
 
+const currentPricing = computed(() => {
+  for (const f of props.families) {
+    const v = f.variants.find((vr) => vr.id === props.current)
+    if (v) return v.pricing
+  }
+  return ''
+})
+
 // Build tier groups with a flat navigation index. Each group's `items` is a
 // list of either family rows or expanded-level blocks; the flatIndex fields
 // map into a parallel flat list used for keyboard nav.
@@ -312,6 +413,7 @@ interface FamilyItem {
   key: string
   family: ModelFamily
   flatIndex: number
+  priceSummary: { variant: ModelVariant; costTier: ModelFamily['tier'] } | null
 }
 interface LevelsItem {
   type: 'levels'
@@ -336,7 +438,13 @@ const visibleGroups = computed(() => {
     const items: GroupItem[] = []
     for (const family of fams) {
       const familyFlat = flat++
-      items.push({ type: 'family', key: family.id, family, flatIndex: familyFlat })
+      items.push({
+        type: 'family',
+        key: family.id,
+        family,
+        flatIndex: familyFlat,
+        priceSummary: familyPriceSummary(family),
+      })
       if (expandedId.value === family.id) {
         const levels = [...family.variants]
           .sort((a, b) => levelRank(a.level) - levelRank(b.level))

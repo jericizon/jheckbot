@@ -3,8 +3,9 @@
     <button
       @click="$emit('openModels')"
       :disabled="disabled"
-      class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-      :title="currentLabel ? `Model: ${currentLabel}` : 'Choose model'"
+      class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content hover:text-content-muted hover:border-content-subtle transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+      :title="chipTitle"
+      :aria-label="chipTitle"
     >
       <svg
         class="w-3.5 h-3.5"
@@ -20,7 +21,17 @@
         />
         <circle cx="12" cy="12" r="3" />
       </svg>
-      <span>{{ currentLabel || 'Models' }}</span>
+      <span v-if="!currentModel">Models</span>
+      <template v-else>
+        <span
+          v-if="tierDot"
+          class="w-2 h-2 rounded-full shrink-0"
+          :class="tierDot"
+          aria-hidden="true"
+        />
+        <span class="shrink-0">{{ currentLabel }}</span>
+        <span :class="['font-normal', tierTextClass]">· {{ currentPricing }}</span>
+      </template>
     </button>
     <button
       @click="$emit('openSkills')"
@@ -92,6 +103,7 @@
 import {
   THINKING_LEVEL_LABELS,
   type ModelFamily,
+  type ModelVariant,
   type ThinkingLevel,
 } from '@jheckbot/shared'
 
@@ -117,16 +129,42 @@ defineEmits<{
   (e: 'openModels'): void
 }>()
 
+const TIER_STYLES: Record<ModelFamily['tier'], { dot: string; text: string }> = {
+  free: { dot: 'bg-emerald-500', text: 'text-emerald-500' },
+  budget: { dot: 'bg-amber-500', text: 'text-amber-500' },
+  mid: { dot: 'bg-orange-500', text: 'text-orange-500' },
+  premium: { dot: 'bg-rose-500', text: 'text-rose-500' },
+}
+
 function levelLabel(level: ThinkingLevel) {
   return THINKING_LEVEL_LABELS[level] ?? level
 }
 
-// Display only — derives the chip label from the current selection.
-const currentLabel = computed(() => {
+const currentModel = computed(() => {
   for (const f of props.families) {
     const v = f.variants.find((vr) => vr.id === props.modelValue)
-    if (v) return `${f.label} · ${levelLabel(v.level)}`
+    if (v) return { family: f, variant: v as ModelVariant }
   }
-  return ''
+  return null
+})
+
+const currentLabel = computed(() => {
+  const m = currentModel.value
+  if (!m) return ''
+  return `${m.family.label} · ${levelLabel(m.variant.level)}`
+})
+
+const currentPricing = computed(() => currentModel.value?.variant.pricing ?? '')
+
+const currentTier = computed(() => currentModel.value?.family.tier ?? null)
+
+const tierDot = computed(() => (currentTier.value ? TIER_STYLES[currentTier.value].dot : ''))
+
+const tierTextClass = computed(() => (currentTier.value ? TIER_STYLES[currentTier.value].text : ''))
+
+const chipTitle = computed(() => {
+  if (!currentModel.value) return 'Choose model'
+  const { family, variant } = currentModel.value
+  return `Model: ${family.label} · ${levelLabel(variant.level)} · ${variant.pricing} (${family.tier})`
 })
 </script>
