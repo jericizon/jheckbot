@@ -13,158 +13,21 @@
     <!-- Main content area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
       <!-- Header -->
-      <AppHeader>
-        <template #leading>
-          <button
-            @click="toggleSidebar"
-            class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
-            aria-label="Toggle sidebar"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <button
-            @click="navigateTo('/projects')"
-            class="hidden sm:block text-content-subtle hover:text-content transition-colors p-1 rounded-md hover:bg-surface-subtle shrink-0"
-            aria-label="Back to projects"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        </template>
-        <ProjectSwitcher :current-id="project?.id" :current-label="project?.name || 'Project'" />
-        <template #actions>
-          <button
-            v-if="project && !editing && !confirmingDelete"
-            @click="startEdit"
-            class="text-content-muted hover:text-content transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
-            title="Edit project"
-          >
-            <svg
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          </button>
-          <button
-            v-if="project && !editing && !confirmingDelete"
-            @click="confirmingDelete = true"
-            class="text-content-muted hover:text-red-500 transition-colors p-1.5 rounded-md hover:bg-surface-subtle"
-            title="Delete project"
-          >
-            <svg
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-        </template>
-      </AppHeader>
+      <ProjectHeader
+        :project="project"
+        :branch="projectBranch"
+        show-back
+        @project-updated="onProjectUpdated"
+        @project-deleted="onProjectDeleted"
+        @branch-switched="handleBranchSwitched"
+      />
 
       <!-- Content -->
       <div class="flex-1 overflow-y-auto">
         <div class="max-w-2xl mx-auto px-4 py-8 space-y-6">
-          <!-- Edit form -->
-          <div
-            v-if="project && editing"
-            class="rounded-lg border border-border bg-surface-elevated p-4 space-y-3 animate-slide-up"
-          >
-            <div class="text-sm font-semibold">Edit Project</div>
-            <input
-              v-model="editForm.name"
-              placeholder="Project name"
-              class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
-            />
-            <input
-              v-model="editForm.description"
-              placeholder="Description (optional)"
-              class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder-content-subtle focus:border-content-subtle focus:outline-none transition-colors"
-            />
-            <p class="text-xs text-content-subtle">
-              Path cannot be changed after creation:
-              <span class="font-mono break-all">{{ project.path }}</span>
-            </p>
-            <div class="flex gap-2">
-              <button
-                @click="cancelEdit"
-                :disabled="saving"
-                class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                @click="saveEdit"
-                :disabled="saving"
-                class="flex-1 rounded-lg bg-content text-surface py-2 text-sm font-medium hover:opacity-80 disabled:opacity-50 transition-opacity active:scale-[0.98]"
-              >
-                {{ saving ? 'Saving...' : 'Save' }}
-              </button>
-            </div>
-            <p v-if="editError" class="text-sm text-red-500">{{ editError }}</p>
-          </div>
-
-          <!-- Delete confirmation -->
-          <div
-            v-else-if="project && confirmingDelete"
-            class="rounded-lg border border-red-500/30 bg-surface-elevated p-4 space-y-3"
-          >
-            <div class="text-sm font-semibold text-red-500">Delete Project</div>
-            <div class="text-xs text-content-subtle">
-              Delete <span class="font-medium text-content">{{ project.name }}</span> and all its
-              conversations. This cannot be undone.
-            </div>
-            <div class="flex gap-2">
-              <button
-                @click="confirmingDelete = false"
-                :disabled="deleting"
-                class="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-content-muted hover:text-content hover:border-content-subtle transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                @click="handleDelete"
-                :disabled="deleting"
-                class="flex-1 rounded-lg bg-red-500 text-white py-2 text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors"
-              >
-                {{ deleting ? 'Deleting...' : 'Yes, delete' }}
-              </button>
-            </div>
-            <p v-if="deleteError" class="text-sm text-red-500">{{ deleteError }}</p>
-          </div>
-
           <!-- Conversation box -->
           <div
-            v-else-if="project"
+            v-if="project"
             class="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in"
           >
             <div
@@ -189,27 +52,7 @@
               {{ project.description }}
             </p>
             <p class="text-content-subtle text-xs font-mono break-all mb-2">{{ project.path }}</p>
-            <button
-              v-if="projectBranch"
-              @click="branchModalOpen = true"
-              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 mb-6 max-w-full cursor-pointer transition-colors"
-              title="Manage branches"
-            >
-              <svg
-                class="w-3 h-3 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="6" r="3" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" />
-              </svg>
-              <span class="font-mono truncate min-w-0">{{ projectBranch }}</span>
-            </button>
-            <p v-else class="mb-6"></p>
+            <p class="mb-6" />
 
             <!-- Input box -->
             <div
@@ -305,14 +148,6 @@
       @close="modelPickerOpen = false"
     />
 
-    <!-- Branch manager -->
-    <BranchModal
-      :open="branchModalOpen"
-      :project-id="project?.id"
-      :current-branch="projectBranch"
-      @close="branchModalOpen = false"
-      @switched="handleBranchSwitched"
-    />
   </div>
 </template>
 
@@ -322,7 +157,6 @@ import type { ModelFamily } from '~/components/MessageToolbar.vue'
 const route = useRoute()
 const projectsApi = useProjects()
 const convApi = useConversations()
-const { toggle: toggleSidebar } = useSidebar()
 const { activeConversations } = useActiveConversations()
 
 const id = computed(() => route.params.id as string)
@@ -346,7 +180,6 @@ const project = ref<Project | null>(null)
 const conversations = ref<Conversation[]>([])
 const convLoading = ref(true)
 const projectBranch = ref<string | null>(null)
-const branchModalOpen = ref(false)
 
 // Refresh sidebar statuses periodically so background agent runs in any
 // conversation of this project surface without a manual reload.
@@ -356,15 +189,6 @@ useConversationPolling(
     conversations.value = convs
   },
 )
-
-const editing = ref(false)
-const saving = ref(false)
-const editError = ref('')
-const editForm = reactive({ name: '', description: '' })
-
-const confirmingDelete = ref(false)
-const deleting = ref(false)
-const deleteError = ref('')
 
 const input = ref('')
 const inputEl = ref<HTMLTextAreaElement | null>(null)
@@ -425,51 +249,12 @@ function handleBranchSwitched(branch: string) {
   projectBranch.value = branch
 }
 
-function startEdit() {
-  if (!project.value) return
-  editForm.name = project.value.name
-  editForm.description = project.value.description ?? ''
-  editError.value = ''
-  editing.value = true
+function onProjectUpdated(updated: Project) {
+  project.value = updated
 }
 
-function cancelEdit() {
-  editing.value = false
-  editError.value = ''
-}
-
-async function saveEdit() {
-  if (!project.value) return
-  saving.value = true
-  editError.value = ''
-  try {
-    const updated = await projectsApi.update(project.value.id, {
-      name: editForm.name,
-      description: editForm.description || undefined,
-    })
-    project.value = updated
-    editing.value = false
-  } catch (err: unknown) {
-    editError.value =
-      (err as { data?: { error?: string } })?.data?.error || 'Failed to save project'
-  } finally {
-    saving.value = false
-  }
-}
-
-async function handleDelete() {
-  if (!project.value) return
-  deleting.value = true
-  deleteError.value = ''
-  try {
-    await projectsApi.delete(project.value.id)
-    await navigateTo('/projects')
-  } catch (err: unknown) {
-    deleteError.value =
-      (err as { data?: { error?: string } })?.data?.error || 'Failed to delete project'
-  } finally {
-    deleting.value = false
-  }
+async function onProjectDeleted() {
+  await navigateTo('/projects')
 }
 
 function newConversation() {

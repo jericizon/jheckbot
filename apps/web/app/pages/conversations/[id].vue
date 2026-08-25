@@ -13,27 +13,15 @@
     <!-- Main chat area -->
     <div class="flex-1 flex flex-col h-full min-w-0">
       <!-- Header -->
-      <AppHeader>
-        <template #leading>
-          <button
-            @click="toggleSidebar"
-            class="text-content-muted hover:text-content transition-colors p-1 -ml-1 rounded-md hover:bg-surface-subtle shrink-0"
-            aria-label="Toggle sidebar"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </template>
-        <!-- Title + project subtitle -->
-        <div class="flex flex-col">
-          <div class="flex items-center gap-1 min-w-0">
+      <ProjectHeader
+        :project="project"
+        :branch="projectBranch"
+        @project-updated="onProjectUpdated"
+        @project-deleted="onProjectDeleted"
+        @branch-switched="handleBranchSwitched"
+      >
+        <template #subtitle>
+          <div class="flex items-center gap-1.5 min-w-0">
             <input
               v-if="editingTitle"
               v-model="titleDraft"
@@ -41,7 +29,8 @@
               @keydown.enter.exact.prevent="saveTitle"
               @keydown.escape="cancelEditTitle"
               ref="titleInputEl"
-              class="flex-1 min-w-0 text-sm font-semibold bg-transparent border-b border-content-subtle focus:outline-none focus:border-content text-content"
+              aria-label="Conversation title"
+              class="flex-1 min-w-0 text-xs bg-transparent border-b border-content-subtle focus:outline-none focus:border-content text-content py-0.5"
             />
             <button
               v-else
@@ -49,7 +38,7 @@
               class="flex items-center gap-1 min-w-0 group"
               :disabled="agentRunning"
             >
-              <span class="text-sm font-semibold truncate text-content">{{
+              <span class="text-xs text-content-subtle truncate">{{
                 conversation?.title || 'Conversation'
               }}</span>
               <svg
@@ -61,8 +50,8 @@
               >
                 <path
                   stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    stroke-linejoin="round"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                 />
               </svg>
             </button>
@@ -74,53 +63,8 @@
               Active · {{ elapsedLabel }}
             </span>
           </div>
-          <!-- Project + branch as compact tappable subtitle -->
-          <button
-            v-if="projectName"
-            @click="navigateTo('/projects/' + conversation?.project_id)"
-            class="flex items-center gap-1 mt-0.5 text-xs text-content-subtle hover:text-content-muted transition-colors min-w-0"
-          >
-            <svg
-              class="w-3 h-3 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            <span class="truncate min-w-0 shrink-[10]">{{ projectName }}</span>
-            <span
-              v-if="projectBranch"
-              @click.stop="branchModalOpen = true"
-              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 min-w-0 shrink-[1] cursor-pointer transition-colors"
-              title="Manage branches"
-            >
-              <svg
-                class="w-3 h-3 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="6" r="3" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" />
-              </svg>
-              <span class="font-mono truncate">{{ projectBranch }}</span>
-            </span>
-          </button>
-        </div>
-        <template #actions>
-          <ProjectSwitcher
-            :current-id="conversation?.project_id"
-            :current-label="projectName || undefined"
-            align="right"
-            class="hidden sm:block"
-          />
         </template>
-      </AppHeader>
+      </ProjectHeader>
 
       <!-- Messages -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto">
@@ -730,14 +674,6 @@
       @close="modelPickerOpen = false"
     />
 
-    <!-- Branch manager -->
-    <BranchModal
-      :open="branchModalOpen"
-      :project-id="conversation?.project_id"
-      :current-branch="projectBranch"
-      @close="branchModalOpen = false"
-      @switched="handleBranchSwitched"
-    />
   </div>
 </template>
 
@@ -748,7 +684,6 @@ const route = useRoute()
 const convApi = useConversations()
 const projectApi = useProjects()
 const sse = useSSE()
-const { toggle: toggleSidebar } = useSidebar()
 const { activeConversations } = useActiveConversations()
 
 const id = computed(() => route.params.id as string)
@@ -758,6 +693,13 @@ interface Conversation {
   project_id: string
   title: string
   agent_status: string
+}
+interface Project {
+  id: string
+  name: string
+  path: string
+  description: string | null
+  enabled: boolean
 }
 interface Message {
   id: string
@@ -790,7 +732,6 @@ const elapsedLabel = computed(() => {
 const sendError = ref('')
 const skillsPickerOpen = ref(false)
 const modelPickerOpen = ref(false)
-const branchModalOpen = ref(false)
 const queue = ref<QueuedMessage[]>([])
 const editingQueueId = ref<string | null>(null)
 const { bypassMode } = useBypassMode()
@@ -802,7 +743,7 @@ const titleInputEl = ref<HTMLInputElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 const changedFilesPanel = ref<{ refresh: () => void } | null>(null)
-const projectName = ref('')
+const project = ref<Project | null>(null)
 const projectBranch = ref<string | null>(null)
 const sidebarConversations = ref<Conversation[]>([])
 let eventSource: EventSource | null = null
@@ -973,10 +914,9 @@ async function load() {
 
 async function loadProjectInfo(projectId: string) {
   try {
-    const project = await projectApi.get(projectId)
-    projectName.value = project.name
+    project.value = await projectApi.get(projectId)
   } catch {
-    // ignore — header just won't show project name
+    // ignore — header just won't show project details
   }
   try {
     const result = await projectApi.branch(projectId)
@@ -990,6 +930,17 @@ function handleBranchSwitched(branch: string) {
   projectBranch.value = branch
   // Working tree contents changed; refresh the changed-files panel.
   changedFilesPanel.value?.refresh()
+}
+
+function onProjectUpdated(updated: Project) {
+  project.value = updated
+}
+
+async function onProjectDeleted() {
+  const projectId = project.value?.id
+  if (projectId) {
+    await navigateTo('/projects')
+  }
 }
 
 function connectSSE() {
