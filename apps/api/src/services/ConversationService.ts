@@ -20,6 +20,7 @@ export interface UpdateConversationInput {
   providerConfig?: Record<string, unknown> | null
   agentSessionId?: string
   agentStatus?: string
+  isPinned?: boolean
 }
 
 export class ConversationService {
@@ -77,6 +78,7 @@ export class ConversationService {
       providerConfig: input.providerConfig,
       agentSessionId: input.agentSessionId,
       agentStatus: input.agentStatus,
+      isPinned: input.isPinned,
     })
   }
 

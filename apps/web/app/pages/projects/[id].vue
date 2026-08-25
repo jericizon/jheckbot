@@ -8,6 +8,7 @@
       @new="newConversation"
       @delete="deleteConversation"
       @rename="handleSidebarRename"
+      @pin="togglePin"
     />
 
     <!-- Main content area -->
@@ -157,7 +158,7 @@ import type { ModelFamily } from '~/components/MessageToolbar.vue'
 const route = useRoute()
 const projectsApi = useProjects()
 const convApi = useConversations()
-const { activeConversations } = useActiveConversations()
+const { activeConversations, refresh: refreshActiveConversations } = useActiveConversations()
 
 const id = computed(() => route.params.id as string)
 
@@ -172,6 +173,7 @@ interface Conversation {
   id: string
   title: string
   agent_status: string
+  is_pinned: boolean
   last_message_at: string | null
   created_at: string
 }
@@ -274,6 +276,16 @@ async function handleSidebarRename(convId: string, newTitle: string) {
     if (conv) conv.title = updated.title
   } catch {
     // Keep old title on failure
+  }
+}
+
+async function togglePin(convId: string, isPinned: boolean) {
+  try {
+    await convApi.update(convId, { isPinned })
+    const [convs] = await Promise.all([convApi.listByProject(id.value), refreshActiveConversations()])
+    conversations.value = convs
+  } catch {
+    // Ignore; the next poll will reconcile.
   }
 }
 

@@ -43,6 +43,7 @@ describe('ConversationService', () => {
       provider_config: null,
       agent_session_id: null,
       agent_status: 'idle',
+      is_pinned: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       last_message_at: null,
@@ -56,6 +57,7 @@ describe('ConversationService', () => {
       delete: vi.fn().mockResolvedValue(true),
       touchLastMessage: vi.fn().mockResolvedValue(undefined),
       search: vi.fn().mockResolvedValue([]),
+      findActiveWithProject: vi.fn().mockResolvedValue([]),
     } as unknown as ConversationRepository
 
     projectRepo = {
@@ -108,6 +110,19 @@ describe('ConversationService', () => {
     const updated = await service.update('conv-1', { title: 'New Title' })
     expect(updated).toEqual(mockConversation)
     expect(conversationRepo.update).toHaveBeenCalledWith('conv-1', expect.objectContaining({ title: 'New Title' }))
+  })
+
+  it('updates the pinned state of a conversation', async () => {
+    await service.update('conv-1', { isPinned: true })
+    expect(conversationRepo.update).toHaveBeenCalledWith('conv-1', expect.objectContaining({ isPinned: true }))
+  })
+
+  it('lists active conversations including pinned ones', async () => {
+    const active = [{ ...mockConversation, is_pinned: true }]
+    vi.mocked(conversationRepo.findActiveWithProject).mockResolvedValueOnce(active as any)
+    const result = await service.listActive()
+    expect(result).toEqual(active)
+    expect(conversationRepo.findActiveWithProject).toHaveBeenCalled()
   })
 
   it('rejects update with empty title', async () => {

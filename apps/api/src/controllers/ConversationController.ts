@@ -88,6 +88,7 @@ export class ConversationController {
         providerConfig: req.body.providerConfig,
         agentSessionId: req.body.agentSessionId,
         agentStatus: req.body.agentStatus,
+        isPinned: req.body.isPinned,
       })
       if (!conversation) {
         res.status(404).json({ error: 'Conversation not found' })

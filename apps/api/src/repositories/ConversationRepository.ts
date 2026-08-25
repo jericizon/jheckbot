@@ -9,6 +9,7 @@ export interface ConversationRecord {
   provider_config: Record<string, unknown> | null
   agent_session_id: string | null
   agent_status: string
+  is_pinned: boolean
   created_at: string
   updated_at: string
   last_message_at: string | null
@@ -89,6 +90,7 @@ export class ConversationRepository {
       providerConfig?: Record<string, unknown> | null
       agentSessionId?: string
       agentStatus?: string
+      isPinned?: boolean
     },
     executor: DbExecutor = pool,
   ): Promise<ConversationRecord | null> {
@@ -98,8 +100,8 @@ export class ConversationRepository {
     const { rows } = await executor.query<ConversationRecord>(
       `UPDATE conversations
        SET title = $1, status = $2, agent_type = $3, provider_config = $4,
-           agent_session_id = $5, agent_status = $6, updated_at = NOW()
-       WHERE id = $7
+           agent_session_id = $5, agent_status = $6, is_pinned = $7, updated_at = NOW()
+       WHERE id = $8
        RETURNING *`,
       [
         data.title ?? existing.title,
@@ -110,6 +112,7 @@ export class ConversationRepository {
           : existing.provider_config,
         data.agentSessionId ?? existing.agent_session_id,
         data.agentStatus ?? existing.agent_status,
+        data.isPinned ?? existing.is_pinned,
         id,
       ],
     )
@@ -202,8 +205,8 @@ export class ConversationRepository {
       `SELECT c.*, p.name AS project_name
        FROM conversations c
        JOIN projects p ON c.project_id = p.id
-       WHERE c.agent_status IN ('starting', 'running', 'stopping')
-       ORDER BY c.updated_at ASC`,
+       WHERE c.is_pinned = TRUE OR c.agent_status IN ('starting', 'running', 'stopping')
+       ORDER BY c.is_pinned DESC, c.updated_at ASC`,
     )
     return rows
   }

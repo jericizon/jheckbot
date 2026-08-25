@@ -6,6 +6,7 @@ interface Conversation {
   agent_type: string
   agent_session_id: string | null
   agent_status: string
+  is_pinned: boolean
   created_at: string
   updated_at: string
   last_message_at: string | null
@@ -42,6 +43,7 @@ interface ActiveConversation {
   project_name: string
   title: string
   agent_status: string
+  is_pinned: boolean
 }
 
 interface SearchResult {
@@ -82,7 +84,7 @@ export function useConversations() {
     create: (projectId: string, title?: string) =>
       api.post<Conversation>(`/api/projects/${projectId}/conversations`, { title }),
     get: (id: string) => api.get<Conversation>(`/api/conversations/${id}`),
-    update: (id: string, data: { title?: string }) =>
+    update: (id: string, data: { title?: string; isPinned?: boolean }) =>
       api.patch<Conversation>(`/api/conversations/${id}`, data),
     archive: (id: string) => api.post<Conversation>(`/api/conversations/${id}/archive`),
     delete: (id: string) => api.delete<void>(`/api/conversations/${id}`),

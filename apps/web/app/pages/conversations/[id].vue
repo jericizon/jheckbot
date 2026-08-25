@@ -8,6 +8,7 @@
       @new="navigateTo('/projects/' + conversation?.project_id)"
       @delete="deleteConversation"
       @rename="handleSidebarRename"
+      @pin="togglePin"
     />
 
     <!-- Main chat area -->
@@ -676,7 +677,7 @@ const route = useRoute()
 const convApi = useConversations()
 const projectApi = useProjects()
 const sse = useSSE()
-const { activeConversations } = useActiveConversations()
+const { activeConversations, refresh: refreshActiveConversations } = useActiveConversations()
 
 const id = computed(() => route.params.id as string)
 
@@ -685,6 +686,7 @@ interface Conversation {
   project_id: string
   title: string
   agent_status: string
+  is_pinned: boolean
 }
 interface Project {
   id: string
@@ -1075,6 +1077,20 @@ async function handleSidebarRename(convId: string, newTitle: string) {
     }
   } catch {
     // Keep old title on failure
+  }
+}
+
+async function togglePin(convId: string, isPinned: boolean) {
+  try {
+    const updated = await convApi.update(convId, { isPinned })
+    const conv = sidebarConversations.value.find((c) => c.id === convId)
+    if (conv) conv.is_pinned = updated.is_pinned
+    if (conversation.value?.id === convId) {
+      conversation.value = { ...conversation.value, is_pinned: updated.is_pinned }
+    }
+    await Promise.all([loadSidebarConversations(), refreshActiveConversations()])
+  } catch {
+    // Ignore; the next poll will reconcile.
   }
 }
 

@@ -162,3 +162,44 @@ describe('ConversationController.listActive', () => {
     expect(res.body).toEqual([])
   })
 })
+
+describe('ConversationController.update', () => {
+  let conversationService: ConversationService
+  let messageService: MessageService
+  let controller: ConversationController
+
+  beforeEach(() => {
+    conversationService = {
+      update: vi.fn(),
+    } as unknown as ConversationService
+    messageService = {} as unknown as MessageService
+    controller = new ConversationController(conversationService, messageService)
+  })
+
+  it('updates the pinned state', async () => {
+    vi.mocked(conversationService.update).mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000001',
+      is_pinned: true,
+    } as any)
+
+    const req = mockReq({ isPinned: true }, { id: '00000000-0000-0000-0000-000000000001' })
+    const res = mockRes()
+    await controller.update(req, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(conversationService.update).toHaveBeenCalledWith(
+      '00000000-0000-0000-0000-000000000001',
+      expect.objectContaining({ isPinned: true }),
+    )
+  })
+
+  it('returns 404 when the conversation is not found', async () => {
+    vi.mocked(conversationService.update).mockResolvedValue(null)
+
+    const req = mockReq({ isPinned: true }, { id: '00000000-0000-0000-0000-000000000001' })
+    const res = mockRes()
+    await controller.update(req, res)
+
+    expect(res.statusCode).toBe(404)
+  })
+})

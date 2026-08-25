@@ -179,4 +179,61 @@ describe('transaction-aware repositories', () => {
     ])
     expect(pool.query).not.toHaveBeenCalled()
   })
+
+  it('includes pinned conversations in the active list and sorts them first', async () => {
+    const executor = fakeExecutor()
+    const pinned = {
+      id: 'conv-1',
+      project_id: 'proj-1',
+      project_name: 'Test Project',
+      title: 'Pinned',
+      agent_status: 'idle',
+      is_pinned: true,
+    }
+    const active = {
+      id: 'conv-2',
+      project_id: 'proj-1',
+      project_name: 'Test Project',
+      title: 'Running',
+      agent_status: 'running',
+      is_pinned: false,
+    }
+    executor.query.mockResolvedValue({ rows: [pinned, active] })
+    const repository = new ConversationRepository()
+
+    const result = await repository.findActiveWithProject(executor as never)
+
+    expect(result).toEqual([pinned, active])
+    const [sql] = executor.query.mock.calls[0]
+    expect(sql).toContain('is_pinned')
+    expect(sql).toContain('ORDER BY')
+  })
+
+  it('updates the pinned state of a conversation', async () => {
+    const executor = fakeExecutor()
+    const existing = {
+      id: 'conv-1',
+      project_id: 'proj-1',
+      title: 'New Conversation',
+      status: 'active',
+      agent_type: 'devin',
+      provider_config: null,
+      agent_session_id: null,
+      agent_status: 'idle',
+      is_pinned: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_message_at: null,
+    }
+    const updated = { ...existing, is_pinned: true }
+    executor.query
+      .mockResolvedValueOnce({ rows: [existing] })
+      .mockResolvedValueOnce({ rows: [updated] })
+    const repository = new ConversationRepository()
+
+    await expect(repository.update('conv-1', { isPinned: true }, executor as never)).resolves.toEqual(updated)
+
+    const [, params] = executor.query.mock.calls[1]
+    expect(params).toContain(true)
+  })
 })

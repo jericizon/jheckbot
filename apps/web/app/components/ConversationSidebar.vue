@@ -63,7 +63,36 @@
               class="text-[10px] font-medium text-amber-500 shrink-0"
               title="Unsent draft"
             >Draft</span>
+            <span
+              v-if="conv.is_pinned"
+              class="text-[10px] font-medium text-amber-500 shrink-0"
+              title="Pinned conversation"
+            >Pinned</span>
           </NuxtLink>
+          <div
+            class="flex items-center px-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
+          >
+            <button
+              @click.prevent="togglePin(conv)"
+              class="p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle"
+              :aria-label="conv.is_pinned ? 'Unpin conversation' : 'Pin conversation'"
+              :title="conv.is_pinned ? 'Unpin conversation' : 'Pin conversation'"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                :fill="conv.is_pinned ? 'currentColor' : 'none'"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -127,6 +156,27 @@
             class="flex items-center px-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
           >
             <button
+              @click.prevent="togglePin(conv)"
+              class="p-1.5 rounded-md"
+              :class="conv.is_pinned ? 'text-amber-500 hover:bg-amber-500/10' : 'text-content-subtle hover:text-content hover:bg-surface-subtle'"
+              :aria-label="conv.is_pinned ? 'Unpin conversation' : 'Pin conversation'"
+              :title="conv.is_pinned ? 'Unpin conversation' : 'Pin conversation'"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                :fill="conv.is_pinned ? 'currentColor' : 'none'"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                />
+              </svg>
+            </button>
+            <button
               @click.prevent="startEdit(conv)"
               class="p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle"
               aria-label="Rename conversation"
@@ -181,6 +231,7 @@ interface Conversation {
   id: string
   title: string
   agent_status: string
+  is_pinned: boolean
 }
 
 interface ActiveConversation {
@@ -189,6 +240,7 @@ interface ActiveConversation {
   project_name: string
   title: string
   agent_status: string
+  is_pinned: boolean
 }
 
 const props = defineProps<{
@@ -203,6 +255,7 @@ const emit = defineEmits<{
   (e: 'new'): void
   (e: 'delete', id: string): void
   (e: 'rename', id: string, title: string): void
+  (e: 'pin', id: string, isPinned: boolean): void
 }>()
 
 const { sidebarOpen, close } = useSidebar()
@@ -220,12 +273,15 @@ function isAgentActive(conv: Conversation) {
 // which project they belong to.
 const activeConversationsList = computed(() => props.activeConversations ?? [])
 
-// Current project conversations that are NOT actively running — active ones
-// are shown in the "Active" section above, so we exclude them here to avoid
-// duplication.
+// Current project conversations that are NOT actively running and NOT pinned.
+// Active ones are shown above, and pinned ones live in the Active section.
 const inactiveConversations = computed(() =>
-  props.conversations.filter((c) => !isAgentActive(c)),
+  props.conversations.filter((c) => !isAgentActive(c) && !c.is_pinned),
 )
+
+function togglePin(conv: { id: string; is_pinned: boolean }) {
+  emit('pin', conv.id, !conv.is_pinned)
+}
 
 const editingId = ref<string | null>(null)
 const titleDraft = ref('')

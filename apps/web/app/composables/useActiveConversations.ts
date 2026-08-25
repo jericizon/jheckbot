@@ -8,6 +8,7 @@ interface ActiveConversation {
   project_name: string
   title: string
   agent_status: string
+  is_pinned: boolean
 }
 
 const activeConversations = ref<ActiveConversation[]>([])
