@@ -737,6 +737,7 @@ const editingQueueId = ref<string | null>(null)
 const { bypassMode } = useBypassMode()
 const voice = useVoiceInput(input)
 const { getDraft, setDraft, clearDraft } = useConversationDrafts()
+const { getQueue, setQueue, clearQueue } = useConversationQueues()
 const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
@@ -885,15 +886,18 @@ async function load() {
     availableFamilies.value = modelsRes.families
     ensureDefault(modelsRes.default)
 
-    // Restore any unsent draft for this conversation.
+    // Restore any unsent draft and queued messages for this conversation.
     input.value = getDraft(id.value)
+    queue.value = getQueue(id.value)
 
     loadSidebarConversations()
     loadProjectInfo(conv.project_id)
 
+    let agentBusy = false
     try {
       const agentStatus = await convApi.agentStatus(id.value)
       if (agentStatus && (agentStatus.status === 'running' || agentStatus.status === 'starting')) {
+        agentBusy = true
         agentRunning.value = true
         // Resume the elapsed counter from the backend's start timestamp so
         // reconnects (page refresh, background tab) show true wall-clock time.
@@ -903,6 +907,12 @@ async function load() {
       }
     } catch {
       // 404 means no agent run
+    }
+
+    // If the agent is idle and there are queued messages left over from a
+    // previous session, drain them now so they are not stuck.
+    if (!agentBusy && queue.value.length > 0) {
+      drainQueue()
     }
 
     await nextTick()
@@ -1112,6 +1122,7 @@ async function confirmDeleteConversation() {
   try {
     await convApi.delete(convId)
     clearDraft(convId)
+    clearQueue(convId)
     sidebarConversations.value = sidebarConversations.value.filter((c) => c.id !== convId)
     deleteModalOpen.value = false
     deleteTarget.value = null
@@ -1263,6 +1274,9 @@ watch(input, () => autoResize())
 
 // Persist an unsent message so it survives page refreshes.
 watch(input, (val) => setDraft(id.value, val))
+
+// Persist queued messages so they survive switching conversations or projects.
+watch(queue, (val) => setQueue(id.value, val), { deep: true })
 
 onMounted(load)
 onUnmounted(() => {
