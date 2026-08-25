@@ -2,6 +2,8 @@
   <div class="flex h-[100dvh] overflow-hidden bg-surface text-content">
     <ConversationSidebar
       :conversations="sidebarConversations"
+      :active-conversations="activeConversations"
+      :current-project-id="conversation?.project_id"
       :active-id="id"
       @new="navigateTo('/projects/' + conversation?.project_id)"
       @delete="deleteConversation"
@@ -66,10 +68,10 @@
             </button>
             <span
               v-if="agentRunning"
-              class="flex items-center gap-1 text-xs text-emerald-500 font-medium shrink-0"
+              class="flex items-center gap-1 text-xs text-emerald-500 font-medium shrink-0 tabular-nums"
             >
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Active
+              Active · {{ elapsedLabel }}
             </span>
           </div>
           <!-- Project + branch as compact tappable subtitle -->
@@ -87,11 +89,11 @@
             >
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            <span class="truncate">{{ projectName }}</span>
+            <span class="truncate min-w-0 shrink-[10]">{{ projectName }}</span>
             <span
               v-if="projectBranch"
               @click.stop="branchModalOpen = true"
-              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 shrink-0 cursor-pointer transition-colors"
+              class="flex items-center gap-1 text-[11px] text-content-subtle bg-surface-subtle hover:text-content hover:bg-surface rounded px-1.5 py-0.5 min-w-0 shrink-[1] cursor-pointer transition-colors"
               title="Manage branches"
             >
               <svg
@@ -106,7 +108,7 @@
                 <circle cx="18" cy="6" r="3" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3a3 3 0 01-3 3H6" />
               </svg>
-              <span class="font-mono truncate max-w-[12ch]">{{ projectBranch }}</span>
+              <span class="font-mono truncate">{{ projectBranch }}</span>
             </span>
           </button>
         </div>
@@ -158,14 +160,24 @@
                 >
                   {{ msg.content }}
                 </div>
-                <!-- Edit-and-resend: load this prompt back into the input -->
+                <!-- Copy prompt to clipboard -->
                 <button
-                  v-if="!agentStarting && !agentRunning"
-                  @click="editMessage(msg.content)"
+                  @click="copyMessage(msg.content, `user-${msg.id}`)"
                   class="invisible group-hover:visible flex items-center gap-1 text-[11px] text-content-subtle hover:text-content transition-colors px-1"
-                  title="Edit and resend"
+                  :title="copiedId === `user-${msg.id}` ? 'Copied!' : 'Copy message'"
                 >
                   <svg
+                    v-if="copiedId === `user-${msg.id}`"
+                    class="w-3 h-3 text-emerald-500"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <svg
+                    v-else
                     class="w-3 h-3"
                     fill="none"
                     stroke="currentColor"
@@ -175,16 +187,19 @@
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                     />
                   </svg>
-                  <span>Edit</span>
+                  <span>{{ copiedId === `user-${msg.id}` ? 'Copied' : 'Copy' }}</span>
                 </button>
               </div>
             </div>
 
             <!-- Assistant message -->
-            <div v-else-if="msg.role === 'assistant'" class="flex gap-3 animate-slide-up">
+            <div
+              v-else-if="msg.role === 'assistant'"
+              class="group flex gap-3 animate-slide-up"
+            >
               <div
                 class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
               >
@@ -212,6 +227,38 @@
                 <div class="text-sm text-content leading-relaxed min-w-0">
                   <Markdown :content="msg.content" />
                 </div>
+                <!-- Copy response to clipboard -->
+                <button
+                  @click="copyMessage(msg.content, `assistant-${msg.id}`)"
+                  class="invisible group-hover:visible flex items-center gap-1 mt-1.5 text-[11px] text-content-subtle hover:text-content transition-colors"
+                  :title="copiedId === `assistant-${msg.id}` ? 'Copied!' : 'Copy response'"
+                >
+                  <svg
+                    v-if="copiedId === `assistant-${msg.id}`"
+                    class="w-3 h-3 text-emerald-500"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <svg
+                    v-else
+                    class="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <span>{{ copiedId === `assistant-${msg.id}` ? 'Copied' : 'Copy' }}</span>
+                </button>
               </div>
             </div>
 
@@ -275,7 +322,7 @@
                 class="flex items-center gap-1.5 mt-2 text-xs text-content-subtle animate-fade-in"
               >
                 <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Processing...</span>
+                <span>Processing · {{ elapsedLabel }}</span>
               </div>
             </div>
           </div>
@@ -631,7 +678,6 @@
             v-model="selectedModel"
             :families="availableFamilies"
             v-model:bypass-mode="bypassMode"
-            :disabled="agentStarting || agentRunning"
             @open-skills="skillsPickerOpen = true"
           />
         </div>
@@ -693,6 +739,7 @@ const convApi = useConversations()
 const projectApi = useProjects()
 const sse = useSSE()
 const { toggle: toggleSidebar } = useSidebar()
+const { activeConversations } = useActiveConversations()
 
 const id = computed(() => route.params.id as string)
 
@@ -720,6 +767,16 @@ const liveOutput = ref('')
 const input = ref('')
 const agentRunning = ref(false)
 const agentStarting = ref(false)
+// Real-time elapsed counter for the active agent run. Started when a prompt
+// is sent (or when reconnecting to an already-running agent) and stopped on
+// the terminal SSE status event.
+const agentTimer = useAgentTimer()
+const elapsedLabel = computed(() => {
+  const s = agentTimer.elapsedSeconds.value
+  const mm = Math.floor(s / 60)
+  const ss = s % 60
+  return `${mm}:${ss.toString().padStart(2, '0')}`
+})
 const sendError = ref('')
 const skillsPickerOpen = ref(false)
 const branchModalOpen = ref(false)
@@ -727,6 +784,7 @@ const queue = ref<QueuedMessage[]>([])
 const editingQueueId = ref<string | null>(null)
 const { bypassMode } = useBypassMode()
 const voice = useVoiceInput(input)
+const { getDraft, setDraft, clearDraft } = useConversationDrafts()
 const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
@@ -805,21 +863,36 @@ function toggleVoice() {
   }
 }
 
-// Load a past user prompt back into the input so it can be tweaked and
-// re-sent as a new turn. History is preserved; the agent session is stateful
-// and cannot truly rewind.
-function editMessage(content: string) {
-  input.value = content
-  nextTick(() => {
-    inputEl.value?.focus()
-    const el = inputEl.value
-    if (el) {
-      const len = el.value.length
-      el.setSelectionRange(len, len)
+// Copy a message's raw content to the system clipboard. `key` uniquely
+// identifies which message was copied so the checkmark feedback can target
+// the right bubble. Falls back to a hidden textarea for non-secure contexts
+// (e.g. HTTP) where navigator.clipboard is unavailable.
+const copiedId = ref<string | null>(null)
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyMessage(content: string, key: string) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(content)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = content
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
     }
-    autoResize()
-    scrollToBottom()
-  })
+    copiedId.value = key
+    if (copyResetTimer) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => {
+      copiedId.value = null
+    }, 2000)
+  } catch {
+    // Clipboard write rejected (permissions, etc.) — silently no-op
+  }
 }
 
 // Insert a selected skill slash command into the input and focus it so the
@@ -860,6 +933,9 @@ async function load() {
     availableFamilies.value = modelsRes.families
     ensureDefault(modelsRes.default)
 
+    // Restore any unsent draft for this conversation.
+    input.value = getDraft(id.value)
+
     loadSidebarConversations()
     loadProjectInfo(conv.project_id)
 
@@ -867,6 +943,10 @@ async function load() {
       const agentStatus = await convApi.agentStatus(id.value)
       if (agentStatus && (agentStatus.status === 'running' || agentStatus.status === 'starting')) {
         agentRunning.value = true
+        // Resume the elapsed counter from the backend's start timestamp so
+        // reconnects (page refresh, background tab) show true wall-clock time.
+        const startedAtMs = agentStatus.startedAt ? Date.parse(agentStatus.startedAt) : NaN
+        agentTimer.start(Number.isNaN(startedAtMs) ? undefined : startedAtMs)
         connectSSE()
       }
     } catch {
@@ -916,6 +996,7 @@ function connectSSE() {
       ) {
         agentRunning.value = false
         agentStarting.value = false
+        agentTimer.stop()
         setSidebarStatus(id.value, 'idle')
         eventSource?.close()
         await reloadMessages()
@@ -1068,6 +1149,7 @@ async function confirmDeleteConversation() {
   deleteConvError.value = ''
   try {
     await convApi.delete(convId)
+    clearDraft(convId)
     sidebarConversations.value = sidebarConversations.value.filter((c) => c.id !== convId)
     deleteModalOpen.value = false
     deleteTarget.value = null
@@ -1115,6 +1197,11 @@ async function sendNow(prompt: string) {
   await nextTick()
   scrollToBottom()
 
+  // Show the typing indicator immediately so the user sees their prompt is
+  // being processed while the backend prepares the agent run. Without this,
+  // there's no visual feedback during the sendMessage API call.
+  agentStarting.value = true
+
   try {
     const result = await convApi.sendMessage(
       id.value,
@@ -1136,7 +1223,7 @@ async function sendNow(prompt: string) {
 
     agentRunning.value = true
     liveOutput.value = ''
-    agentStarting.value = true
+    agentTimer.start()
     setSidebarStatus(id.value, 'starting')
     connectSSE()
   } catch (err: unknown) {
@@ -1153,6 +1240,7 @@ async function sendNow(prompt: string) {
 
     agentRunning.value = false
     agentStarting.value = false
+    agentTimer.stop()
     setSidebarStatus(id.value, 'idle')
 
     // If the send failed but there are queued messages, drain the next one
@@ -1193,6 +1281,7 @@ async function confirmStopAgent() {
   } catch {
     agentRunning.value = false
     agentStarting.value = false
+    agentTimer.stop()
     setSidebarStatus(id.value, 'idle')
     eventSource?.close()
     stopModalOpen.value = false
@@ -1210,8 +1299,12 @@ watch([messages, liveOutput], async () => {
 // DOM input event.
 watch(input, () => autoResize())
 
+// Persist an unsent message so it survives page refreshes.
+watch(input, (val) => setDraft(id.value, val))
+
 onMounted(load)
 onUnmounted(() => {
+  agentTimer.stop()
   voice.stop()
   eventSource?.close()
 })

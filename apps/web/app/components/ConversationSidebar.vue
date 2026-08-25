@@ -33,13 +33,50 @@
         </slot>
       </div>
 
-      <!-- Conversation list -->
-      <div class="flex-1 overflow-y-auto px-2 pb-2">
-        <p class="px-3 py-2 text-[11px] font-medium text-content-subtle uppercase tracking-wide">Conversations</p>
-        <div v-if="loading" class="px-3 py-2 text-sm text-content-subtle">Loading...</div>
-        <div v-else-if="conversations.length === 0" class="px-3 py-2 text-sm text-content-subtle">No conversations yet.</div>
+      <!-- Active conversations (all projects, including current) -->
+      <div v-if="activeConversationsList.length > 0" class="px-2 pb-2 shrink-0">
+        <p class="px-3 py-2 text-[11px] font-medium text-content-subtle uppercase tracking-wide">Active</p>
         <div
-          v-for="conv in conversations"
+          v-for="conv in activeConversationsList"
+          :key="conv.id"
+          class="group relative flex items-center rounded-lg mb-0.5"
+          :class="conv.id === activeId && editingId !== conv.id ? 'bg-accent-muted' : ''"
+        >
+          <NuxtLink
+            :to="`/conversations/${conv.id}`"
+            class="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm truncate transition-colors flex items-center gap-2"
+            :class="conv.id === activeId ? 'text-content' : 'text-content-muted hover:bg-surface-subtle hover:text-content'"
+          >
+            <span
+              class="relative flex h-2 w-2 shrink-0 items-center justify-center"
+              title="Agent running"
+            >
+              <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />
+              <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            </span>
+            <div class="truncate flex-1 min-w-0">
+              <span class="truncate block">{{ conv.title }}</span>
+              <span class="text-[10px] text-content-subtle truncate block">{{ conv.project_name }}</span>
+            </div>
+            <span
+              v-if="hasDraft(conv.id)"
+              class="text-[10px] font-medium text-amber-500 shrink-0"
+              title="Unsent draft"
+            >Draft</span>
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- Divider between sections -->
+      <div v-if="activeConversationsList.length > 0" class="mx-3 border-t border-border"></div>
+
+      <!-- Current project conversations (inactive only — active ones live above) -->
+      <div class="flex-1 overflow-y-auto px-2 pb-2 pt-2">
+        <p class="px-3 py-2 text-[11px] font-medium text-content-subtle uppercase tracking-wide">This Project</p>
+        <div v-if="loading" class="px-3 py-2 text-sm text-content-subtle">Loading...</div>
+        <div v-else-if="inactiveConversations.length === 0" class="px-3 py-2 text-sm text-content-subtle">No conversations yet.</div>
+        <div
+          v-for="conv in inactiveConversations"
           :key="conv.id"
           class="group relative flex items-center rounded-lg mb-0.5"
           :class="conv.id === activeId && editingId !== conv.id ? 'bg-accent-muted' : ''"
@@ -74,6 +111,11 @@
               />
             </span>
             <span class="truncate flex-1">{{ conv.title }}</span>
+            <span
+              v-if="hasDraft(conv.id)"
+              class="text-[10px] font-medium text-amber-500 shrink-0"
+              title="Unsent draft"
+            >Draft</span>
             <span
               v-if="isAgentActive(conv)"
               class="text-[10px] font-medium text-emerald-500 shrink-0"
@@ -120,9 +162,14 @@
             <svg v-if="theme === 'dark'" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
             <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
           </button>
-          <NuxtLink to="/settings" class="p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle transition-colors" aria-label="Settings" title="Settings">
+          <button
+            @click="openSettings"
+            class="p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle transition-colors"
+            aria-label="Settings"
+            title="Settings"
+          >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          </NuxtLink>
+          </button>
         </div>
       </div>
     </aside>
@@ -136,8 +183,18 @@ interface Conversation {
   agent_status: string
 }
 
+interface ActiveConversation {
+  id: string
+  project_id: string
+  project_name: string
+  title: string
+  agent_status: string
+}
+
 const props = defineProps<{
   conversations: Conversation[]
+  activeConversations?: ActiveConversation[]
+  currentProjectId?: string
   activeId?: string
   loading?: boolean
 }>()
@@ -150,11 +207,25 @@ const emit = defineEmits<{
 
 const { sidebarOpen, close } = useSidebar()
 const { theme, toggle: toggleTheme } = useTheme()
+const { open: openSettings } = useSettingsModal()
+const { hasDraft } = useConversationDrafts()
 
 const ACTIVE_STATUSES = ['starting', 'running', 'stopping']
 function isAgentActive(conv: Conversation) {
   return ACTIVE_STATUSES.includes(conv.agent_status)
 }
+
+// Active conversations across ALL projects (including the current one).
+// Active conversations always surface in the "Active" section regardless of
+// which project they belong to.
+const activeConversationsList = computed(() => props.activeConversations ?? [])
+
+// Current project conversations that are NOT actively running — active ones
+// are shown in the "Active" section above, so we exclude them here to avoid
+// duplication.
+const inactiveConversations = computed(() =>
+  props.conversations.filter((c) => !isAgentActive(c)),
+)
 
 const editingId = ref<string | null>(null)
 const titleDraft = ref('')
