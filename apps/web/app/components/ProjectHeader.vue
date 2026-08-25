@@ -38,7 +38,7 @@
 
     <div class="flex flex-col min-w-0">
       <div class="flex items-center gap-2 min-w-0">
-        <h1 class="text-sm font-semibold truncate text-content min-w-0">
+        <h1 class="text-sm font-semibold text-content min-w-0">
           <ProjectSwitcher
             v-if="project"
             :current-id="project.id"
