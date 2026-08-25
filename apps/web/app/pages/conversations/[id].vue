@@ -64,7 +64,7 @@
         <div class="max-w-3xl mx-auto px-4 py-8 space-y-6">
           <!-- Empty state -->
           <div
-            v-if="messages.length === 0 && !liveOutput && !agentStarting"
+            v-if="messages.length === 0 && !liveOutput && !agentStarting && !agentRunning"
             class="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in"
           >
             <div
@@ -225,7 +225,7 @@
           </template>
 
           <!-- Live output -->
-          <div v-if="liveOutput" class="flex gap-3 animate-fade-in">
+          <div v-if="liveOutput || (agentRunning && !agentStarting)" class="flex gap-3 animate-fade-in">
             <div
               class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
             >
