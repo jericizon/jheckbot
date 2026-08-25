@@ -36,7 +36,6 @@
               v-else
               @click="startEditTitle"
               class="flex items-center gap-1 min-w-0 group"
-              :disabled="agentRunning"
             >
               <span class="text-xs text-content-subtle truncate">{{
                 conversation?.title || 'Conversation'
@@ -55,13 +54,6 @@
                 />
               </svg>
             </button>
-            <span
-              v-if="agentRunning"
-              class="flex items-center gap-1 text-xs text-emerald-500 font-medium shrink-0 tabular-nums"
-            >
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Active · {{ elapsedLabel }}
-            </span>
           </div>
         </template>
       </ProjectHeader>
@@ -1043,7 +1035,6 @@ function scrollToBottom() {
 }
 
 function startEditTitle() {
-  if (agentRunning.value) return
   titleDraft.value = conversation.value?.title || ''
   editingTitle.value = true
   nextTick(() => titleInputEl.value?.focus())
