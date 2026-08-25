@@ -114,6 +114,7 @@
           <ProjectSwitcher
             :current-id="conversation?.project_id"
             :current-label="projectName || undefined"
+            align="right"
             class="hidden sm:block"
           />
         </template>
@@ -150,11 +151,35 @@
           <!-- Message list -->
           <template v-for="msg in messages" :key="msg.id">
             <!-- User message -->
-            <div v-if="msg.role === 'user'" class="flex justify-end animate-slide-up">
-              <div
-                class="max-w-[80%] rounded-2xl rounded-br-md bg-accent-muted px-4 py-2.5 text-sm text-content whitespace-pre-wrap break-words"
-              >
-                {{ msg.content }}
+            <div v-if="msg.role === 'user'" class="group flex justify-end animate-slide-up">
+              <div class="flex flex-col items-end gap-1 max-w-[80%]">
+                <div
+                  class="rounded-2xl rounded-br-md bg-accent-muted px-4 py-2.5 text-sm text-content whitespace-pre-wrap break-words"
+                >
+                  {{ msg.content }}
+                </div>
+                <!-- Edit-and-resend: load this prompt back into the input -->
+                <button
+                  v-if="!agentStarting && !agentRunning"
+                  @click="editMessage(msg.content)"
+                  class="invisible group-hover:visible flex items-center gap-1 text-[11px] text-content-subtle hover:text-content transition-colors px-1"
+                  title="Edit and resend"
+                >
+                  <svg
+                    class="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  <span>Edit</span>
+                </button>
               </div>
             </div>
 
@@ -764,7 +789,7 @@ useConversationPolling(
 )
 
 const availableFamilies = ref<ModelFamily[]>([])
-const selectedModel = ref('glm-5-2')
+const { selectedModel, ensureDefault } = useSelectedModel()
 
 function autoResize() {
   const el = inputEl.value
@@ -778,6 +803,23 @@ function toggleVoice() {
   if (voice.listening.value) {
     nextTick(() => inputEl.value?.focus())
   }
+}
+
+// Load a past user prompt back into the input so it can be tweaked and
+// re-sent as a new turn. History is preserved; the agent session is stateful
+// and cannot truly rewind.
+function editMessage(content: string) {
+  input.value = content
+  nextTick(() => {
+    inputEl.value?.focus()
+    const el = inputEl.value
+    if (el) {
+      const len = el.value.length
+      el.setSelectionRange(len, len)
+    }
+    autoResize()
+    scrollToBottom()
+  })
 }
 
 // Insert a selected skill slash command into the input and focus it so the
@@ -816,7 +858,7 @@ async function load() {
     conversation.value = conv
     messages.value = msgs
     availableFamilies.value = modelsRes.families
-    selectedModel.value = modelsRes.default
+    ensureDefault(modelsRes.default)
 
     loadSidebarConversations()
     loadProjectInfo(conv.project_id)

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-wrap items-center gap-2 mt-2 px-1">
+  <div class="flex items-center gap-2 mt-2 px-1 overflow-x-auto">
     <select
       :value="currentFamilyId"
       @change="onFamilyChange(($event.target as HTMLSelectElement).value)"
@@ -98,9 +98,6 @@
       <span>Bypass {{ bypassMode ? 'On' : 'Off' }}</span>
     </button>
     <slot name="actions" />
-    <p class="text-xs text-content-subtle shrink-0 ml-auto hidden sm:block">
-      Enter to send, Shift+Enter for new line
-    </p>
   </div>
 </template>
 

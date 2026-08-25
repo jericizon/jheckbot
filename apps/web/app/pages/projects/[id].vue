@@ -258,65 +258,9 @@
               v-model:bypass-mode="bypassMode"
               :disabled="sending"
               @open-skills="skillsPickerOpen = true"
-            >
-              <template #actions>
-                <button
-                  @click="checkHealth"
-                  :disabled="healthLoading"
-                  class="text-xs text-content-muted hover:text-content transition-colors disabled:opacity-50 shrink-0"
-                >
-                  {{ healthLoading ? 'Checking...' : 'Health' }}
-                </button>
-              </template>
-            </MessageToolbar>
+            />
 
             <p v-if="sendError" class="mt-3 text-sm text-red-500">{{ sendError }}</p>
-
-            <!-- Health details -->
-            <div v-if="health" class="w-full mt-4 grid grid-cols-2 gap-2 text-xs">
-              <div
-                class="flex items-center gap-2"
-                :class="health.directory ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.directory ? '✓' : '○' }}</span> Directory
-              </div>
-              <div
-                class="flex items-center gap-2"
-                :class="health.accessible ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.accessible ? '✓' : '○' }}</span> Accessible
-              </div>
-              <div
-                class="flex items-center gap-2"
-                :class="health.gitRepository ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.gitRepository ? '✓' : '○' }}</span> Git
-              </div>
-              <div
-                class="flex items-center gap-2"
-                :class="health.nodeProject ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.nodeProject ? '✓' : '○' }}</span> Node
-              </div>
-              <div
-                class="flex items-center gap-2"
-                :class="health.pnpmProject ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.pnpmProject ? '✓' : '○' }}</span> pnpm
-              </div>
-              <div
-                class="flex items-center gap-2"
-                :class="health.dockerProject ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.dockerProject ? '✓' : '○' }}</span> Docker
-              </div>
-              <div
-                class="flex items-center gap-2"
-                :class="health.devinCli ? 'text-emerald-500' : 'text-content-subtle'"
-              >
-                <span>{{ health.devinCli ? '✓' : '○' }}</span> Devin CLI
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -381,21 +325,10 @@ interface Conversation {
   last_message_at: string | null
   created_at: string
 }
-interface HealthResult {
-  directory: boolean
-  accessible: boolean
-  gitRepository: boolean
-  nodeProject: boolean
-  pnpmProject: boolean
-  dockerProject: boolean
-  devinCli: boolean
-}
 
 const project = ref<Project | null>(null)
 const conversations = ref<Conversation[]>([])
 const convLoading = ref(true)
-const health = ref<HealthResult | null>(null)
-const healthLoading = ref(false)
 const projectBranch = ref<string | null>(null)
 const branchModalOpen = ref(false)
 
@@ -425,7 +358,7 @@ const skillsPickerOpen = ref(false)
 const { bypassMode } = useBypassMode()
 
 const availableFamilies = ref<ModelFamily[]>([])
-const selectedModel = ref('glm-5-2')
+const { selectedModel, ensureDefault } = useSelectedModel()
 
 function autoResize() {
   const el = inputEl.value
@@ -454,7 +387,7 @@ async function load() {
     project.value = proj
     conversations.value = convs
     availableFamilies.value = modelsRes.families
-    selectedModel.value = modelsRes.default
+    ensureDefault(modelsRes.default)
     // Load branch best-effort; non-git projects just leave it null.
     projectsApi
       .branch(id.value)
@@ -473,17 +406,6 @@ async function load() {
 
 function handleBranchSwitched(branch: string) {
   projectBranch.value = branch
-}
-
-async function checkHealth() {
-  healthLoading.value = true
-  try {
-    health.value = await projectsApi.health(id.value)
-  } catch {
-    // ignore
-  } finally {
-    healthLoading.value = false
-  }
 }
 
 function startEdit() {

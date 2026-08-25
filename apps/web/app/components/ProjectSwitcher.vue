@@ -13,7 +13,8 @@
 
     <div
       v-if="open"
-      class="absolute right-0 mt-1 w-64 rounded-lg border border-border bg-surface-elevated shadow-lg z-50 overflow-hidden animate-slide-up"
+      class="absolute mt-1 w-64 rounded-lg border border-border bg-surface-elevated shadow-lg z-50 overflow-hidden animate-slide-up"
+      :class="align === 'right' ? 'right-0' : 'left-0'"
     >
       <div class="px-3 py-2 text-[11px] font-medium text-content-subtle uppercase tracking-wide border-b border-border">
         Switch project
@@ -48,10 +49,16 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  currentId?: string
-  currentLabel?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    currentId?: string
+    currentLabel?: string
+    align?: 'left' | 'right'
+  }>(),
+  {
+    align: 'left',
+  },
+)
 
 const projectsApi = useProjects()
 
