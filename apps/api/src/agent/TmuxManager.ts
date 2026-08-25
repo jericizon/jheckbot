@@ -104,6 +104,22 @@ export class TmuxManager {
     }
   }
 
+  /** Return the OS process ID of the tmux pane's command. */
+  getPanePid(name: string): number | undefined {
+    if (!this.sessionExists(name)) return undefined
+    try {
+      const output = execFileSync(
+        this.tmuxBin,
+        ['display-message', '-t', name, '-p', '#{pane_pid}'],
+        { stdio: 'pipe', encoding: 'utf-8' },
+      ).trim()
+      const pid = Number.parseInt(output, 10)
+      return Number.isNaN(pid) || pid <= 0 ? undefined : pid
+    } catch {
+      return undefined
+    }
+  }
+
   /** Set a tmux session option. */
   setOption(name: string, option: string, value: string): void {
     execFileSync(

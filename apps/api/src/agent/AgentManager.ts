@@ -1,5 +1,6 @@
 import { DevinAdapter } from './DevinAdapter.js'
 import { TmuxManager, type TmuxSession } from './TmuxManager.js'
+import { LogTailer } from './LogTailer.js'
 import { TerminalOutputNormalizer } from './TerminalOutputNormalizer.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
 import { ConversationRepository, type ConversationRecord } from '../repositories/ConversationRepository.js'
@@ -62,6 +63,7 @@ interface ManagedAgentRun {
   pendingOutput: string[]
   pendingLog: string[]
   lastLogSnapshot: string
+  logTailer?: LogTailer
   watcher?: WatcherHandle
   watcherInFlight?: Promise<void>
   terminalPersistence?: Promise<void>
@@ -639,6 +641,7 @@ export class AgentManager {
       pendingOutput: [],
       pendingLog: [],
       lastLogSnapshot: '',
+      logTailer: undefined,
       terminalizing: false,
       stopRequested: false,
       lastFlushAt: Date.now(),
@@ -680,6 +683,14 @@ export class AgentManager {
 
   private startWatcher(state: ManagedAgentRun): void {
     if (state.watcher || state.terminalizing) return
+
+    if (this.tmux) {
+      try {
+        state.logTailer = new LogTailer(state.run.sessionName, this.tmux, this.devin.getLogDir())
+      } catch {
+        // Log tailing is best-effort; the run continues without it.
+      }
+    }
 
     state.watcher = setInterval(() => {
       if (state.terminalizing || state.watcherInFlight) return
@@ -829,6 +840,7 @@ export class AgentManager {
     state.pendingOutput = []
     state.pendingLog = []
     state.lastLogSnapshot = ''
+    state.logTailer = undefined
     state.sessionIdPersisted = false
     state.stopRequested = false
     state.terminalizing = false
@@ -1035,14 +1047,24 @@ export class AgentManager {
       state.pendingOutput = [outputWithMedia]
     }
 
-    // Capture raw ANSI-stripped terminal output for the activity log.
-    // This includes progress indicators, commands, and status lines that
-    // the normalizer filters out.
-    const rawLines = this.normalizer.stripAnsi(captured)
-    const rawSnapshot = rawLines.join('\n')
-    if (rawSnapshot && rawSnapshot !== state.lastLogSnapshot) {
-      state.lastLogSnapshot = rawSnapshot
-      state.pendingLog = [rawSnapshot]
+    // Tail the Devin ACP trace log for live activity output. The ACP server
+    // writes the meaningful trace; the tmux pane itself is empty in --print
+    // mode. Fall back to the raw terminal snapshot for tests/legacy paths.
+    let logLines: string[] = []
+    try {
+      logLines = state.logTailer?.tail() ?? []
+    } catch {
+      // Log tailing is best-effort; the run continues without it.
+    }
+    if (logLines.length > 0) {
+      state.pendingLog.push(...logLines)
+    } else {
+      const rawLines = this.normalizer.stripAnsi(captured)
+      const rawSnapshot = rawLines.join('\n')
+      if (rawSnapshot && rawSnapshot !== state.lastLogSnapshot) {
+        state.lastLogSnapshot = rawSnapshot
+        state.pendingLog = [rawSnapshot]
+      }
     }
   }
 

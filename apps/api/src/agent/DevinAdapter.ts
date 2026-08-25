@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { dirname, resolve } from 'node:path'
 import type { Skill } from '@jheckbot/shared'
 import { DEFAULT_DEVIN_MODEL, DEVIN_MODEL_FAMILIES } from '@jheckbot/shared'
 import { TmuxManager, type TmuxSession } from './TmuxManager.js'
@@ -41,6 +42,25 @@ export class DevinAdapter implements AgentAdapter {
 
   defaultModel(): string {
     return DEFAULT_DEVIN_MODEL
+  }
+
+  /** Return the Devin CLI log directory used by `devin acp` processes. */
+  getLogDir(): string {
+    const bin = this.devinBin.includes('/') ? this.devinBin : this.resolveBinPath()
+    try {
+      const resolved = realpathSync(bin)
+      return resolve(dirname(resolved), '../../../logs')
+    } catch {
+      return resolve(dirname(bin), '../../logs')
+    }
+  }
+
+  private resolveBinPath(): string {
+    try {
+      return execFileSync('which', [this.devinBin], { stdio: 'pipe', encoding: 'utf8' }).trim()
+    } catch {
+      return this.devinBin
+    }
   }
 
   supportedModels() {

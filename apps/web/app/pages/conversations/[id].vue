@@ -260,6 +260,26 @@
               >
                 <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Processing · {{ elapsedLabel }}</span>
+                <button
+                  v-if="liveLog"
+                  @click="logsOpen = !logsOpen"
+                  class="ml-auto flex items-center gap-1.5 text-[11px] text-content-subtle hover:text-content transition-colors min-h-[44px] px-2 rounded"
+                  :title="logsOpen ? 'Hide live logs' : 'Show live logs'"
+                >
+                  <span class="font-medium">{{ logsOpen ? 'Hide logs' : 'Live logs' }}</span>
+                  <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                </button>
+              </div>
+
+              <!-- Live ACP trace logs -->
+              <div
+                v-if="logsOpen && liveLog"
+                class="mt-3 rounded-lg border border-border bg-surface-subtle overflow-hidden"
+              >
+                <pre
+                  ref="logsContainer"
+                  class="p-3 text-[11px] font-mono text-content leading-relaxed max-h-[40vh] overflow-auto whitespace-pre-wrap break-words"
+                >{{ liveLog }}</pre>
               </div>
             </div>
           </div>
@@ -736,7 +756,10 @@ const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
+const logsContainer = ref<HTMLPreElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
+const liveLog = ref('')
+const logsOpen = ref(false)
 const changedFilesPanel = ref<{ refresh: () => void } | null>(null)
 const project = ref<Project | null>(null)
 const projectBranch = ref<string | null>(null)
@@ -997,6 +1020,12 @@ function connectSSE() {
       liveOutput.value = data.content
       await nextTick()
       scrollToBottom()
+    } else if (event.type === 'log') {
+      agentStarting.value = false
+      const data = JSON.parse(event.data)
+      if (data.content) {
+        appendLog(data.content)
+      }
     } else if (event.type === 'media') {
       // The media file is also injected into the output buffer as markdown,
       // so it renders inline in the live output. This event signals a new
@@ -1034,6 +1063,23 @@ function scrollToBottom() {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
+}
+
+function appendLog(content: string) {
+  if (!content) return
+  if (liveLog.value) liveLog.value += '\n'
+  liveLog.value += content
+  // Cap live log length so the UI stays responsive during long runs.
+  if (liveLog.value.length > 500_000) {
+    liveLog.value = liveLog.value.slice(-400_000)
+  }
+  if (!logsOpen.value) logsOpen.value = true
+  nextTick(() => {
+    if (logsContainer.value) {
+      logsContainer.value.scrollTop = logsContainer.value.scrollHeight
+    }
+    scrollToBottom()
+  })
 }
 
 function startEditTitle() {
@@ -1203,6 +1249,8 @@ async function sendNow(prompt: string) {
 
     agentRunning.value = true
     liveOutput.value = ''
+    liveLog.value = ''
+    logsOpen.value = false
     agentTimer.start()
     setSidebarStatus(id.value, 'starting')
     connectSSE()

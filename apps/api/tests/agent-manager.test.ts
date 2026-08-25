@@ -571,6 +571,47 @@ describe('AgentManager', () => {
     }
   })
 
+  it('tails the Devin ACP log file into log events', async () => {
+    vi.useFakeTimers()
+    try {
+      const tmux = new TmuxManager('tmux')
+      const logDir = join(TMP, 'devin-logs')
+      const logFile = join(logDir, 'devin_20260826-000000_1234.log')
+      mkdirSync(logDir, { recursive: true })
+      writeFileSync(logFile, '')
+
+      vi.spyOn(devin, 'getLogDir').mockReturnValue(logDir)
+      vi.spyOn(tmux, 'getPanePid').mockReturnValue(1234)
+      vi.spyOn(tmux, 'sessionExists').mockReturnValue(true)
+      vi.spyOn(devin, 'captureOutput').mockReturnValue([])
+
+      const pathFactory = (roots: AllowedRoot[]) => new PathValidator(roots)
+      const logManager = new AgentManager(devin, tmux, repo, pathFactory, conversationRepo, messageRepo, eventRepo)
+
+      const received: AgentEventRecord[] = []
+      logManager.subscribe('conv-logs', (event) => received.push(event))
+
+      await logManager.start({ conversationId: 'conv-logs', projectId: 'proj-1', prompt: 'tail logs' })
+
+      // The first tick discovers the empty log file and starts at the current end.
+      await vi.advanceTimersByTimeAsync(100)
+
+      // New ACP trace lines written after discovery are tailed and flushed.
+      writeFileSync(logFile, 'first trace line\n')
+      await vi.advanceTimersByTimeAsync(100)
+      writeFileSync(logFile, 'second trace line\n', { flag: 'a' })
+      await vi.advanceTimersByTimeAsync(100)
+
+      const logEvents = received.filter((e) => e.event_type === 'log')
+      expect(logEvents.length).toBeGreaterThanOrEqual(1)
+      const contents = logEvents.map((e) => JSON.parse(e.content ?? '{}').content ?? '')
+      expect(contents.some((c) => c.includes('first trace line'))).toBe(true)
+      expect(contents.some((c) => c.includes('second trace line'))).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   // Regression: a --resume that fails because the target Devin session is
   // locked by another process ("failed to start ACP agent session") must
   // clear the stale session ID and retry once as a fresh (non-resume) run.
