@@ -46,7 +46,7 @@
 
     <!-- Cartoon status / activity bar -->
     <div
-      class="w-12 h-1.5 sm:w-14 rounded-full bg-black/15 overflow-hidden border border-black/10"
+      class="w-12 h-1.5 sm:w-14 rounded-full bg-black/15 dark:bg-white/15 overflow-hidden border border-black/10 dark:border-white/10"
       role="progressbar"
       :aria-valuenow="bar.percent"
       aria-valuemin="0"

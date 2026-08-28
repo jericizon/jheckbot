@@ -13,16 +13,31 @@ export function gridColumns(count: number, viewport: 'mobile' | 'desktop'): numb
 }
 
 // Row/col + percentage positions for `count` cells in a `cols`-wide grid.
-// Cells are centered as a block; left/top locate the cell's center point.
+// A center band is reserved for the CEO so no employee overlaps the center.
 export function gridPositions(count: number, cols: number): CubiclePosition[] {
   if (count <= 0) return []
   const rows = Math.ceil(count / cols)
   const positions: CubiclePosition[] = []
+  // Reserve a center band for the CEO corner office.
+  const centerGap = 20 // % of scene height
+  const topZone = 50 - centerGap / 2 // 40%
+  const bottomZone = 50 + centerGap / 2 // 60%
+  const topRows = Math.ceil(rows / 2)
+  const bottomRows = rows - topRows
+
   for (let i = 0; i < count; i++) {
     const row = Math.floor(i / cols)
     const col = i % cols
     const left = ((col + 0.5) / cols) * 100
-    const top = ((row + 0.5) / rows) * 100
+
+    let top: number
+    if (row < topRows) {
+      top = ((row + 0.5) / topRows) * topZone
+    } else {
+      const bottomRow = row - topRows
+      top = bottomZone + ((bottomRow + 0.5) / bottomRows) * (100 - bottomZone)
+    }
+
     positions.push({ row, col, left, top })
   }
   return positions

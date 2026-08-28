@@ -35,6 +35,29 @@ describe('gridPositions', () => {
       expect(p.top).toBeLessThanOrEqual(100)
     }
   })
+
+  it('never places an employee at the exact scene center', () => {
+    for (const count of [1, 2, 3, 4, 5, 6, 7, 8, 9, 12]) {
+      const cols = Math.min(4, count)
+      const pos = gridPositions(count, cols)
+      for (const p of pos) {
+        // No cell should be within the center band (40-60% top)
+        expect(p.top < 40 || p.top > 60).toBe(true)
+        expect(p).not.toHaveProperty('top', 50)
+      }
+    }
+  })
+
+  it('keeps a center gap for the CEO across various headcounts', () => {
+    for (const count of [1, 3, 6, 9, 12]) {
+      const cols = Math.min(4, count)
+      const pos = gridPositions(count, cols)
+      // All positions should be either above 40% or below 60%
+      for (const p of pos) {
+        expect(p.top < 40 || p.top > 60).toBe(true)
+      }
+    }
+  })
 })
 
 describe('sceneHeightFor', () => {
