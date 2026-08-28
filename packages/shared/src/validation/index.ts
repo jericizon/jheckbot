@@ -1,5 +1,7 @@
 // Placeholder validators — full path security validation is implemented in Phase 2.
 
+export * from './office.js'
+
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }

@@ -1,3 +1,5 @@
+export * from './office.js'
+
 export const PORTS = {
   WEB: 8800,
   API: 8801,

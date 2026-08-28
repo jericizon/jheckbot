@@ -1,5 +1,7 @@
 // Placeholder types — expanded in later phases with full schema.
 
+export * from './office.js'
+
 export interface Project {
   id: string
   name: string
