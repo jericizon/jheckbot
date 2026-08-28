@@ -15,7 +15,7 @@
 
       <!-- Avatar disc -->
       <div
-        class="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl sm:text-3xl shadow-md border-[3px] transition-transform group-hover:scale-110 group-hover:-translate-y-1"
+        class="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-2xl sm:text-3xl shadow-md border-[3px] transition-transform group-hover:scale-110 group-hover:-translate-y-1"
         :class="avatarClasses"
         aria-hidden="true"
       >
@@ -40,13 +40,13 @@
     </div>
 
     <!-- Name -->
-    <span class="text-xs font-bold text-content truncate max-w-[5.5rem] drop-shadow-sm">
+    <span class="text-xs font-bold text-content truncate max-w-[7rem] drop-shadow-sm">
       {{ agent.name }}
     </span>
 
     <!-- Cartoon status / activity bar -->
     <div
-      class="w-14 h-1.5 sm:w-16 rounded-full bg-black/15 overflow-hidden border border-black/10"
+      class="w-12 h-1.5 sm:w-14 rounded-full bg-black/15 overflow-hidden border border-black/10"
       role="progressbar"
       :aria-valuenow="bar.percent"
       aria-valuemin="0"
