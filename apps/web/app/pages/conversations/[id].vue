@@ -262,7 +262,7 @@
                 <span>Processing · {{ elapsedLabel }}</span>
                 <button
                   v-if="liveLog"
-                  @click="logsOpen = !logsOpen"
+                  @click="toggleLogs"
                   class="ml-auto flex items-center gap-1.5 text-[11px] text-content-subtle hover:text-content transition-colors min-h-[44px] px-2 rounded"
                   :title="logsOpen ? 'Hide live logs' : 'Show live logs'"
                 >
@@ -752,6 +752,11 @@ const { bypassMode } = useBypassMode()
 const voice = useVoiceInput(input)
 const { getDraft, setDraft, clearDraft } = useConversationDrafts()
 const { getQueue, setQueue, clearQueue } = useConversationQueues()
+const {
+  getLogsOpen,
+  hasLogsOpenPreference,
+  setLogsOpen,
+} = useConversationLogsOpen()
 const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
@@ -759,7 +764,7 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const logsContainer = ref<HTMLPreElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 const liveLog = ref('')
-const logsOpen = ref(false)
+const logsOpen = ref(getLogsOpen(id.value))
 const changedFilesPanel = ref<{ refresh: () => void } | null>(null)
 const project = ref<Project | null>(null)
 const projectBranch = ref<string | null>(null)
@@ -1073,13 +1078,20 @@ function appendLog(content: string) {
   if (liveLog.value.length > 500_000) {
     liveLog.value = liveLog.value.slice(-400_000)
   }
-  if (!logsOpen.value) logsOpen.value = true
+  // Only auto-open on first run; once the user has toggled the panel,
+  // respect that preference across reloads and new runs.
+  if (!logsOpen.value && !hasLogsOpenPreference(id.value)) logsOpen.value = true
   nextTick(() => {
     if (logsContainer.value) {
       logsContainer.value.scrollTop = logsContainer.value.scrollHeight
     }
     scrollToBottom()
   })
+}
+
+function toggleLogs() {
+  logsOpen.value = !logsOpen.value
+  setLogsOpen(id.value, logsOpen.value)
 }
 
 function startEditTitle() {
@@ -1250,7 +1262,9 @@ async function sendNow(prompt: string) {
     agentRunning.value = true
     liveOutput.value = ''
     liveLog.value = ''
-    logsOpen.value = false
+    // Honor the user's saved logs preference for this conversation; defaults
+    // to closed when no preference exists yet (appendLog will auto-open).
+    logsOpen.value = getLogsOpen(id.value)
     agentTimer.start()
     setSidebarStatus(id.value, 'starting')
     connectSSE()
