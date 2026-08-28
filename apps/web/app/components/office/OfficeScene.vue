@@ -30,9 +30,9 @@
 
       <div class="relative z-10 flex flex-col items-center gap-8 sm:gap-12">
         <!-- CEO desk -->
-        <div class="flex flex-col items-center gap-3">
+        <div class="flex flex-col items-center gap-3 w-full">
           <div
-            class="relative bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-lg p-4 sm:p-5 w-44 sm:w-56"
+            class="relative bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-lg p-3 sm:p-5 w-36 sm:w-56"
           >
             <div class="flex items-end justify-center gap-3">
               <div class="w-3 h-8 bg-content-subtle/20 rounded-sm" aria-hidden="true" />
@@ -52,7 +52,7 @@
 
         <!-- Employee desks -->
         <div
-          class="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 w-full max-w-3xl justify-items-center"
+          class="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-8 w-full max-w-3xl justify-items-center"
         >
           <div
             v-for="agent in employees"
@@ -60,7 +60,7 @@
             class="flex flex-col items-center gap-3"
           >
             <div
-              class="bg-sky-50 dark:bg-sky-900/10 border border-sky-100 dark:border-sky-900/30 rounded-lg p-3 sm:p-4 w-32 sm:w-40"
+              class="bg-sky-50 dark:bg-sky-900/10 border border-sky-100 dark:border-sky-900/30 rounded-lg p-2 sm:p-4 w-28 sm:w-40"
             >
               <div class="flex items-end justify-center gap-2">
                 <div

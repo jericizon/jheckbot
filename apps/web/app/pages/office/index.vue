@@ -1,10 +1,10 @@
 <template>
-  <div class="pb-24">
+  <div>
     <AppHeader sticky>
       <div class="w-full flex items-center justify-between gap-2">
         <h1 class="text-lg font-semibold">Office</h1>
         <span
-          class="text-xs text-content-subtle font-mono truncate max-w-[50%]"
+          class="hidden sm:inline text-xs text-content-subtle font-mono truncate max-w-[50%]"
           :title="officeId"
         >
           {{ officeId }}
@@ -12,7 +12,7 @@
       </div>
     </AppHeader>
 
-    <main class="px-4 py-4 max-w-6xl mx-auto space-y-4">
+    <main class="px-4 py-4 max-w-6xl mx-auto space-y-4 pb-20 sm:pb-4">
       <OfficeScene
         :agents="agents"
         :ceo="ceo"
@@ -75,8 +75,18 @@
         <OfficeActivityPanel :events="events" :loading="eventsLoading" />
       </div>
 
-      <OfficeChatButton :ceo="ceo" :office-id="officeId" />
+      <!-- Desktop chat link -->
+      <div class="hidden sm:block">
+        <OfficeChatButton :ceo="ceo" :office-id="officeId" />
+      </div>
     </main>
+
+    <!-- Mobile sticky action bar -->
+    <div
+      class="sm:hidden fixed bottom-0 left-0 right-0 z-20 p-3 bg-surface/95 backdrop-blur-sm border-t border-border"
+    >
+      <OfficeChatButton :ceo="ceo" :office-id="officeId" />
+    </div>
   </div>
 </template>
 

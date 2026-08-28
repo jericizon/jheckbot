@@ -12,7 +12,7 @@
       />
     </div>
 
-    <ul v-else-if="events.length" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+    <ul v-else-if="events.length" class="space-y-2 max-h-52 sm:max-h-60 overflow-y-auto pr-1">
       <li
         v-for="event in events"
         :key="event.id"

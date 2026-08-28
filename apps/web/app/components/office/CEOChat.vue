@@ -12,7 +12,7 @@
           <h1 class="text-lg font-semibold">Talk to CEO</h1>
         </div>
         <span
-          class="text-xs text-content-subtle font-mono truncate max-w-[50%]"
+          class="hidden sm:inline text-xs text-content-subtle font-mono truncate max-w-[50%]"
           :title="officeId"
         >
           {{ officeId }}
@@ -35,7 +35,7 @@
         >
           <div
             :class="[
-              'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+              'max-w-[92%] sm:max-w-[80%] rounded-lg px-3 py-2 text-sm',
               message.sender === 'user'
                 ? 'bg-accent text-white'
                 : 'bg-surface-elevated border border-border',

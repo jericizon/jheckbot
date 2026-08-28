@@ -12,7 +12,7 @@
       />
     </div>
 
-    <ul v-else-if="tasks.length" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+    <ul v-else-if="tasks.length" class="space-y-2 max-h-52 sm:max-h-60 overflow-y-auto pr-1">
       <li
         v-for="task in tasks"
         :key="task.id"
