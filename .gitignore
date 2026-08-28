@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.output/
+.nuxt/
+.nitro/
+.cache/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker/data/
+
+# Agent media (keep the directory, ignore contents)
+data/media/*
+!data/media/.gitkeep
+
+# Temp
+tmp/
+temp/
+
+# Superpowers SDD artifacts (internal development tracking)
+.superpowers/sdd/

@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme */
+    color-scheme: light;
+    --surface: 248 249 250;
+    --surface-elevated: 255 255 255;
+    --surface-subtle: 243 244 246;
+    --content: 17 24 39;
+    --content-muted: 75 85 99;
+    --content-subtle: 107 114 128;
+    --border: 226 229 235;
+    --border-subtle: 237 239 243;
+    --accent: 17 24 39;
+    --accent-hover: 31 41 55;
+    --accent-muted: 243 244 246;
+  }
+
+  .dark {
+    /* Dark theme */
+    color-scheme: dark;
+    --surface: 18 18 21;
+    --surface-elevated: 58 58 64;
+    --surface-subtle: 48 48 54;
+    --content: 235 235 238;
+    --content-muted: 185 185 194;
+    --content-subtle: 158 158 168;
+    --border: 72 72 80;
+    --border-subtle: 64 64 70;
+    --accent: 244 244 245;
+    --accent-hover: 228 228 231;
+    --accent-muted: 39 39 42;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-family: theme('fontFamily.sans');
+    background-color: rgb(var(--surface));
+    color: rgb(var(--content));
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--content-subtle) / 0.3);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--content-subtle) / 0.5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* iOS safe-area helpers for notched / home-indicator devices */
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-pt {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-area-mb {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+}
