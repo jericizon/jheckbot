@@ -26,6 +26,7 @@ export class OfficeEventService {
       metadata: input.metadata ?? null,
     } as OfficeEventCreateData)
     this.emitter.emit(event.officeId, event)
+    this.emitter.emit('*', event)
     return event
   }
 
@@ -48,5 +49,6 @@ export class OfficeEventService {
 
   emit(event: OfficeEvent): void {
     this.emitter.emit(event.officeId, event)
+    this.emitter.emit('*', event)
   }
 }

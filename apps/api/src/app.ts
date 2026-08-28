@@ -27,6 +27,7 @@ import { MediaService } from './services/MediaService.js'
 import { OfficeAgentService } from './services/OfficeAgentService.js'
 import { OfficeTaskService } from './services/OfficeTaskService.js'
 import { OfficeEventService } from './services/OfficeEventService.js'
+import { OfficeNotificationService } from './services/OfficeNotificationService.js'
 import { CEOPlanner } from './services/orchestration/CEOPlanner.js'
 import { CEOService } from './services/orchestration/CEOService.js'
 import { ProjectController } from './controllers/ProjectController.js'
@@ -202,6 +203,8 @@ export function createApp(): express.Express {
   const agentController = new AgentController(agentManager, eventRepo, promptExecutionService)
 
   const officeEventService = new OfficeEventService(officeEventRepo)
+  const officeNotificationService = new OfficeNotificationService(officeEventService, pushService)
+  officeNotificationService.start()
 
   const officeAgentService = new OfficeAgentService(officeAgentRepo, officeEventService)
   const officeAgentController = new OfficeAgentController(officeAgentService)
