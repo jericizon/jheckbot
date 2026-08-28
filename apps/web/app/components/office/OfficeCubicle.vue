@@ -5,12 +5,12 @@
       class="relative w-full max-w-[10rem] bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 border-2 border-slate-400 dark:border-slate-500 rounded-lg shadow-md overflow-hidden"
     >
       <!-- Partition wall (top edge) -->
-      <div class="h-1.5 bg-gradient-to-b from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 border-b border-slate-500/50" />
+      <div class="h-1.5 bg-gradient-to-b from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 border-b border-slate-500/50 dark:border-slate-600/50" />
 
       <!-- Desk with monitor + status prop -->
       <div class="px-2 py-1.5 flex items-end justify-between gap-1">
         <!-- Monitor -->
-        <div class="w-8 h-6 bg-sky-200 dark:bg-sky-800 border border-slate-500 rounded-sm flex items-center justify-center text-[10px]">
+        <div class="w-8 h-6 bg-sky-200 dark:bg-sky-800 border border-slate-500 dark:border-slate-600 rounded-sm flex items-center justify-center text-[10px]">
           <span class="font-mono font-bold text-slate-700 dark:text-slate-200 uppercase">{{ deskLabel }}</span>
         </div>
         <!-- Status prop on desk -->
