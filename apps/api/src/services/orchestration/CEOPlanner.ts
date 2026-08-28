@@ -86,17 +86,11 @@ export class CEOPlanner {
         description: def.description,
         priority: def.priority,
         workflowType: def.workflowType,
+        metadata: { request: normalized, projectId: projectId ?? null, complexity },
       })
 
       byRole.set(def.role, task)
       tasks.push(task)
-
-      await this.emit(officeId, 'TASK_CREATED', `Created task: ${task.title}`, {
-        taskId: task.id,
-        request: normalized,
-        projectId: projectId ?? null,
-        complexity,
-      })
     }
 
     const dependencySpecs = this.buildDependencySpecs(byRole, complexity)

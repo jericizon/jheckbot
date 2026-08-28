@@ -186,7 +186,7 @@ describe('CEOPlanner', () => {
     expect(startCall?.[0].metadata).toMatchObject({ projectId: 'project-1' })
   })
 
-  it('emits CEO_PLANNING before and after, plus TASK_CREATED for each task', async () => {
+  it('emits CEO_PLANNING before and after, and passes request metadata through task creation', async () => {
     await planner.plan('add endpoint', 'office-1')
 
     const calls = vi.mocked(eventService.create).mock.calls
@@ -196,11 +196,15 @@ describe('CEOPlanner', () => {
     })
 
     const taskCreatedCalls = calls.filter((call) => call[0].eventType === 'TASK_CREATED')
-    expect(taskCreatedCalls).toHaveLength(3)
+    expect(taskCreatedCalls).toHaveLength(0)
 
     expect(calls[calls.length - 1][0]).toMatchObject({
       eventType: 'CEO_PLANNING',
       content: 'Planning completed',
+    })
+
+    expect(vi.mocked(taskService.create).mock.calls[0][0]).toMatchObject({
+      metadata: { request: 'add endpoint', complexity: 'medium' },
     })
   })
 

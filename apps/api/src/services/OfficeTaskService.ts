@@ -85,7 +85,7 @@ export class OfficeTaskService {
         officeId: task.officeId,
         eventType: 'TASK_CREATED',
         content: `Task created: ${task.title}`,
-        metadata: { taskId: task.id, status: task.status },
+        metadata: { ...input.metadata, taskId: task.id, status: task.status },
       })
     }
 
