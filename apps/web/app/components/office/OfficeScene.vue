@@ -49,7 +49,7 @@
 
       <!-- Resource pills (status counters) -->
       <div
-        class="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 px-2 py-1 rounded-full bg-black/30 backdrop-blur-sm border border-white/20 dark:border-white/10"
+        class="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 px-2 py-1 rounded-full bg-black/30 dark:bg-black/40 backdrop-blur-sm border border-white/20 dark:border-white/10"
       >
         <div
           v-for="pill in resourcePills"
@@ -58,7 +58,7 @@
           :title="`${pill.count} ${pill.label}`"
         >
           <span class="text-xs sm:text-sm" aria-hidden="true">{{ pill.icon }}</span>
-          <span class="text-[10px] sm:text-xs font-bold text-white tabular-nums">
+          <span class="text-[10px] sm:text-xs font-bold text-white dark:text-slate-100 tabular-nums">
             {{ pill.count }}
           </span>
         </div>
