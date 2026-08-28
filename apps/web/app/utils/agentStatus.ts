@@ -69,3 +69,33 @@ export function getAgentStatusBar(status: AgentStatus): AgentStatusBar {
       return { barClass: 'bg-content-subtle/50', percent: 8, glow: false }
   }
 }
+
+export interface CubicleStatusProp {
+  emoji: string
+  label: string
+}
+
+// Desk prop reflecting current activity, shown on the cubicle tile.
+export function getCubicleStatusProp(status: AgentStatus): CubicleStatusProp {
+  switch (status) {
+    case 'working':
+      return { emoji: '💻', label: 'At work' }
+    case 'testing':
+      return { emoji: '🧪', label: 'Testing' }
+    case 'reviewing':
+      return { emoji: '🔍', label: 'Reviewing' }
+    case 'communicating':
+      return { emoji: '💬', label: 'In a meeting' }
+    case 'thinking':
+      return { emoji: '☕', label: 'Thinking' }
+    case 'blocked':
+      return { emoji: '🚧', label: 'Blocked' }
+    case 'error':
+      return { emoji: '⚠️', label: 'Error' }
+    case 'completed':
+      return { emoji: '✅', label: 'Done' }
+    case 'idle':
+    default:
+      return { emoji: '💤', label: 'Idle' }
+  }
+}

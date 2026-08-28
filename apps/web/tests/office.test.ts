@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { nextTick } from 'vue'
 import type { OfficeAgent, AgentStatus, OfficeEvent } from '@jheckbot/shared'
-import { getAgentStatusStyle } from '../app/utils/agentStatus'
+import { getAgentStatusStyle, getCubicleStatusProp } from '../app/utils/agentStatus'
 import { getRoleEmoji } from '../app/utils/roleEmoji'
 
 function createMockApi() {
@@ -418,5 +418,23 @@ describe('role emoji mapping', () => {
 
   it('falls back to a generic developer emoji', () => {
     expect(getRoleEmoji('Senior Backend Developer')).toBe('⚙️')
+  })
+})
+
+describe('cubicle status prop', () => {
+  it('shows a lit monitor for working', () => {
+    expect(getCubicleStatusProp('working').emoji).toBe('💻')
+  })
+  it('shows coffee for thinking', () => {
+    expect(getCubicleStatusProp('thinking').emoji).toBe('☕')
+  })
+  it('shows a warning for error', () => {
+    expect(getCubicleStatusProp('error').emoji).toBe('⚠️')
+  })
+  it('shows a checkmark for completed', () => {
+    expect(getCubicleStatusProp('completed').emoji).toBe('✅')
+  })
+  it('shows a sleep emoji for idle', () => {
+    expect(getCubicleStatusProp('idle').emoji).toBe('💤')
   })
 })
