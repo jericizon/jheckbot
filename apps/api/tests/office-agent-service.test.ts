@@ -39,9 +39,11 @@ describe('OfficeAgentService', () => {
   let repo: OfficeAgentRepository
   let service: OfficeAgentService
   let mockAgent: OfficeAgent
+  let mockCapability: OfficeAgentCapability
 
   beforeEach(() => {
     mockAgent = makeAgent()
+    mockCapability = makeCapability()
 
     repo = {
       create: vi.fn().mockResolvedValue(mockAgent),
@@ -49,8 +51,8 @@ describe('OfficeAgentService', () => {
       getById: vi.fn().mockResolvedValue(mockAgent),
       update: vi.fn().mockResolvedValue(mockAgent),
       delete: vi.fn().mockResolvedValue(true),
-      listCapabilities: vi.fn().mockResolvedValue([makeCapability()]),
-      addCapability: vi.fn().mockResolvedValue(makeCapability()),
+      listCapabilities: vi.fn().mockResolvedValue([mockCapability]),
+      addCapability: vi.fn().mockResolvedValue(mockCapability),
       removeCapability: vi.fn().mockResolvedValue(true),
     } as unknown as OfficeAgentRepository
 
@@ -77,9 +79,9 @@ describe('OfficeAgentService', () => {
   })
 
   it('rejects creation with empty name', async () => {
-    await expect(
-      service.create({ officeId: 'office-1', name: '', role: 'Dev' }),
-    ).rejects.toThrow(OfficeAgentValidationError)
+    await expect(service.create({ officeId: 'office-1', name: '', role: 'Dev' })).rejects.toThrow(
+      OfficeAgentValidationError,
+    )
   })
 
   it('rejects creation with empty role', async () => {
@@ -184,7 +186,7 @@ describe('OfficeAgentService', () => {
 
   it('adds a capability', async () => {
     const result = await service.addCapability('agent-1', 'Laravel')
-    expect(result).toEqual(makeCapability())
+    expect(result).toEqual(mockCapability)
     expect(repo.addCapability).toHaveBeenCalledWith('agent-1', 'Laravel')
   })
 
