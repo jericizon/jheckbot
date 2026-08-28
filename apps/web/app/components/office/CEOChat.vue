@@ -116,7 +116,7 @@ function isChatEvent(event: OfficeEvent): boolean {
 async function loadMessages() {
   try {
     const events = await chat.listEvents(props.officeId)
-    messages.value = events.filter(isChatEvent).map(toChatMessage)
+    messages.value = events.filter(isChatEvent).map(toChatMessage).reverse()
   } catch {
     messages.value = []
   }
@@ -125,7 +125,7 @@ async function loadMessages() {
 function handleLiveEvent(event: OfficeEvent) {
   if (!isChatEvent(event)) return
   if (messages.value.some((m) => m.id === event.id)) return
-  messages.value = [toChatMessage(event), ...messages.value]
+  messages.value = [...messages.value, toChatMessage(event)]
 }
 
 let unsubscribeEvents: (() => void) | null = null
