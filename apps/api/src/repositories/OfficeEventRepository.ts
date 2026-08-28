@@ -71,4 +71,16 @@ export class OfficeEventRepository {
     )
     return rows.map(toOfficeEvent)
   }
+
+  async listByOfficeAndTypes(
+    officeId: string,
+    eventTypes: string[],
+    executor: DbExecutor = pool,
+  ): Promise<OfficeEvent[]> {
+    const { rows } = await executor.query<OfficeEventRecord>(
+      'SELECT * FROM office_events WHERE office_id = $1 AND event_type = ANY($2::text[]) ORDER BY created_at DESC',
+      [officeId, eventTypes],
+    )
+    return rows.map(toOfficeEvent)
+  }
 }

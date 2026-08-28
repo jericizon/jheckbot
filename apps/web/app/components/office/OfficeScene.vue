@@ -46,7 +46,7 @@
             <div class="mt-3 h-2 w-full bg-content-subtle/10 rounded" aria-hidden="true" />
           </div>
 
-          <OfficeCharacter v-if="ceo" :agent="ceo" is-ceo @select="onSelect" />
+          <OfficeCharacter v-if="ceo" :agent="ceo" is-ceo @select="onCeoSelect" />
           <div v-else class="text-xs text-content-subtle">No CEO assigned</div>
         </div>
 
@@ -103,10 +103,15 @@ defineProps<{
 
 const emit = defineEmits<{
   'select-agent': [OfficeAgent]
+  'talk-to-ceo': []
 }>()
 
 function onSelect(agent: OfficeAgent) {
   emit('select-agent', agent)
+}
+
+function onCeoSelect() {
+  emit('talk-to-ceo')
 }
 
 function deskLabel(agent: OfficeAgent) {

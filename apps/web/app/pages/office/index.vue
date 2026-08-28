@@ -19,6 +19,7 @@
         :employees="employees"
         :loading="loading"
         @select-agent="selectAgent"
+        @talk-to-ceo="goToCEO"
       />
 
       <div
@@ -74,7 +75,7 @@
         <OfficeActivityPanel :events="events" :loading="eventsLoading" />
       </div>
 
-      <OfficeChatButton :ceo="ceo" @talk-to-ceo="selectCeo" />
+      <OfficeChatButton :ceo="ceo" :office-id="officeId" />
     </main>
   </div>
 </template>
@@ -146,6 +147,10 @@ function handleLiveEvent(event: OfficeEvent) {
   if (isAgentEvent(event.eventType)) {
     loadAgents()
   }
+}
+
+function goToCEO() {
+  navigateTo(`/office/ceo?office=${officeId.value}`)
 }
 
 async function loadEvents() {

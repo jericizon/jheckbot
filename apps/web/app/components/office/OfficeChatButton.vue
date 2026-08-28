@@ -1,24 +1,27 @@
 <template>
-  <button
-    type="button"
-    :disabled="!ceo"
-    class="w-full rounded-lg bg-accent text-white dark:text-black py-3 text-sm font-medium hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+  <NuxtLink
+    :to="`/office/ceo?office=${ceo?.officeId || officeId}`"
+    class="block w-full rounded-lg bg-accent text-white dark:text-black py-3 text-sm font-medium text-center hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface transition-colors"
+    :class="{ 'opacity-50 cursor-not-allowed pointer-events-none': !canNavigate }"
     :aria-label="`Talk to ${ceo?.name || 'CEO'}`"
-    @click="$emit('talk-to-ceo')"
   >
     <span class="mr-2" aria-hidden="true">💬</span>
     Talk to {{ ceo?.name || 'CEO' }}
-  </button>
+  </NuxtLink>
 </template>
 
 <script setup lang="ts">
 import type { OfficeAgent } from '@jheckbot/shared'
 
-defineProps<{
-  ceo?: OfficeAgent
-}>()
+const props = withDefaults(
+  defineProps<{
+    ceo?: OfficeAgent
+    officeId?: string
+  }>(),
+  {
+    officeId: '',
+  },
+)
 
-defineEmits<{
-  'talk-to-ceo': []
-}>()
+const canNavigate = computed(() => !!(props.ceo?.officeId || props.officeId))
 </script>

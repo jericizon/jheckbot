@@ -336,6 +336,44 @@ describe('useOfficeEvents', () => {
   })
 })
 
+describe('useCEOChat', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).useApi
+    vi.resetAllMocks()
+  })
+
+  it('wraps the CEO chat endpoints', async () => {
+    const mockApi = createMockApi()
+    mockApi.get.mockResolvedValueOnce([
+      { id: 'event-1', eventType: 'CEO_MESSAGE', content: 'Hello', createdAt: '2026-01-01T00:00:00Z' },
+    ])
+    mockApi.post.mockResolvedValueOnce({
+      userMessage: { id: 'event-2', eventType: 'CEO_MESSAGE' },
+      ceoResponse: { id: 'event-3', eventType: 'CEO_RESPONSE' },
+      plan: { request: 'Add login', complexity: 'medium', tasks: [], dependencies: [] },
+    })
+    ;(globalThis as Record<string, unknown>).useApi = vi.fn(() => mockApi)
+
+    const { useCEOChat } = await import('../app/composables/useCEOChat')
+    const chat = useCEOChat()
+
+    const events = await chat.listEvents('office-1')
+    expect(mockApi.get).toHaveBeenCalledWith('/api/offices/office-1/ceo/events')
+    expect(events).toHaveLength(1)
+
+    const result = await chat.sendMessage('office-1', 'Add login')
+    expect(mockApi.post).toHaveBeenCalledWith('/api/offices/office-1/ceo/messages', {
+      request: 'Add login',
+      projectId: undefined,
+    })
+    expect(result.plan.complexity).toBe('medium')
+  })
+})
+
 describe('agent status mapping', () => {
   it('maps working to a pulsing sky dot', () => {
     const style = getAgentStatusStyle('working')

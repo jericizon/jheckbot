@@ -37,6 +37,10 @@ export class OfficeEventService {
     return this.repo.listByOffice(officeId)
   }
 
+  async listByOfficeAndTypes(officeId: string, eventTypes: EventType[]): Promise<OfficeEvent[]> {
+    return this.repo.listByOfficeAndTypes(officeId, eventTypes)
+  }
+
   subscribe(officeId: string, listener: OfficeEventListener): () => void {
     this.emitter.on(officeId, listener)
     return () => this.emitter.off(officeId, listener)
