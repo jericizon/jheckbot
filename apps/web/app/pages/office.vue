@@ -138,6 +138,7 @@ function isAgentEvent(eventType: string) {
 }
 
 function handleLiveEvent(event: OfficeEvent) {
+  if (events.value.some((e) => e.id === event.id)) return
   events.value = [event, ...events.value]
   if (isTaskEvent(event.eventType)) {
     loadTasks()
