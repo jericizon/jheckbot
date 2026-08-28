@@ -17,73 +17,114 @@
 
     <div
       v-else
-      class="relative rounded-2xl border border-border bg-gradient-to-b from-surface-elevated to-surface p-4 sm:p-6 overflow-hidden min-h-[22rem] shadow-lg"
+      class="relative rounded-2xl border-2 border-emerald-700/40 overflow-hidden shadow-xl"
+      :style="{ height: sceneHeight }"
     >
+      <!-- Grass terrain -->
       <div
-        class="absolute inset-0 opacity-[0.08] pointer-events-none"
+        class="absolute inset-0 bg-gradient-to-b from-emerald-300 via-emerald-400 to-emerald-600 dark:from-emerald-800 dark:via-emerald-900 dark:to-emerald-950"
+      />
+
+      <!-- Grass tile grid -->
+      <div
+        class="absolute inset-0 opacity-20 pointer-events-none"
         style="
           background-image:
-            repeating-linear-gradient(0deg, transparent, transparent 1.5rem, rgb(var(--border)) 1.5rem, rgb(var(--border)) 1.625rem),
-            repeating-linear-gradient(90deg, transparent, transparent 1.5rem, rgb(var(--border)) 1.5rem, rgb(var(--border)) 1.625rem);
+            repeating-linear-gradient(0deg, transparent, transparent 1.5rem, rgb(255 255 255 / 0.25) 1.5rem, rgb(255 255 255 / 0.25) 1.625rem),
+            repeating-linear-gradient(90deg, transparent, transparent 1.5rem, rgb(255 255 255 / 0.25) 1.5rem, rgb(255 255 255 / 0.25) 1.625rem);
         "
       />
 
-      <div class="relative z-10 flex flex-col items-center gap-8 sm:gap-12">
-        <!-- CEO desk -->
-        <div class="flex flex-col items-center gap-3 w-full">
-          <div
-            class="relative bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-lg p-3 sm:p-5 w-36 sm:w-56 shadow-sm"
-          >
-            <div class="flex items-end justify-center gap-3">
-              <div class="w-3 h-8 bg-content-subtle/20 rounded-sm" aria-hidden="true" />
+      <!-- Decorative props (trees, rocks, bushes) placed around the perimeter -->
+      <div
+        v-for="(prop, i) in scenery"
+        :key="`prop-${i}`"
+        class="absolute pointer-events-none select-none animate-prop-sway"
+        :style="prop.style"
+        :class="prop.delay ? `[animation-delay:${prop.delay}s]` : ''"
+        aria-hidden="true"
+      >
+        <span class="text-xl sm:text-2xl drop-shadow">{{ prop.emoji }}</span>
+      </div>
+
+      <!-- Resource pills (CoC-style status counters) -->
+      <div
+        class="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 px-2 py-1 rounded-full bg-black/30 backdrop-blur-sm border border-white/20"
+      >
+        <div
+          v-for="pill in resourcePills"
+          :key="pill.label"
+          class="flex items-center gap-1 px-1.5 py-0.5 rounded-full"
+          :title="`${pill.count} ${pill.label}`"
+        >
+          <span class="text-xs sm:text-sm" aria-hidden="true">{{ pill.icon }}</span>
+          <span class="text-[10px] sm:text-xs font-bold text-white tabular-nums">
+            {{ pill.count }}
+          </span>
+        </div>
+      </div>
+
+      <div class="relative z-10 w-full h-full">
+        <!-- CEO Town Hall at the center -->
+        <div
+          class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1.5"
+        >
+          <div class="relative animate-unit-bob">
+            <!-- Town Hall building -->
+            <div
+              class="relative w-20 sm:w-28 bg-gradient-to-b from-amber-200 to-amber-400 border-2 border-amber-700 rounded-lg shadow-lg overflow-hidden"
+            >
+              <!-- Roof -->
               <div
-                class="w-16 h-12 bg-surface-subtle border border-border rounded-sm flex items-center justify-center"
-                aria-hidden="true"
+                class="h-3 sm:h-4 bg-gradient-to-b from-red-500 to-red-700 border-b-2 border-red-900"
+              />
+              <!-- Door + windows -->
+              <div class="px-2 py-1.5 sm:py-2 flex items-end justify-center gap-1.5">
+                <div
+                  class="w-3 h-4 sm:w-4 sm:h-5 bg-amber-900/70 rounded-t border border-amber-900"
+                />
+                <div
+                  class="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-sky-200/80 border border-amber-900 rounded-sm"
+                />
+              </div>
+              <!-- Flag -->
+              <div
+                class="absolute -top-3 left-1/2 -translate-x-1/2 flex flex-col items-center"
               >
-                <span class="text-xs text-content-subtle font-mono">CEO</span>
+                <div class="w-0.5 h-3 bg-amber-900" />
+                <div class="w-2 h-1.5 bg-red-500 -mt-0.5" />
               </div>
             </div>
-            <div class="mt-3 h-2 w-full bg-content-subtle/10 rounded" aria-hidden="true" />
           </div>
 
           <OfficeCharacter v-if="ceo" :agent="ceo" is-ceo @select="onCeoSelect" />
-          <div v-else class="text-xs text-content-subtle">No CEO assigned</div>
+          <div v-else class="text-xs font-semibold text-white drop-shadow">
+            No CEO assigned
+          </div>
         </div>
 
-        <!-- Employee desks -->
+        <!-- Employees arranged in a ring around the CEO -->
         <div
-          class="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-8 w-full max-w-3xl justify-items-center"
+          v-for="(agent, index) in employees"
+          :key="agent.id"
+          class="absolute flex flex-col items-center gap-1"
+          :style="ringStyle(index)"
         >
+          <!-- Cartoon hut tile -->
           <div
-            v-for="agent in employees"
-            :key="agent.id"
-            class="flex flex-col items-center gap-3"
+            class="bg-gradient-to-b from-sky-200 to-sky-400 dark:from-sky-700 dark:to-sky-900 border-2 border-sky-700 dark:border-sky-500 rounded-lg shadow-md w-16 sm:w-20 overflow-hidden"
           >
             <div
-              class="bg-sky-50 dark:bg-sky-900/10 border border-sky-100 dark:border-sky-900/30 rounded-lg p-2 sm:p-4 w-28 sm:w-40 shadow-sm"
-            >
-              <div class="flex items-end justify-center gap-2">
-                <div
-                  class="w-2.5 h-6 bg-content-subtle/20 rounded-sm"
-                  aria-hidden="true"
-                />
-                <div
-                  class="w-10 h-8 bg-surface-subtle border border-border rounded-sm flex items-center justify-center"
-                  aria-hidden="true"
-                >
-                  <span class="text-[10px] text-content-subtle font-mono uppercase">
-                    {{ deskLabel(agent) }}
-                  </span>
-                </div>
-              </div>
-              <div
-                class="mt-2 h-1.5 w-full bg-content-subtle/10 rounded"
-                aria-hidden="true"
-              />
+              class="h-2 sm:h-2.5 bg-gradient-to-b from-orange-400 to-orange-600 border-b border-orange-800"
+            />
+            <div class="py-1 flex items-center justify-center">
+              <span class="text-[9px] text-sky-900 dark:text-sky-100 font-mono font-bold uppercase">
+                {{ deskLabel(agent) }}
+              </span>
             </div>
-
-            <OfficeCharacter :agent="agent" @select="onSelect" />
           </div>
+
+          <OfficeCharacter :agent="agent" @select="onSelect" />
         </div>
       </div>
     </div>
@@ -91,10 +132,11 @@
 </template>
 
 <script setup lang="ts">
-import type { OfficeAgent } from '@jheckbot/shared'
+import { computed } from 'vue'
+import type { OfficeAgent, AgentStatus } from '@jheckbot/shared'
 import OfficeCharacter from './OfficeCharacter.vue'
 
-defineProps<{
+const props = defineProps<{
   agents: OfficeAgent[]
   ceo?: OfficeAgent
   employees: OfficeAgent[]
@@ -106,12 +148,50 @@ const emit = defineEmits<{
   'talk-to-ceo': []
 }>()
 
+// Ring radii (as % of the scene) scale with headcount so tiles never overlap.
+const ringRadiusX = computed(() => {
+  const count = props.employees.length
+  if (count <= 4) return 38
+  if (count <= 8) return 42
+  return 45
+})
+
+const ringRadiusY = computed(() => {
+  const count = props.employees.length
+  if (count <= 4) return 34
+  if (count <= 8) return 38
+  return 41
+})
+
+// Scene grows with the ring so employees stay inside the frame.
+const sceneHeight = computed(() => {
+  const count = props.employees.length
+  if (count === 0) return '22rem'
+  if (count <= 4) return '24rem'
+  if (count <= 8) return '28rem'
+  return '32rem'
+})
+
 function onSelect(agent: OfficeAgent) {
   emit('select-agent', agent)
 }
 
 function onCeoSelect() {
   emit('talk-to-ceo')
+}
+
+// Place each employee on the ring at an evenly spaced angle, starting at the top.
+function ringStyle(index: number) {
+  const count = props.employees.length
+  const angle = (360 / count) * index - 90
+  const rad = (angle * Math.PI) / 180
+  const left = 50 + Math.cos(rad) * ringRadiusX.value
+  const top = 50 + Math.sin(rad) * ringRadiusY.value
+  return {
+    left: `${left}%`,
+    top: `${top}%`,
+    transform: 'translate(-50%, -50%)',
+  }
 }
 
 function deskLabel(agent: OfficeAgent) {
@@ -124,4 +204,42 @@ function deskLabel(agent: OfficeAgent) {
   if (role.includes('full')) return 'FS'
   return 'DEV'
 }
+
+// CoC-style resource pills: counts of agents grouped by status category.
+const resourcePills = computed(() => {
+  const all = [...props.employees, ...(props.ceo ? [props.ceo] : [])]
+  const count = (pred: (s: AgentStatus) => boolean) =>
+    all.filter((a) => pred(a.status)).length
+
+  return [
+    { icon: '⚔️', label: 'Working', count: count((s) => s === 'working' || s === 'testing' || s === 'reviewing') },
+    { icon: '💬', label: 'Talking', count: count((s) => s === 'communicating' || s === 'thinking') },
+    { icon: '💤', label: 'Idle', count: count((s) => s === 'idle') },
+    { icon: '✅', label: 'Done', count: count((s) => s === 'completed') },
+    { icon: '⚠️', label: 'Issues', count: count((s) => s === 'error' || s === 'blocked') },
+  ]
+})
+
+// Decorative scenery props scattered around the village perimeter.
+const scenery = computed(() => {
+  const items = [
+    { emoji: '🌳', x: 6, y: 14 },
+    { emoji: '🪨', x: 88, y: 22 },
+    { emoji: '🌲', x: 12, y: 78 },
+    { emoji: '🌳', x: 90, y: 80 },
+    { emoji: '🪨', x: 4, y: 50 },
+    { emoji: '🌲', x: 94, y: 52 },
+    { emoji: '🌻', x: 22, y: 8 },
+    { emoji: '🍄', x: 78, y: 90 },
+  ]
+  return items.map((it, i) => ({
+    emoji: it.emoji,
+    delay: (i % 4) * 0.4,
+    style: {
+      left: `${it.x}%`,
+      top: `${it.y}%`,
+      transform: 'translate(-50%, -50%)',
+    },
+  }))
+})
 </script>
