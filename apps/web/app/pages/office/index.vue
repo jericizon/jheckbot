@@ -2,7 +2,10 @@
   <div>
     <AppHeader sticky>
       <div class="w-full flex items-center justify-between gap-2">
-        <h1 class="text-lg font-semibold">Office</h1>
+        <div class="flex items-center gap-2">
+          <span aria-hidden="true">🏢</span>
+          <h1 class="text-lg font-semibold">Office</h1>
+        </div>
         <span
           class="hidden sm:inline text-xs text-content-subtle font-mono truncate max-w-[50%]"
           :title="officeId"

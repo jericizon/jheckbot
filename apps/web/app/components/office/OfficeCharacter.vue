@@ -7,7 +7,7 @@
   >
     <div class="relative">
       <div
-        class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 border-2 border-border flex items-center justify-center text-2xl sm:text-3xl shadow-sm group-hover:scale-105 transition-transform"
+        class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 border-2 border-border flex items-center justify-center text-2xl sm:text-3xl shadow-sm group-hover:scale-105 group-hover:-translate-y-0.5 transition-transform"
         aria-hidden="true"
       >
         {{ emoji }}

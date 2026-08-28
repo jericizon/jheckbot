@@ -59,6 +59,14 @@
         </div>
       </div>
 
+      <div
+        v-if="!loading && messages.length === 0"
+        class="flex-1 flex flex-col items-center justify-center text-center text-content-subtle"
+      >
+        <span class="text-4xl mb-2" aria-hidden="true">👔</span>
+        <p class="text-sm">Send a request to the CEO to start planning.</p>
+      </div>
+
       <form class="mt-4 flex items-end gap-2" @submit.prevent="submit">
         <textarea
           v-model="draft"
