@@ -14,12 +14,6 @@ export class QAWorkflowError extends Error {
   }
 }
 
-export interface QAWorkflowServices {
-  taskService: Pick<OfficeTaskService, 'getById' | 'setStatus'>
-  eventService: Pick<OfficeEventService, 'create'>
-  messageService: Pick<OfficeAgentMessageService, 'create'>
-}
-
 export class QAWorkflow {
   constructor(
     private taskService: Pick<OfficeTaskService, 'getById' | 'setStatus'>,
