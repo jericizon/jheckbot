@@ -7,6 +7,15 @@
           {{ officeId }}
         </span>
       </div>
+      <template #actions>
+        <NuxtLink
+          :to="`/office?office=${officeId}`"
+          class="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors"
+          aria-label="Open office view"
+        >
+          Office
+        </NuxtLink>
+      </template>
     </AppHeader>
 
     <div class="px-4 py-4 max-w-2xl mx-auto">
