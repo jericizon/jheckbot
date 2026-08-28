@@ -12,9 +12,9 @@
       />
     </div>
 
-    <ul v-else-if="displayEvents.length" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+    <ul v-else-if="events.length" class="space-y-2 max-h-60 overflow-y-auto pr-1">
       <li
-        v-for="event in displayEvents"
+        v-for="event in events"
         :key="event.id"
         class="text-xs text-content border-l-2 border-border pl-2"
       >
@@ -30,10 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { OfficeEvent } from '@jheckbot/shared'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     events?: OfficeEvent[]
     loading?: boolean
@@ -42,43 +41,6 @@ const props = withDefaults(
     events: () => [],
     loading: false,
   },
-)
-
-const now = new Date().toISOString()
-
-const sampleEvents: OfficeEvent[] = [
-  {
-    id: 'evt-1',
-    officeId: '',
-    eventType: 'CEO_PLANNING',
-    content: 'CEO created an implementation plan',
-    createdAt: now,
-  },
-  {
-    id: 'evt-2',
-    officeId: '',
-    eventType: 'TASK_ASSIGNED',
-    content: 'CEO assigned authentication to Alfred',
-    createdAt: now,
-  },
-  {
-    id: 'evt-3',
-    officeId: '',
-    eventType: 'TASK_STARTED',
-    content: 'Alfred started work',
-    createdAt: now,
-  },
-  {
-    id: 'evt-4',
-    officeId: '',
-    eventType: 'QA_STARTED',
-    content: 'Alice started QA',
-    createdAt: now,
-  },
-]
-
-const displayEvents = computed(() =>
-  props.events.length ? props.events : sampleEvents,
 )
 
 function formatTime(iso?: string) {

@@ -5,6 +5,7 @@ import {
   isValidTaskStatusTransition,
 } from '@jheckbot/shared'
 import { OfficeTaskRepository } from '../repositories/OfficeTaskRepository.js'
+import { OfficeEventService } from './OfficeEventService.js'
 
 export interface CreateOfficeTaskInput {
   officeId: string
@@ -35,7 +36,10 @@ export interface UpdateOfficeTaskInput {
 }
 
 export class OfficeTaskService {
-  constructor(private repo: OfficeTaskRepository) {}
+  constructor(
+    private repo: OfficeTaskRepository,
+    private eventService?: OfficeEventService,
+  ) {}
 
   async listByOffice(officeId: string): Promise<OfficeTask[]> {
     if (!officeId?.trim()) {
@@ -69,12 +73,23 @@ export class OfficeTaskService {
       throw new OfficeTaskValidationError(`Invalid task priority: ${priority}`)
     }
 
-    return this.repo.create({
+    const task = await this.repo.create({
       ...input,
       title: input.title.trim(),
       status,
       priority,
     })
+
+    if (this.eventService) {
+      await this.eventService.create({
+        officeId: task.officeId,
+        eventType: 'TASK_CREATED',
+        content: `Task created: ${task.title}`,
+        metadata: { taskId: task.id, status: task.status },
+      })
+    }
+
+    return task
   }
 
   async update(id: string, input: UpdateOfficeTaskInput): Promise<OfficeTask | null> {
@@ -95,17 +110,43 @@ export class OfficeTaskService {
       throw new OfficeTaskValidationError(`Invalid task priority: ${input.priority}`)
     }
 
-    return this.repo.update(id, {
+    const task = await this.repo.update(id, {
       ...input,
       title: input.title?.trim(),
     })
+
+    if (task && this.eventService) {
+      await this.eventService.create({
+        officeId: task.officeId,
+        eventType: 'TASK_UPDATED',
+        content: `Task updated: ${task.title}`,
+        metadata: { taskId: task.id, status: task.status },
+      })
+    }
+
+    return task
   }
 
   async delete(id: string): Promise<boolean> {
     if (!id?.trim()) {
       throw new OfficeTaskValidationError('Task ID is required')
     }
-    return this.repo.delete(id)
+
+    const existing = await this.repo.getById(id)
+    if (!existing) return false
+
+    const deleted = await this.repo.delete(id)
+
+    if (deleted && this.eventService) {
+      await this.eventService.create({
+        officeId: existing.officeId,
+        eventType: 'TASK_UPDATED',
+        content: `Task deleted: ${existing.title}`,
+        metadata: { taskId: existing.id, deleted: true },
+      })
+    }
+
+    return deleted
   }
 
   async setStatus(id: string, status: TaskStatus): Promise<OfficeTask | null> {
@@ -135,7 +176,18 @@ export class OfficeTaskService {
       }
     }
 
-    return this.repo.setStatus(id, status)
+    const task = await this.repo.setStatus(id, status)
+
+    if (task && this.eventService) {
+      await this.eventService.create({
+        officeId: task.officeId,
+        eventType: 'TASK_UPDATED',
+        content: `Task status changed to ${task.status}: ${task.title}`,
+        metadata: { taskId: task.id, status: task.status, previousStatus: existing.status },
+      })
+    }
+
+    return task
   }
 
   async listDependencies(id: string): Promise<OfficeTask[]> {

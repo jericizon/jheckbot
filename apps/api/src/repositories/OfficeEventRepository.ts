@@ -55,6 +55,15 @@ export class OfficeEventRepository {
     return toOfficeEvent(rows[0])
   }
 
+  async getById(id: string, executor: DbExecutor = pool): Promise<OfficeEvent | null> {
+    const { rows } = await executor.query<OfficeEventRecord>(
+      'SELECT * FROM office_events WHERE id = $1',
+      [id],
+    )
+    if (rows.length === 0) return null
+    return toOfficeEvent(rows[0])
+  }
+
   async listByOffice(officeId: string, executor: DbExecutor = pool): Promise<OfficeEvent[]> {
     const { rows } = await executor.query<OfficeEventRecord>(
       'SELECT * FROM office_events WHERE office_id = $1 ORDER BY created_at DESC',

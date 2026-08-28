@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useOffice } from '~/composables/useOffice'
 import { useTasks } from '~/composables/useTasks'
 import { useOfficeEvents } from '~/composables/useOfficeEvents'
@@ -127,10 +127,39 @@ async function loadTasks() {
   }
 }
 
+let unsubscribeEvents: (() => void) | null = null
+
+function isTaskEvent(eventType: string) {
+  return eventType.startsWith('TASK_')
+}
+
+function isAgentEvent(eventType: string) {
+  return eventType.startsWith('AGENT_')
+}
+
+function handleLiveEvent(event: OfficeEvent) {
+  events.value = [event, ...events.value]
+  if (isTaskEvent(event.eventType)) {
+    loadTasks()
+  }
+  if (isAgentEvent(event.eventType)) {
+    loadAgents()
+  }
+}
+
 async function loadEvents() {
+  if (unsubscribeEvents) {
+    unsubscribeEvents()
+    unsubscribeEvents = null
+  }
+
   eventsLoading.value = true
   try {
     events.value = await eventsApi.listByOffice(officeId.value)
+    unsubscribeEvents = eventsApi.subscribeToOffice(
+      officeId.value,
+      handleLiveEvent,
+    )
   } catch {
     events.value = []
   } finally {
@@ -144,10 +173,18 @@ onMounted(() => {
   loadEvents()
 })
 
+onUnmounted(() => {
+  if (unsubscribeEvents) {
+    unsubscribeEvents()
+    unsubscribeEvents = null
+  }
+})
+
 watch(
   () => route.query.office,
   (id) => {
     setOfficeId(id as string)
+    loadAgents()
     loadTasks()
     loadEvents()
   },

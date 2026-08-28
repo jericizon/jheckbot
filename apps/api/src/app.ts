@@ -12,6 +12,7 @@ import { UserRepository } from './repositories/UserRepository.js'
 import { PushSubscriptionRepository } from './repositories/PushSubscriptionRepository.js'
 import { OfficeAgentRepository } from './repositories/OfficeAgentRepository.js'
 import { OfficeTaskRepository } from './repositories/OfficeTaskRepository.js'
+import { OfficeEventRepository } from './repositories/OfficeEventRepository.js'
 import { PathValidator, type AllowedRoot } from './services/PathValidator.js'
 import { ProjectService } from './services/ProjectService.js'
 import { ProjectHealthService } from './services/ProjectHealthService.js'
@@ -25,6 +26,7 @@ import { PushService } from './services/PushService.js'
 import { MediaService } from './services/MediaService.js'
 import { OfficeAgentService } from './services/OfficeAgentService.js'
 import { OfficeTaskService } from './services/OfficeTaskService.js'
+import { OfficeEventService } from './services/OfficeEventService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
@@ -33,6 +35,7 @@ import { PushController } from './controllers/PushController.js'
 import { MediaController } from './controllers/MediaController.js'
 import { OfficeAgentController } from './controllers/OfficeAgentController.js'
 import { OfficeTaskController } from './controllers/OfficeTaskController.js'
+import { OfficeEventController } from './controllers/OfficeEventController.js'
 import { createProjectRouter } from './routes/project.routes.js'
 import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
 import { createAuthRouter } from './routes/auth.routes.js'
@@ -41,6 +44,7 @@ import { createPushRouter } from './routes/push.routes.js'
 import { createMediaRouter } from './routes/media.routes.js'
 import { createOfficeAgentRouter, createOfficeAgentsByOfficeRouter } from './routes/office-agent.routes.js'
 import { createOfficeTaskRouter, createOfficeTasksByOfficeRouter } from './routes/office-task.routes.js'
+import { createOfficeEventRouter, createOfficeEventsByOfficeRouter } from './routes/office-event.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
@@ -144,6 +148,7 @@ export function createApp(): express.Express {
   const pushRepo = new PushSubscriptionRepository()
   const officeAgentRepo = new OfficeAgentRepository()
   const officeTaskRepo = new OfficeTaskRepository()
+  const officeEventRepo = new OfficeEventRepository()
   const pushConfig = env.vapidPublicKey && env.vapidPrivateKey
     ? {
         vapidPublicKey: env.vapidPublicKey,
@@ -192,11 +197,15 @@ export function createApp(): express.Express {
   )
   const agentController = new AgentController(agentManager, eventRepo, promptExecutionService)
 
-  const officeAgentService = new OfficeAgentService(officeAgentRepo)
+  const officeEventService = new OfficeEventService(officeEventRepo)
+
+  const officeAgentService = new OfficeAgentService(officeAgentRepo, officeEventService)
   const officeAgentController = new OfficeAgentController(officeAgentService)
 
-  const officeTaskService = new OfficeTaskService(officeTaskRepo)
+  const officeTaskService = new OfficeTaskService(officeTaskRepo, officeEventService)
   const officeTaskController = new OfficeTaskController(officeTaskService)
+
+  const officeEventController = new OfficeEventController(officeEventService)
 
   const authMiddleware = createAuthMiddleware(authService)
   const authController = new AuthController(authService, authMiddleware)
@@ -289,6 +298,13 @@ export function createApp(): express.Express {
     createOfficeTasksByOfficeRouter(officeTaskController),
   )
   app.use('/api/tasks', createOfficeTaskRouter(officeTaskController))
+
+  // Office event routes
+  app.use(
+    '/api/offices/:officeId/events',
+    createOfficeEventsByOfficeRouter(officeEventController),
+  )
+  app.use('/api/events', createOfficeEventRouter(officeEventController))
 
   // Bulk data management (destructive — requires confirmation token)
   app.use('/api/data', createDataRouter(dataController))

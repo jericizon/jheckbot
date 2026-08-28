@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { nextTick } from 'vue'
-import type { OfficeAgent, AgentStatus } from '@jheckbot/shared'
+import type { OfficeAgent, AgentStatus, OfficeEvent } from '@jheckbot/shared'
 import { getAgentStatusStyle } from '../app/utils/agentStatus'
 import { getRoleEmoji } from '../app/utils/roleEmoji'
 
@@ -11,6 +11,69 @@ function createMockApi() {
     patch: vi.fn(),
     delete: vi.fn(),
   }
+}
+
+function createMockEventSource() {
+  const allListeners = new Map<string, Array<(e: { data: string }) => void>>()
+  const instances: MockEventSource[] = []
+
+  return {
+    instances,
+    reset() {
+      instances.length = 0
+      allListeners.clear()
+    },
+    get MockEventSource() {
+      return class MockEventSource {
+        url: string
+        onopen?: () => void
+        onerror?: () => void
+        private listeners = new Map<string, Array<(e: { data: string }) => void>>()
+        closed = false
+
+        constructor(url: string) {
+          this.url = url
+          instances.push(this as unknown as MockEventSource)
+        }
+
+        close() {
+          this.closed = true
+        }
+
+        addEventListener(type: string, handler: (e: { data: string }) => void) {
+          if (!this.listeners.has(type)) this.listeners.set(type, [])
+          this.listeners.get(type)!.push(handler)
+          if (!allListeners.has(type)) allListeners.set(type, [])
+          allListeners.get(type)!.push(handler)
+        }
+
+        dispatch(type: string, data: string) {
+          const handlers = this.listeners.get(type) ?? []
+          for (const h of handlers) h({ data })
+        }
+      }
+    },
+    dispatch(type: string, data: string) {
+      for (const instance of instances) {
+        instance.dispatch(type, data)
+      }
+    },
+    triggerOpen() {
+      for (const instance of instances) {
+        if (instance.onopen) instance.onopen()
+      }
+    },
+  }
+}
+
+type MockEventSource = {
+  url: string
+  onopen?: () => void
+  onerror?: () => void
+  closed: boolean
+  close: () => void
+  addEventListener: (type: string, handler: (e: { data: string }) => void) => void
+  dispatch: (type: string, data: string) => void
 }
 
 function baseAgent(
@@ -188,12 +251,17 @@ describe('useTasks', () => {
 })
 
 describe('useOfficeEvents', () => {
+  const eventSourceMock = createMockEventSource()
+
   beforeEach(() => {
     vi.resetModules()
+    eventSourceMock.reset()
+    vi.stubGlobal('EventSource', eventSourceMock.MockEventSource)
   })
 
   afterEach(() => {
     delete (globalThis as Record<string, unknown>).useApi
+    vi.unstubAllGlobals()
     vi.resetAllMocks()
   })
 
@@ -213,6 +281,58 @@ describe('useOfficeEvents', () => {
     const event = await events.get('event-1')
     expect(mockApi.get).toHaveBeenCalledWith('/api/events/event-1')
     expect(event).toEqual({ id: 'event-1' })
+  })
+
+  it('subscribes to an office SSE stream and parses incoming events', async () => {
+    const mockApi = createMockApi()
+    mockApi.get.mockResolvedValueOnce([])
+    ;(globalThis as Record<string, unknown>).useApi = vi.fn(() => mockApi)
+
+    const { useOfficeEvents } = await import('../app/composables/useOfficeEvents')
+    const events = useOfficeEvents()
+
+    const received: OfficeEvent[] = []
+    const onOpen = vi.fn()
+    const unsubscribe = events.subscribeToOffice('office-1', (event) => {
+      received.push(event)
+    }, onOpen)
+
+    expect(eventSourceMock.instances.length).toBe(1)
+    expect(eventSourceMock.instances[0].url).toBe('/api/offices/office-1/events/stream')
+
+    eventSourceMock.triggerOpen()
+    expect(onOpen).toHaveBeenCalled()
+
+    const liveEvent: OfficeEvent = {
+      id: 'event-2',
+      officeId: 'office-1',
+      eventType: 'TASK_UPDATED',
+      content: 'Task updated',
+      createdAt: '2026-01-01T00:00:00Z',
+    }
+    eventSourceMock.dispatch('office', JSON.stringify(liveEvent))
+
+    expect(received).toEqual([liveEvent])
+
+    unsubscribe()
+  })
+
+  it('closes an existing connection when subscribing to a new office', async () => {
+    const mockApi = createMockApi()
+    mockApi.get.mockResolvedValueOnce([])
+    ;(globalThis as Record<string, unknown>).useApi = vi.fn(() => mockApi)
+
+    const { useOfficeEvents } = await import('../app/composables/useOfficeEvents')
+    const events = useOfficeEvents()
+
+    events.subscribeToOffice('office-1', () => {})
+    const firstInstance = eventSourceMock.instances[0]
+
+    events.subscribeToOffice('office-2', () => {})
+
+    expect(firstInstance.closed).toBe(true)
+    expect(eventSourceMock.instances.length).toBe(2)
+    expect(eventSourceMock.instances[1].url).toBe('/api/offices/office-2/events/stream')
   })
 })
 

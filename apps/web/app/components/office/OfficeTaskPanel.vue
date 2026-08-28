@@ -12,9 +12,9 @@
       />
     </div>
 
-    <ul v-else-if="displayTasks.length" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+    <ul v-else-if="tasks.length" class="space-y-2 max-h-60 overflow-y-auto pr-1">
       <li
-        v-for="task in displayTasks"
+        v-for="task in tasks"
         :key="task.id"
         class="text-sm text-content border-l-2 border-border pl-2"
       >
@@ -40,10 +40,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { OfficeTask } from '@jheckbot/shared'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     tasks?: OfficeTask[]
     loading?: boolean
@@ -52,41 +51,5 @@ const props = withDefaults(
     tasks: () => [],
     loading: false,
   },
-)
-
-const now = new Date().toISOString()
-
-const sampleTasks: OfficeTask[] = [
-  {
-    id: 'task-1',
-    officeId: '',
-    title: 'Authentication flow',
-    status: 'working',
-    priority: 'high',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-2',
-    officeId: '',
-    title: 'Payment integration',
-    status: 'qa',
-    priority: 'critical',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-3',
-    officeId: '',
-    title: 'Dashboard widgets',
-    status: 'backlog',
-    priority: 'medium',
-    createdAt: now,
-    updatedAt: now,
-  },
-]
-
-const displayTasks = computed(() =>
-  props.tasks.length ? props.tasks : sampleTasks,
 )
 </script>

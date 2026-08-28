@@ -1,6 +1,7 @@
 import type { OfficeAgent, OfficeAgentCapability, AgentStatus } from '@jheckbot/shared'
 import { isValidAgentStatus } from '@jheckbot/shared'
 import { OfficeAgentRepository } from '../repositories/OfficeAgentRepository.js'
+import { OfficeEventService } from './OfficeEventService.js'
 
 export interface CreateOfficeAgentInput {
   officeId: string
@@ -24,7 +25,10 @@ export interface CreateOfficeAgentInput {
 export type UpdateOfficeAgentInput = Partial<Omit<CreateOfficeAgentInput, 'officeId'>>
 
 export class OfficeAgentService {
-  constructor(private repo: OfficeAgentRepository) {}
+  constructor(
+    private repo: OfficeAgentRepository,
+    private eventService?: OfficeEventService,
+  ) {}
 
   async listByOffice(officeId: string): Promise<OfficeAgent[]> {
     if (!officeId?.trim()) {
@@ -54,13 +58,24 @@ export class OfficeAgentService {
       throw new OfficeAgentValidationError(`Invalid agent status: ${input.status}`)
     }
 
-    return this.repo.create({
+    const agent = await this.repo.create({
       ...input,
       name: input.name.trim(),
       role: input.role.trim(),
       status: input.status ?? 'idle',
       enabled: input.enabled ?? true,
     })
+
+    if (this.eventService) {
+      await this.eventService.create({
+        officeId: agent.officeId,
+        eventType: 'AGENT_UPDATED',
+        content: `Agent created: ${agent.name}`,
+        metadata: { agentId: agent.id, status: agent.status },
+      })
+    }
+
+    return agent
   }
 
   async update(id: string, input: UpdateOfficeAgentInput): Promise<OfficeAgent | null> {
@@ -81,18 +96,44 @@ export class OfficeAgentService {
       throw new OfficeAgentValidationError(`Invalid agent status: ${input.status}`)
     }
 
-    return this.repo.update(id, {
+    const agent = await this.repo.update(id, {
       ...input,
       name: input.name?.trim(),
       role: input.role?.trim(),
     })
+
+    if (agent && this.eventService) {
+      await this.eventService.create({
+        officeId: agent.officeId,
+        eventType: 'AGENT_UPDATED',
+        content: `Agent updated: ${agent.name}`,
+        metadata: { agentId: agent.id, status: agent.status },
+      })
+    }
+
+    return agent
   }
 
   async delete(id: string): Promise<boolean> {
     if (!id?.trim()) {
       throw new OfficeAgentValidationError('Agent ID is required')
     }
-    return this.repo.delete(id)
+
+    const existing = await this.repo.getById(id)
+    if (!existing) return false
+
+    const deleted = await this.repo.delete(id)
+
+    if (deleted && this.eventService) {
+      await this.eventService.create({
+        officeId: existing.officeId,
+        eventType: 'AGENT_UPDATED',
+        content: `Agent deleted: ${existing.name}`,
+        metadata: { agentId: existing.id, deleted: true },
+      })
+    }
+
+    return deleted
   }
 
   async enable(id: string): Promise<OfficeAgent | null> {
@@ -110,7 +151,18 @@ export class OfficeAgentService {
   }
 
   private async setEnabled(id: string, enabled: boolean): Promise<OfficeAgent | null> {
-    return this.repo.update(id, { enabled })
+    const agent = await this.repo.update(id, { enabled })
+
+    if (agent && this.eventService) {
+      await this.eventService.create({
+        officeId: agent.officeId,
+        eventType: 'AGENT_UPDATED',
+        content: `Agent ${enabled ? 'enabled' : 'disabled'}: ${agent.name}`,
+        metadata: { agentId: agent.id, enabled },
+      })
+    }
+
+    return agent
   }
 
   async listCapabilities(agentId: string): Promise<OfficeAgentCapability[]> {
