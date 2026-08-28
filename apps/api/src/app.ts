@@ -10,6 +10,7 @@ import { MessageRepository } from './repositories/MessageRepository.js'
 import { AgentEventRepository } from './repositories/AgentEventRepository.js'
 import { UserRepository } from './repositories/UserRepository.js'
 import { PushSubscriptionRepository } from './repositories/PushSubscriptionRepository.js'
+import { OfficeAgentRepository } from './repositories/OfficeAgentRepository.js'
 import { PathValidator, type AllowedRoot } from './services/PathValidator.js'
 import { ProjectService } from './services/ProjectService.js'
 import { ProjectHealthService } from './services/ProjectHealthService.js'
@@ -21,18 +22,21 @@ import { DataService } from './services/DataService.js'
 import { SkillsService } from './services/SkillsService.js'
 import { PushService } from './services/PushService.js'
 import { MediaService } from './services/MediaService.js'
+import { OfficeAgentService } from './services/OfficeAgentService.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
 import { DataController } from './controllers/DataController.js'
 import { PushController } from './controllers/PushController.js'
 import { MediaController } from './controllers/MediaController.js'
+import { OfficeAgentController } from './controllers/OfficeAgentController.js'
 import { createProjectRouter } from './routes/project.routes.js'
 import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
 import { createAuthRouter } from './routes/auth.routes.js'
 import { createDataRouter } from './routes/data.routes.js'
 import { createPushRouter } from './routes/push.routes.js'
 import { createMediaRouter } from './routes/media.routes.js'
+import { createOfficeAgentRouter, createOfficeAgentsByOfficeRouter } from './routes/office-agent.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
@@ -134,6 +138,7 @@ export function createApp(): express.Express {
   const authService = new AuthService(userRepo)
 
   const pushRepo = new PushSubscriptionRepository()
+  const officeAgentRepo = new OfficeAgentRepository()
   const pushConfig = env.vapidPublicKey && env.vapidPrivateKey
     ? {
         vapidPublicKey: env.vapidPublicKey,
@@ -181,6 +186,9 @@ export function createApp(): express.Express {
     mediaService,
   )
   const agentController = new AgentController(agentManager, eventRepo, promptExecutionService)
+
+  const officeAgentService = new OfficeAgentService(officeAgentRepo)
+  const officeAgentController = new OfficeAgentController(officeAgentService)
 
   const authMiddleware = createAuthMiddleware(authService)
   const authController = new AuthController(authService, authMiddleware)
@@ -259,6 +267,13 @@ export function createApp(): express.Express {
     createMediaRouter(new MediaController(mediaService)),
   )
   app.use('/api/conversations', conversationRouter)
+
+  // Office agent routes
+  app.use(
+    '/api/offices/:officeId/agents',
+    createOfficeAgentsByOfficeRouter(officeAgentController),
+  )
+  app.use('/api/agents', createOfficeAgentRouter(officeAgentController))
 
   // Bulk data management (destructive — requires confirmation token)
   app.use('/api/data', createDataRouter(dataController))
