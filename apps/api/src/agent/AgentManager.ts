@@ -2,6 +2,7 @@ import { DevinAdapter } from './DevinAdapter.js'
 import { TmuxManager, type TmuxSession } from './TmuxManager.js'
 import { LogTailer } from './LogTailer.js'
 import { TerminalOutputNormalizer } from './TerminalOutputNormalizer.js'
+import type { StartAgentOptions as AdapterStartOptions } from './AgentAdapter.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
 import { ConversationRepository, type ConversationRecord } from '../repositories/ConversationRepository.js'
 import { MessageRepository } from '../repositories/MessageRepository.js'
@@ -76,6 +77,12 @@ interface ManagedAgentRun {
   bypass: boolean
   knownMedia: Map<string, MediaFingerprint>
   mediaMarkdown: Map<string, string>
+  // Deferred launch options — populated by prepareRun, consumed by
+  // commitPreparedRun so tmux session creation happens outside the DB
+  // transaction that called prepareRun.
+  launchOptions?: AdapterStartOptions
+  mediaEnv?: Record<string, string>
+  agentPrompt?: string
 }
 
 interface ActiveConversationRepository {
@@ -91,8 +98,8 @@ interface SessionIdRepository {
 }
 
 const MAX_CONCURRENT_SESSIONS = 3
-const WATCH_INTERVAL_MS = 100
-const OUTPUT_FLUSH_INTERVAL_MS = 100
+const WATCH_INTERVAL_MS = 50
+const OUTPUT_FLUSH_INTERVAL_MS = 50
 const OUTPUT_FLUSH_BYTES = 512
 const SESSION_LOCK_RETRY_DEADLINE_MS = 15_000
 
@@ -213,9 +220,10 @@ export class AgentManager {
   }
 
   /**
-   * Validate a project and create a prepared tmux-backed run. This method is
-   * synchronous after the caller has resolved the project path, which lets a
-   * database transaction decide when the process becomes visible.
+   * Validate and create a prepared run WITHOUT launching the tmux session.
+   * The actual `devin.start()` call is deferred to `commitPreparedRun` so
+   * that subprocess creation happens outside the caller's DB transaction.
+   * This keeps the advisory lock held only for DB operations.
    */
   prepareRun(options: PrepareRunOptions): PreparedAgentRun {
     if (!options.projectSlug?.trim() || !options.cwd?.trim()) {
@@ -232,7 +240,6 @@ export class AgentManager {
 
     const sessionName = this.buildSessionName(options.projectSlug, options.conversationId)
     const startedAt = new Date().toISOString()
-    let sessionInfo
 
     // Expose the media directory + conversation id to the agent so its
     // browser automation tool (Playwright/Puppeteer MCP) can save images
@@ -249,40 +256,32 @@ export class AgentManager {
     // the media dir, append a save instruction so the capture surfaces inline.
     const agentPrompt = augmentPromptForMedia(options.prompt, mediaEnabled)
 
-    try {
-      sessionInfo = this.devin.start({
-        sessionName,
-        cwd: options.cwd,
-        prompt: agentPrompt,
-        resumeSessionId: options.devinSessionId,
-        model: options.model || DEFAULT_DEVIN_MODEL,
-        bypass: options.bypass,
-        env: mediaEnv,
-      })
-    } catch (error) {
-      // A failed create is not assumed to have created a session. Killing here
-      // could destroy an unrelated pre-existing session with the same name.
-      throw error
-    }
-
     const run: AgentRun = {
       conversationId: options.conversationId,
       projectSlug: options.projectSlug,
       sessionName,
       cwd: options.cwd,
       status: 'starting',
-      devinSessionId: sessionInfo?.devinSessionId,
+      devinSessionId: options.devinSessionId,
       userMessageId: options.userMessageId,
       model: options.model || DEFAULT_DEVIN_MODEL,
-      startedAt: sessionInfo?.startedAt || startedAt,
+      startedAt,
       outputBuffer: '',
       normalizedSnapshot: [],
     }
     const state = this.createManagedRun(run, options.prompt, options.bypass)
-    // Seed known media so files from a previous run are not re-emitted and
-    // re-shown in this run's responses. New or overwritten files are still
-    // detected by their mtime/size fingerprint.
-    this.mediaService?.seedKnownMedia(options.conversationId, state.knownMedia)
+    // Store deferred launch options for commitPreparedRun.
+    state.launchOptions = {
+      sessionName,
+      cwd: options.cwd,
+      prompt: agentPrompt,
+      resumeSessionId: options.devinSessionId,
+      model: options.model || DEFAULT_DEVIN_MODEL,
+      bypass: options.bypass,
+      env: mediaEnv,
+    }
+    state.mediaEnv = mediaEnv
+    state.agentPrompt = agentPrompt
     this.pendingRuns.set(options.conversationId, state)
     return new PreparedAgentRun(this, state)
   }
@@ -616,6 +615,40 @@ export class AgentManager {
     }
 
     this.pendingRuns.delete(state.run.conversationId)
+
+    // Launch the tmux session NOW — outside the caller's DB transaction.
+    // This is where the 3 subprocess calls (has-session, new-session,
+    // set-option) actually execute, so keeping it outside the transaction
+    // avoids holding the advisory lock during process creation.
+    //
+    // If we are not resuming, clear any stale tmux session with the same name
+    // (e.g. a previous run that ended with remain-on-exit, or a session that
+    // was abandoned when the model changed mid-conversation).
+    if (!state.launchOptions?.resumeSessionId) {
+      this.devin.forceKill(state.run.sessionName)
+    }
+
+    let sessionInfo: ReturnType<typeof this.devin.start> | undefined
+    try {
+      sessionInfo = this.devin.start(state.launchOptions!)
+    } catch (error) {
+      // tmux creation failed after the DB transaction already committed.
+      // Clean up the persisted 'starting' status so the conversation isn't
+      // stuck. The caller will surface the error to the user.
+      void this.conversationRepo?.updateAgentStatus(state.run.conversationId, 'idle').catch(() => {})
+      throw error
+    }
+
+    if (sessionInfo?.devinSessionId) {
+      state.run.devinSessionId = sessionInfo.devinSessionId
+    }
+    if (sessionInfo?.startedAt) {
+      state.run.startedAt = sessionInfo.startedAt
+    }
+
+    // Seed known media so files from a previous run are not re-emitted.
+    this.mediaService?.seedKnownMedia(state.run.conversationId, state.knownMedia)
+
     state.run.status = 'running'
     this.runs.set(state.run.conversationId, state)
     this.conversationLocks.add(state.run.conversationId)
@@ -628,11 +661,8 @@ export class AgentManager {
       this.pendingRuns.delete(state.run.conversationId)
     }
 
-    try {
-      this.devin.forceKill(state.run.sessionName)
-    } catch {
-      // Rollback is best effort when tmux has already disappeared.
-    }
+    // No tmux session was created (prepareRun defers it to commit), so
+    // there's nothing to force-kill. Just clean up the in-memory state.
   }
 
   private createManagedRun(run: AgentRun, prompt = '', bypass = false): ManagedAgentRun {

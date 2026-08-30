@@ -4,6 +4,7 @@ interface Conversation {
   title: string
   status: string
   agent_type: string
+  provider_config: Record<string, unknown> | null
   agent_session_id: string | null
   agent_status: string
   is_pinned: boolean
@@ -18,6 +19,7 @@ interface Message {
   role: string
   content: string
   message_type: string
+  model?: string | null
   created_at: string
 }
 

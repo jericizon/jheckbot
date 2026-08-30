@@ -11,8 +11,39 @@
       @pin="togglePin"
     />
 
-    <!-- Main chat area -->
-    <div class="flex-1 flex flex-col h-full min-w-0">
+    <!-- Main content: office center + chat side panel -->
+    <div class="flex-1 flex h-full min-w-0">
+      <!-- Main office area -->
+      <div class="flex-1 flex flex-col h-full min-w-0">
+        <ConversationOfficePanel
+          v-if="conversation?.project_id"
+          :project-id="conversation.project_id"
+          :busy="agentRunning || agentStarting"
+          :reacting="reacting"
+          :reaction-message="reactionMessage"
+          @office-loaded="office = $event"
+        />
+      </div>
+
+      <!-- Chat side panel (YouTube live comments style) -->
+      <aside
+        v-if="conversation?.project_id"
+        :class="[
+          'flex-col h-full min-w-0 border-border bg-surface-elevated',
+          mobileChatOpen
+            ? 'fixed inset-0 z-30 w-full flex'
+            : 'hidden xl:flex relative xl:border-l',
+        ]"
+        :style="mobileChatOpen ? { width: '100%' } : { width: `${chatPanelWidth}px` }"
+        aria-label="Conversation chat"
+      >
+        <div
+          class="hidden xl:block absolute top-0 left-0 w-1 h-full cursor-ew-resize hover:bg-content-subtle/20 active:bg-content-subtle/40 z-10"
+          role="separator"
+          aria-label="Resize chat panel"
+          aria-orientation="vertical"
+          @mousedown="startChatResize"
+        />
       <!-- Header -->
       <ProjectHeader
         :project="project"
@@ -57,11 +88,35 @@
             </button>
           </div>
         </template>
+
+        <template #extra-actions>
+          <button
+            v-if="mobileChatOpen"
+            @click="closeMobileChat"
+            class="xl:hidden p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close chat"
+            title="Close chat"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </template>
       </ProjectHeader>
 
       <!-- Messages -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto">
-        <div class="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <div class="w-full px-4 py-4 space-y-4">
           <!-- Empty state -->
           <div
             v-if="messages.length === 0 && !liveOutput && !agentStarting && !agentRunning"
@@ -346,7 +401,7 @@
 
       <!-- Input area -->
       <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div class="max-w-3xl mx-auto px-4">
+        <div class="w-full px-4">
           <!-- Input box -->
           <div
             class="relative rounded-2xl border border-border bg-white focus-within:border-content-subtle/60 focus-within:ring-1 focus-within:ring-content-subtle/30 transition-all"
@@ -640,7 +695,7 @@
           />
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- Delete conversation modal -->
     <ConfirmModal
@@ -687,11 +742,37 @@
       @close="modelPickerOpen = false"
     />
 
+    <!-- Mobile chat toggle -->
+    <button
+      v-if="chatViewportReady && !mobileChatOpen"
+      @click="openMobileChat"
+      class="fixed bottom-4 right-4 z-20 xl:hidden rounded-full w-12 h-12 bg-content text-surface shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+      aria-label="Open chat"
+      title="Open chat"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 0 01-2 2h-5l-5 3v-3z"
+        />
+      </svg>
+    </button>
+
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { ModelFamily } from '~/components/MessageToolbar.vue'
+import type { Office } from '@jheckbot/shared'
+import ConversationOfficePanel from '~/components/office/ConversationOfficePanel.vue'
 
 const route = useRoute()
 const convApi = useConversations()
@@ -728,11 +809,16 @@ interface QueuedMessage {
 }
 
 const conversation = ref<Conversation | null>(null)
+const office = ref<Office | null>(null)
 const messages = ref<Message[]>([])
 const liveOutput = ref('')
 const input = ref('')
 const agentRunning = ref(false)
 const agentStarting = ref(false)
+// Brief character reaction in the office panel on each interaction.
+const reacting = ref(false)
+const reactionMessage = ref('')
+let reactionTimer: ReturnType<typeof setTimeout> | null = null
 // Real-time elapsed counter for the active agent run. Started when a prompt
 // is sent (or when reconnecting to an already-running agent) and stopped on
 // the terminal SSE status event.
@@ -770,6 +856,71 @@ const project = ref<Project | null>(null)
 const projectBranch = ref<string | null>(null)
 const sidebarConversations = ref<Conversation[]>([])
 let eventSource: EventSource | null = null
+
+// Resizable chat panel state (right-side comments rail).
+const chatPanelWidth = ref(320)
+const chatPanelMin = 260
+const chatPanelMax = 480
+const chatResizing = ref(false)
+const chatResizeStartX = ref(0)
+const chatResizeStartWidth = ref(0)
+
+// Mobile chat drawer state. On small screens the chat panel is hidden by
+// default and can be toggled full-screen so the conversation is reachable.
+const mobileChatOpen = ref(false)
+const chatViewportReady = ref(false)
+
+function updateViewport() {
+  if (!import.meta.client) return
+  const xl = window.innerWidth >= 1280
+  if (xl) mobileChatOpen.value = false
+  if (!chatViewportReady.value) {
+    chatViewportReady.value = true
+    if (!xl) mobileChatOpen.value = true
+  }
+}
+
+function openMobileChat() {
+  mobileChatOpen.value = true
+}
+
+function closeMobileChat() {
+  mobileChatOpen.value = false
+}
+
+onMounted(() => {
+  updateViewport()
+  window.addEventListener('resize', updateViewport)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewport)
+})
+
+function startChatResize(e: MouseEvent) {
+  chatResizing.value = true
+  chatResizeStartX.value = e.clientX
+  chatResizeStartWidth.value = chatPanelWidth.value
+  document.body.style.cursor = 'ew-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onChatResize)
+  window.addEventListener('mouseup', stopChatResize)
+}
+
+function onChatResize(e: MouseEvent) {
+  if (!chatResizing.value) return
+  const delta = chatResizeStartX.value - e.clientX
+  const next = chatResizeStartWidth.value + delta
+  chatPanelWidth.value = Math.max(chatPanelMin, Math.min(chatPanelMax, next))
+}
+
+function stopChatResize() {
+  chatResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('mousemove', onChatResize)
+  window.removeEventListener('mouseup', stopChatResize)
+}
 
 // Track background conversations that were running on the previous poll,
 // so we can detect transitions to idle and fire a notification.
@@ -906,7 +1057,22 @@ async function load() {
     conversation.value = conv
     messages.value = msgs
     availableFamilies.value = modelsRes.families
-    ensureDefault(modelsRes.default)
+
+    // Sync the picker to the model actually used by this conversation so a
+    // global selection from another conversation doesn't accidentally switch
+    // the model here. Fall back to the API default for a brand-new chat.
+    const lastAssistant = msgs
+      .slice()
+      .reverse()
+      .find((m) => m.role === 'assistant' && m.model)
+    const conversationModel = conv.provider_config?.model
+    if (typeof conversationModel === 'string' && conversationModel) {
+      selectedModel.value = conversationModel
+    } else if (lastAssistant?.model) {
+      selectedModel.value = lastAssistant.model
+    } else {
+      ensureDefault(modelsRes.default)
+    }
 
     // Restore any unsent draft and queued messages for this conversation.
     input.value = getDraft(id.value)
@@ -1221,6 +1387,18 @@ function sendMessage() {
   sendNow(prompt)
 }
 
+// Trigger a brief office character reaction (walk + speech bubble) so the
+// scene feels alive on every interaction. Auto-clears after a short delay.
+function triggerReaction(message: string) {
+  if (reactionTimer) clearTimeout(reactionTimer)
+  reactionMessage.value = message
+  reacting.value = true
+  reactionTimer = setTimeout(() => {
+    reacting.value = false
+    reactionMessage.value = ''
+  }, 2000)
+}
+
 async function sendNow(prompt: string) {
   voice.stop()
   sendError.value = ''
@@ -1239,6 +1417,9 @@ async function sendNow(prompt: string) {
   // being processed while the backend prepares the agent run. Without this,
   // there's no visual feedback during the sendMessage API call.
   agentStarting.value = true
+
+  // Make the office character react (walk + speech bubble) on every send.
+  triggerReaction('On it!')
 
   try {
     const result = await convApi.sendMessage(
@@ -1260,7 +1441,10 @@ async function sendNow(prompt: string) {
     }
 
     agentRunning.value = true
-    liveOutput.value = ''
+    // Brief natural acknowledgement while Devin spins up; the first SSE
+    // output event replaces this with real agent output.
+    agentStarting.value = false
+    liveOutput.value = 'On it — looking into that now.'
     liveLog.value = ''
     // Honor the user's saved logs preference for this conversation; defaults
     // to closed when no preference exists yet (appendLog will auto-open).
@@ -1352,5 +1536,6 @@ onUnmounted(() => {
   agentTimer.stop()
   voice.stop()
   eventSource?.close()
+  if (reactionTimer) clearTimeout(reactionTimer)
 })
 </script>

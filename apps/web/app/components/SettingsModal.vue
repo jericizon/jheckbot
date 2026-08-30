@@ -135,6 +135,25 @@
                 <div class="text-xs text-content-subtle">Controls Devin CLI from your phone</div>
               </div>
 
+              <div class="rounded-lg border border-border bg-surface p-4 space-y-3">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-content-muted" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <div class="text-sm font-semibold">Mobile app</div>
+                </div>
+                <div class="text-xs text-content-subtle">
+                  Install the Android wrapper to launch JheckBot from your home screen.
+                </div>
+                <a
+                  href="/jheckbot-debug.apk"
+                  download
+                  class="inline-flex items-center justify-center w-full rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-content hover:border-content-subtle hover:bg-surface-subtle transition-colors"
+                >
+                  Download Android APK
+                </a>
+              </div>
+
               <div class="rounded-lg border border-red-500/30 bg-surface p-4 space-y-3">
                 <div class="text-sm font-semibold text-red-500">Danger Zone</div>
                 <div class="text-xs text-content-subtle">

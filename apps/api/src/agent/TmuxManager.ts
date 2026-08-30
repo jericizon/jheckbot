@@ -34,10 +34,8 @@ export class TmuxManager {
 
   /** Create a new detached tmux session running a command. */
   createSession(name: string, cwd: string, command: string, env?: Record<string, string>): void {
-    if (this.sessionExists(name)) {
-      throw new TmuxError(`Session already exists: ${name}`)
-    }
-
+    // Skip the separate has-session pre-check — new-session fails with a
+    // clear error if the session already exists, saving one subprocess call.
     const createArgs = [
       'new-session',
       '-d',                    // detached
@@ -53,7 +51,17 @@ export class TmuxManager {
     })
 
     createArgs.push('--', [...environmentAssignments, command].join(' '))
-    execFileSync(this.tmuxBin, createArgs, { stdio: 'pipe' })
+    try {
+      execFileSync(this.tmuxBin, createArgs, { stdio: 'pipe' })
+    } catch (error) {
+      // tmux reports "duplicate session" with a non-zero exit; surface a
+      // clear error so the caller doesn't need a separate has-session check.
+      const msg = error instanceof Error ? error.message : String(error)
+      if (msg.includes('duplicate session') || msg.includes('exists')) {
+        throw new TmuxError(`Session already exists: ${name}`)
+      }
+      throw error
+    }
 
     // Keep the session alive after the command exits so scrollback is
     // preserved for the watcher to capture the final output.
@@ -89,9 +97,10 @@ export class TmuxManager {
    * Check if the pane's process is still running. With remain-on-exit,
    * has-session returns true even after the process exits; this method
    * checks the pane_dead flag to detect actual process termination.
+   * Skips the separate has-session check — display-message fails if the
+   * session doesn't exist, saving one subprocess call per tick.
    */
   isPaneAlive(name: string): boolean {
-    if (!this.sessionExists(name)) return false
     try {
       const output = execFileSync(
         this.tmuxBin,
@@ -106,7 +115,8 @@ export class TmuxManager {
 
   /** Return the OS process ID of the tmux pane's command. */
   getPanePid(name: string): number | undefined {
-    if (!this.sessionExists(name)) return undefined
+    // Skip has-session pre-check — display-message fails if the session
+    // doesn't exist, saving one subprocess call.
     try {
       const output = execFileSync(
         this.tmuxBin,

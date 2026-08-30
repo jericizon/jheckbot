@@ -8,6 +8,11 @@ dist/
 .nitro/
 .cache/
 *.tsbuildinfo
+installers/*.apk
+apps/android/app/build/
+apps/android/.gradle/
+apps/android/.kotlin/
+.gradle/
 
 # Environment
 .env
@@ -45,3 +50,9 @@ temp/
 
 # Superpowers SDD artifacts (internal development tracking)
 .superpowers/sdd/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Client demo artifacts
+docs/client-demo/

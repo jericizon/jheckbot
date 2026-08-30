@@ -13,6 +13,7 @@ import { PushSubscriptionRepository } from './repositories/PushSubscriptionRepos
 import { OfficeAgentRepository } from './repositories/OfficeAgentRepository.js'
 import { OfficeTaskRepository } from './repositories/OfficeTaskRepository.js'
 import { OfficeEventRepository } from './repositories/OfficeEventRepository.js'
+import { OfficeRepository } from './repositories/OfficeRepository.js'
 import { PathValidator, type AllowedRoot } from './services/PathValidator.js'
 import { ProjectService } from './services/ProjectService.js'
 import { ProjectHealthService } from './services/ProjectHealthService.js'
@@ -27,9 +28,14 @@ import { MediaService } from './services/MediaService.js'
 import { OfficeAgentService } from './services/OfficeAgentService.js'
 import { OfficeTaskService } from './services/OfficeTaskService.js'
 import { OfficeEventService } from './services/OfficeEventService.js'
+import { OfficeService } from './services/OfficeService.js'
 import { OfficeNotificationService } from './services/OfficeNotificationService.js'
 import { CEOPlanner } from './services/orchestration/CEOPlanner.js'
 import { CEOService } from './services/orchestration/CEOService.js'
+import { WorkflowEngine } from './services/orchestration/WorkflowEngine.js'
+import { TaskDispatcher } from './services/orchestration/TaskDispatcher.js'
+import { AgentSelector } from './services/orchestration/AgentSelector.js'
+import { WorkflowRunRepository } from './repositories/WorkflowRunRepository.js'
 import { ProjectController } from './controllers/ProjectController.js'
 import { ConversationController } from './controllers/ConversationController.js'
 import { AuthController } from './controllers/AuthController.js'
@@ -39,6 +45,7 @@ import { MediaController } from './controllers/MediaController.js'
 import { OfficeAgentController } from './controllers/OfficeAgentController.js'
 import { OfficeTaskController } from './controllers/OfficeTaskController.js'
 import { OfficeEventController } from './controllers/OfficeEventController.js'
+import { OfficeController } from './controllers/OfficeController.js'
 import { CEOController } from './controllers/CEOController.js'
 import { createProjectRouter } from './routes/project.routes.js'
 import { createConversationRouter, createNestedConversationRouter } from './routes/conversation.routes.js'
@@ -49,6 +56,7 @@ import { createMediaRouter } from './routes/media.routes.js'
 import { createOfficeAgentRouter, createOfficeAgentsByOfficeRouter } from './routes/office-agent.routes.js'
 import { createOfficeTaskRouter, createOfficeTasksByOfficeRouter } from './routes/office-task.routes.js'
 import { createOfficeEventRouter, createOfficeEventsByOfficeRouter } from './routes/office-event.routes.js'
+import { createOfficeProjectRouter } from './routes/office.routes.js'
 import { createCEORouter } from './routes/ceo.routes.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { loginLimiter, apiLimiter, messageLimiter } from './middleware/rateLimiter.js'
@@ -209,13 +217,22 @@ export function createApp(): express.Express {
   const officeAgentService = new OfficeAgentService(officeAgentRepo, officeEventService)
   const officeAgentController = new OfficeAgentController(officeAgentService)
 
+  const officeRepo = new OfficeRepository()
+  const officeService = new OfficeService(officeRepo, officeAgentRepo, repo)
+  const officeController = new OfficeController(officeService)
+
   const officeTaskService = new OfficeTaskService(officeTaskRepo, officeEventService)
   const officeTaskController = new OfficeTaskController(officeTaskService)
 
   const officeEventController = new OfficeEventController(officeEventService)
 
+  const workflowRunRepo = new WorkflowRunRepository()
+  const agentSelector = new AgentSelector()
+  const taskDispatcher = new TaskDispatcher(officeTaskService, officeAgentService, officeEventService, agentSelector)
+  const workflowEngine = new WorkflowEngine(workflowRunRepo, officeTaskService, officeEventService, taskDispatcher)
+
   const ceoPlanner = new CEOPlanner(officeTaskService, officeEventService, officeAgentService)
-  const ceoService = new CEOService(ceoPlanner, officeEventService)
+  const ceoService = new CEOService(ceoPlanner, officeEventService, officeAgentService, workflowEngine)
   const ceoController = new CEOController(ceoService)
 
   const authMiddleware = createAuthMiddleware(authService)
@@ -280,6 +297,10 @@ export function createApp(): express.Express {
   projectRouter.use(
     '/:projectId/conversations',
     createNestedConversationRouter(conversationController),
+  )
+  projectRouter.use(
+    '/:projectId/office',
+    createOfficeProjectRouter(officeController),
   )
   app.use('/api/projects', projectRouter)
 

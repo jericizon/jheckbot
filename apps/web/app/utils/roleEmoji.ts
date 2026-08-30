@@ -6,6 +6,7 @@ export function getRoleEmoji(role: string): string {
   const lower = role.toLowerCase()
   if (lower.includes('ceo')) return '👔'
   if (lower.includes('qa')) return '🧪'
+  if (lower.includes('support')) return '🎧'
   if (lower.includes('review')) return '🔍'
   if (lower.includes('devops')) return '⚙️'
   if (lower.includes('security')) return '🛡️'
@@ -14,5 +15,6 @@ export function getRoleEmoji(role: string): string {
   if (lower.includes('backend')) return '⚙️'
   if (lower.includes('writer') || lower.includes('doc')) return '📝'
   if (lower.includes('product') || lower.includes('manager')) return '📋'
+  if (lower === 'default') return '🧑‍💻'
   return '🧑‍💻'
 }

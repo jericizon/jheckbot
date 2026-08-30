@@ -33,6 +33,7 @@ const { settingsOpen, open: openSettings, close: closeSettings } = useSettingsMo
 const showNav = computed(() =>
   !route.path.startsWith('/login')
   && !route.path.startsWith('/conversations/')
+  && !route.path.startsWith('/office/ceo')
   && !(/^\/projects\/[^/]+\/?$/.test(route.path))
 )
 </script>

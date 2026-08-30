@@ -83,6 +83,7 @@ support, see [deploy/README.md](deploy/README.md).
 | `pnpm dev` | Start web and API in development mode |
 | `pnpm dev:clean` | Free reserved development ports (8800, 8801, 8802) |
 | `pnpm build` | Build all packages |
+| `pnpm build:android` | Build the Android debug APK |
 | `pnpm test` | Run all tests |
 | `pnpm typecheck` | Type-check all packages |
 | `pnpm lint` | Lint all packages |

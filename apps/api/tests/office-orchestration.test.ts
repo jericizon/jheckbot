@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { OfficeAgent, OfficeEvent, OfficeTask, OfficeTaskDependency } from '@jheckbot/shared'
 import { OfficeEventRepository } from '../src/repositories/OfficeEventRepository.js'
 import { OfficeTaskRepository } from '../src/repositories/OfficeTaskRepository.js'
@@ -54,6 +54,10 @@ class FakeOfficeEventRepository extends OfficeEventRepository {
 
   override async listByOfficeAndTypes(officeId: string, eventTypes: string[]): Promise<OfficeEvent[]> {
     return this.events.filter((e) => e.officeId === officeId && eventTypes.includes(e.eventType))
+  }
+
+  override async officeExists(officeId: string): Promise<boolean> {
+    return true
   }
 
   all(): OfficeEvent[] {
@@ -188,7 +192,13 @@ class FakeOfficeAgentRepository extends OfficeAgentRepository {
   override async update(id: string, data: Partial<OfficeAgent>): Promise<OfficeAgent | null> {
     const agent = this.agents.find((a) => a.id === id)
     if (!agent) return null
-    Object.assign(agent, data, { updatedAt: now() })
+    // Mirror the real repository: keep existing values for fields not provided.
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        ;(agent as Record<string, unknown>)[key] = value
+      }
+    }
+    agent.updatedAt = now()
     return agent
   }
 
@@ -369,6 +379,101 @@ describe('Office orchestration E2E', () => {
     expect(events.some((e) => e.eventType === 'CEO_RESPONSE')).toBe(true)
     expect(events.some((e) => e.eventType === 'CEO_PLANNING' && e.content === 'Planning completed')).toBe(true)
     expect(events.filter((e) => e.eventType === 'TASK_CREATED')).toHaveLength(3)
+  })
+
+  it('CEO joins the conference room meeting and speaks first, then returns to idle', async () => {
+    vi.useFakeTimers()
+    try {
+      const { eventRepo, eventService, agentService, agentRepo, taskService } = createOrchestrationFixture()
+      // Wire the CEO service with the agent service so holdMeeting can run.
+      const planner = new CEOPlanner(taskService, eventService, agentService)
+      const ceoService = new CEOService(planner, eventService, agentService)
+
+      const ceo = await agentService.create({ officeId: 'office-1', name: 'CEO', role: 'CEO' })
+      await agentService.create({ officeId: 'office-1', name: 'Support', role: 'Support' })
+      await agentService.create({ officeId: 'office-1', name: 'QA', role: 'QA' })
+
+      const updateSpy = vi.spyOn(agentService, 'update')
+
+      const promise = ceoService.sendMessage({ officeId: 'office-1', request: 'add login' })
+      await promise
+      // Drive the background meeting forward, flushing microtasks between
+      // timer advances so dialogue + status updates complete in order.
+      for (let i = 0; i < 30; i++) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+
+      const allEvents = eventRepo.all()
+
+      // CEO was called into the conference room.
+      expect(updateSpy).toHaveBeenCalledWith(ceo.id, { status: 'communicating' })
+
+      // CEO opens the planning phase as the first speaker (chronological
+      // order — the fake repo unshifts, so the first emitted is last in array).
+      const agentMessages = allEvents.filter((e) => e.eventType === 'AGENT_MESSAGE')
+      expect(agentMessages.length).toBeGreaterThan(0)
+      const firstMessage = agentMessages[agentMessages.length - 1]
+      expect(firstMessage.metadata?.fromAgentId).toBe(ceo.id)
+
+      // After the meeting, the CEO is restored to idle.
+      const finalCeo = (await agentRepo.listByOffice('office-1')).find((a) => a.id === ceo.id)
+      expect(finalCeo?.status).toBe('idle')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('CEO plans alone, then Support is called for work, then QA for finalizing', async () => {
+    vi.useFakeTimers()
+    try {
+      const { eventRepo, eventService, agentService, agentRepo, taskService } = createOrchestrationFixture()
+      const planner = new CEOPlanner(taskService, eventService, agentService)
+      const ceoService = new CEOService(planner, eventService, agentService)
+
+      const ceo = await agentService.create({ officeId: 'office-1', name: 'CEO', role: 'CEO' })
+      const support = await agentService.create({ officeId: 'office-1', name: 'Support', role: 'Support' })
+      const qa = await agentService.create({ officeId: 'office-1', name: 'QA', role: 'QA' })
+
+      const updateSpy = vi.spyOn(agentService, 'update')
+      const updateCalls: { id: string; status: string }[] = []
+      updateSpy.mockImplementation(async (id, data) => {
+        if (data.status) updateCalls.push({ id, status: data.status })
+        return agentRepo.update(id, data)
+      })
+
+      const promise = ceoService.sendMessage({ officeId: 'office-1', request: 'add login' })
+      await promise
+
+      // Phase 1: CEO enters alone for planning (2s delay).
+      // Advance just 1.5s — CEO should be the only one communicating.
+      await vi.advanceTimersByTimeAsync(1500)
+      const communicatingDuringPlanning = updateCalls.filter((c) => c.status === 'communicating')
+      expect(communicatingDuringPlanning).toHaveLength(1)
+      expect(communicatingDuringPlanning[0].id).toBe(ceo.id)
+
+      // Drive the rest of the meeting forward.
+      for (let i = 0; i < 40; i++) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+
+      // By the end, Support and QA were both called in.
+      const allCommunicating = updateCalls.filter((c) => c.status === 'communicating').map((c) => c.id)
+      expect(allCommunicating).toContain(support.id)
+      expect(allCommunicating).toContain(qa.id)
+
+      // CEO was called first (planning), then Support (work), then QA (finalizing).
+      const ceoIdx = updateCalls.findIndex((c) => c.id === ceo.id && c.status === 'communicating')
+      const supportIdx = updateCalls.findIndex((c) => c.id === support.id && c.status === 'communicating')
+      const qaIdx = updateCalls.findIndex((c) => c.id === qa.id && c.status === 'communicating')
+      expect(ceoIdx).toBeLessThan(supportIdx)
+      expect(supportIdx).toBeLessThan(qaIdx)
+
+      // Everyone returns to idle after the meeting.
+      const finalAgents = await agentRepo.listByOffice('office-1')
+      expect(finalAgents.every((a) => a.status === 'idle')).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('WorkflowEngine dispatches dependent tasks and completes the run', async () => {

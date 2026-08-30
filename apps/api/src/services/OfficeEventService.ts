@@ -42,6 +42,10 @@ export class OfficeEventService {
     return this.repo.listByOfficeAndTypes(officeId, eventTypes)
   }
 
+  async officeExists(officeId: string): Promise<boolean> {
+    return this.repo.officeExists(officeId)
+  }
+
   subscribe(officeId: string, listener: OfficeEventListener): () => void {
     this.emitter.on(officeId, listener)
     return () => this.emitter.off(officeId, listener)

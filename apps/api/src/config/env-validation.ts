@@ -192,7 +192,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): RuntimeEnv {
   // Rate limits — tunable so the frontend's polling of /api/models and
   // /api/conversations/active doesn't exhaust the shared bucket.
   const rateLimitWindowMs = parsePositiveInt(source, 'RATE_LIMIT_WINDOW_MS', 60 * 1000)
-  const rateLimitMax = parsePositiveInt(source, 'RATE_LIMIT_MAX', 600)
+  const rateLimitMax = parsePositiveInt(source, 'RATE_LIMIT_MAX', 3000)
   const messageRateLimitMax = parsePositiveInt(source, 'MESSAGE_RATE_LIMIT_MAX', 60)
 
   flushWarnings()

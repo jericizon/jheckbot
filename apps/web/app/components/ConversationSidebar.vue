@@ -6,7 +6,13 @@
     enter-from-class="opacity-0"
     leave-to-class="opacity-0"
   >
-    <div v-if="sidebarOpen" class="fixed inset-0 bg-black/40 z-30 md:hidden" @click="close" />
+    <button
+      v-if="sidebarOpen"
+      type="button"
+      class="fixed inset-0 bg-black/40 z-40 md:hidden"
+      aria-label="Close sidebar"
+      @click="close"
+    />
   </Transition>
 
   <!-- Sidebar -->
@@ -18,8 +24,20 @@
   >
     <aside
       v-if="sidebarOpen"
-      class="fixed md:relative z-40 w-64 shrink-0 h-full bg-surface-elevated border-r border-border flex flex-col"
+      class="fixed md:relative z-50 shrink-0 h-full bg-surface-elevated border-r border-border flex flex-col"
+      :style="{ width: sidebarWidth + 'px' }"
     >
+      <button
+        type="button"
+        @click="close"
+        class="absolute top-2 right-2 z-10 p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+        aria-label="Close sidebar"
+        title="Close sidebar"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
       <!-- New conversation -->
       <div class="p-3">
         <slot name="new-button">
@@ -222,6 +240,19 @@
           </button>
         </div>
       </div>
+
+      <!-- Resize handle (desktop only) -->
+      <div
+        class="hidden md:flex absolute top-0 -right-1 w-2 h-full cursor-col-resize items-center justify-center group z-50"
+        @mousedown.prevent="startResize"
+        @touchstart.prevent="startResize"
+        aria-hidden="true"
+      >
+        <div
+          class="w-0.5 h-full bg-border transition-colors group-hover:bg-accent group-hover:w-1"
+          :class="{ 'bg-accent w-1': resizing }"
+        />
+      </div>
     </aside>
   </Transition>
 </template>
@@ -258,10 +289,45 @@ const emit = defineEmits<{
   (e: 'pin', id: string, isPinned: boolean): void
 }>()
 
-const { sidebarOpen, close } = useSidebar()
+const { sidebarOpen, sidebarWidth, close, setWidth } = useSidebar()
 const { theme, toggle: toggleTheme } = useTheme()
 const { open: openSettings } = useSettingsModal()
 const { hasDraft } = useConversationDrafts()
+
+// --- Resize logic ---
+const resizing = ref(false)
+let startX = 0
+let startWidth = 0
+
+function onPointerMove(e: PointerEvent | MouseEvent | TouchEvent) {
+  const clientX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : (e as MouseEvent).clientX
+  const delta = clientX - startX
+  setWidth(startWidth + delta)
+}
+
+function onPointerUp() {
+  resizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('mousemove', onPointerMove)
+  window.removeEventListener('mouseup', onPointerUp)
+  window.removeEventListener('touchmove', onPointerMove)
+  window.removeEventListener('touchend', onPointerUp)
+}
+
+function startResize(e: MouseEvent | TouchEvent) {
+  resizing.value = true
+  startX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : (e as MouseEvent).clientX
+  startWidth = sidebarWidth.value
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onPointerMove)
+  window.addEventListener('mouseup', onPointerUp)
+  window.addEventListener('touchmove', onPointerMove, { passive: false })
+  window.addEventListener('touchend', onPointerUp)
+}
+
+onUnmounted(onPointerUp)
 
 const ACTIVE_STATUSES = ['starting', 'running', 'stopping']
 function isAgentActive(conv: Conversation) {

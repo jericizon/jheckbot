@@ -55,4 +55,18 @@ export class MessageRepository {
     )
     return Number(rows[0].count)
   }
+
+  async findLastAssistantMessage(
+    conversationId: string,
+    executor: DbExecutor = pool,
+  ): Promise<MessageRecord | null> {
+    const { rows } = await executor.query<MessageRecord>(
+      `SELECT * FROM messages
+       WHERE conversation_id = $1 AND role = 'assistant'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [conversationId],
+    )
+    return rows[0] ?? null
+  }
 }

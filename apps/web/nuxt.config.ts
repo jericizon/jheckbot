@@ -12,6 +12,8 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
+      // NUXT_PUBLIC_API_BASE lets the LAN/mobile build proxy /api to the
+      // API's reachable address (e.g. http://192.168.18.12:8801).
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8801',
     },
   },

@@ -1,113 +1,91 @@
 <template>
-  <button
-    type="button"
-    class="group relative flex flex-col items-center gap-1.5 p-1 rounded-xl hover:bg-emerald-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-50 transition-colors animate-pop-in"
+  <div
+    class="group relative flex flex-col items-center animate-pop-in"
     :aria-label="ariaLabel"
-    @click="$emit('select', agent)"
   >
-    <div class="relative" :class="{ 'animate-unit-bob': bar.glow }">
-      <!-- Status glow ring for active units -->
+    <div class="relative">
+      <!-- Speech bubble — only for actual messages, not generic status -->
       <div
-        v-if="bar.glow"
-        class="absolute inset-0 rounded-full animate-glow-pulse pointer-events-none"
-        aria-hidden="true"
-      />
-
-      <!-- Avatar disc -->
-      <div
-        class="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-2xl sm:text-3xl shadow-md border-[3px] transition-transform group-hover:scale-110 group-hover:-translate-y-1"
-        :class="avatarClasses"
+        v-if="hasMessage"
+        class="absolute -top-8 left-1/2 -translate-x-1/2 z-10 px-2 py-1 rounded-xl bg-surface-elevated border border-border text-[10px] leading-tight shadow-sm animate-talk-bubble max-w-[12rem] text-center break-words"
         aria-hidden="true"
       >
-        {{ emoji }}
+        {{ speechBubbleText }}
       </div>
 
-      <!-- Role badge (CoC-style circular badge) -->
+      <!-- Brainstorming thought bubble (idea indicator while planning) -->
       <div
-        class="absolute -bottom-1 -left-1 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 border-2 border-white dark:border-slate-900 shadow flex items-center justify-center text-[10px] font-bold text-amber-900"
-        :title="agent.role"
+        v-else-if="brainstorming"
+        class="absolute -top-6 left-1/2 -translate-x-1/2 z-10 text-sm animate-talk-bubble"
         aria-hidden="true"
       >
-        {{ badgeLabel }}
+        <span class="inline-block animate-pulse">💭</span>
       </div>
 
-      <!-- Status dot -->
-      <OfficeStatusBadge
-        :status="agent.status"
-        compact
-        class="absolute -top-0.5 -right-0.5"
-      />
+      <!-- Mini figure character -->
+      <div
+        class="relative w-12 h-14 sm:w-14 sm:h-16 transition-transform group-hover:scale-110 group-hover:-translate-y-1"
+        aria-hidden="true"
+      >
+        <OfficeMiniFigure
+          :role="agent.role"
+          :is-ceo="isCeo"
+          :active="bar.glow"
+          :walking="isMoving"
+          :talking="isTalking"
+          :busy="busy"
+          :seated="seated"
+          :variant="figureVariant"
+        />
+      </div>
     </div>
 
-    <!-- Name -->
-    <span class="text-xs font-bold text-content truncate max-w-[7rem] drop-shadow-sm">
+    <!-- Name tag below the feet so it never overlaps the speech bubble -->
+    <span
+      class="z-20 -mt-0.5 px-1.5 py-0.5 rounded-full bg-surface-elevated/90 border border-border text-[10px] font-semibold text-content truncate max-w-[8rem] shadow-sm"
+    >
       {{ agent.name }}
     </span>
-
-    <!-- Cartoon status / activity bar -->
-    <div
-      class="w-12 h-1.5 sm:w-14 rounded-full bg-black/15 dark:bg-white/15 overflow-hidden border border-black/10 dark:border-white/10"
-      role="progressbar"
-      :aria-valuenow="bar.percent"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      :aria-label="`${style.label} status`"
-    >
-      <div
-        class="h-full rounded-full transition-all duration-500"
-        :class="[bar.barClass, bar.glow ? 'animate-pulse' : '']"
-        :style="{ width: `${bar.percent}%` }"
-      />
-    </div>
-  </button>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { OfficeAgent } from '@jheckbot/shared'
-import { getRoleEmoji } from '~/utils/roleEmoji'
-import { getAgentStatusStyle, getAgentStatusBar } from '~/utils/agentStatus'
-import OfficeStatusBadge from './OfficeStatusBadge.vue'
+import type { OfficeAgent, AgentStatus } from '@jheckbot/shared'
+import { getAgentStatusBar } from '~/utils/agentStatus'
+import OfficeMiniFigure from './OfficeMiniFigure.vue'
 
 const props = defineProps<{
   agent: OfficeAgent
   isCeo?: boolean
+  walking?: boolean
+  busy?: boolean
+  seated?: boolean
+  brainstorming?: boolean
+  message?: string
 }>()
 
-defineEmits<{
-  select: [OfficeAgent]
-}>()
+const MOVING_STATUSES: AgentStatus[] = ['working', 'thinking', 'communicating', 'reviewing', 'testing']
 
-const emoji = computed(() => (props.isCeo ? '👑' : getRoleEmoji(props.agent.role)))
-const style = computed(() => getAgentStatusStyle(props.agent.status))
 const bar = computed(() => getAgentStatusBar(props.agent.status))
 
-const avatarClasses = computed(() => {
-  if (props.isCeo) {
-    return 'bg-gradient-to-br from-amber-200 to-amber-400 border-amber-600'
-  }
-  return 'bg-gradient-to-br from-sky-200 to-sky-400 border-sky-600'
-})
+// Characters only move based on their OWN status, not the global busy flag.
+const isMoving = computed(
+  () => props.walking || MOVING_STATUSES.includes(props.agent.status),
+)
+const hasMessage = computed(() => !!props.message?.trim())
+const speechBubbleText = computed(() => props.message?.trim() ?? '')
 
-// Short role badge label (1-3 chars) for the circular badge.
-const badgeLabel = computed(() => {
-  if (props.isCeo) return 'CEO'
-  const role = props.agent.role.toLowerCase()
-  if (role.includes('qa')) return 'QA'
-  if (role.includes('review')) return 'REV'
-  if (role.includes('devops')) return 'OPS'
-  if (role.includes('security')) return 'SEC'
-  if (role.includes('frontend')) return 'FE'
-  if (role.includes('backend')) return 'BE'
-  if (role.includes('full')) return 'FS'
-  if (role.includes('design') || role.includes('ui') || role.includes('ux')) return 'UX'
-  if (role.includes('writer') || role.includes('doc')) return 'DOC'
-  if (role.includes('product') || role.includes('manager')) return 'PM'
-  return 'DEV'
+const figureVariant = computed(() => {
+  if (!props.agent.id) return 0
+  let hash = 0
+  for (let i = 0; i < props.agent.id.length; i++) {
+    hash = (hash * 31 + props.agent.id.charCodeAt(i)) | 0
+  }
+  return Math.abs(hash)
 })
 
 const ariaLabel = computed(
-  () =>
-    `Select ${props.agent.name}, ${props.agent.role}, status ${props.agent.status}`,
+  () => `${props.agent.name}, ${props.agent.role}, status ${props.agent.status}`,
 )
 </script>

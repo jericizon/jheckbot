@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { gridColumns, gridPositions, sceneHeightFor } from '../app/utils/cubicleLayout'
+import {
+  gridColumns,
+  gridPositions,
+  sceneHeightFor,
+  midZoneLayout,
+  conferenceSeats,
+  hallwayPositions,
+} from '../app/utils/cubicleLayout'
 
 describe('gridColumns', () => {
   it('uses 2 columns on mobile', () => {
@@ -68,5 +75,45 @@ describe('sceneHeightFor', () => {
     const small = parseFloat(sceneHeightFor(3, 3))
     const large = parseFloat(sceneHeightFor(12, 3))
     expect(large).toBeGreaterThan(small)
+  })
+})
+
+describe('midZoneLayout', () => {
+  it('places CEO on the left and conference room centered on screen', () => {
+    const { ceo, conference } = midZoneLayout()
+    expect(ceo.left).toBeLessThan(50)
+    expect(conference.left).toBe(50)
+  })
+  it('positions both in the middle band of the scene', () => {
+    const { ceo, conference } = midZoneLayout()
+    expect(ceo.top).toBeGreaterThan(40)
+    expect(ceo.top).toBeLessThan(80)
+    expect(conference.top).toBeGreaterThan(40)
+    expect(conference.top).toBeLessThan(80)
+  })
+})
+
+describe('conferenceSeats', () => {
+  it('returns empty for 0 participants', () => {
+    expect(conferenceSeats(0)).toEqual([])
+  })
+  it('places seats near the conference room center', () => {
+    const seats = conferenceSeats(4)
+    expect(seats).toHaveLength(4)
+    const { conference } = midZoneLayout()
+    for (const s of seats) {
+      expect(Math.abs(s.left - conference.left)).toBeLessThan(15)
+      expect(Math.abs(s.top - conference.top)).toBeLessThan(15)
+    }
+  })
+})
+
+describe('hallwayPositions', () => {
+  it('returns hallway strips in ascending order', () => {
+    const hallways = hallwayPositions()
+    expect(hallways.length).toBeGreaterThanOrEqual(2)
+    for (let i = 1; i < hallways.length; i++) {
+      expect(hallways[i - 1].top).toBeLessThan(hallways[i].top)
+    }
   })
 })

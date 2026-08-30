@@ -23,6 +23,11 @@ export class LogTailer {
   private position = 0
   private partial = ''
   private decoder = new StringDecoder('utf8')
+  // Cache the pane PID so we don't shell out to tmux on every tail() call.
+  // The PID doesn't change during a run; re-resolve only if the log file
+  // can't be opened (session may have been recreated).
+  private cachedPanePid?: number
+  private pidResolveFailed = false
 
   constructor(sessionName: string, tmux: TmuxManager, logDir: string) {
     this.sessionName = sessionName
@@ -83,10 +88,19 @@ export class LogTailer {
   }
 
   private resolveLogPath(): string | undefined {
-    const panePid = this.tmux.getPanePid(this.sessionName)
-    if (!panePid) return undefined
+    // Use cached PID if available; only shell out to tmux on first call
+    // or after a failed resolve (session may have been recreated).
+    if (this.cachedPanePid === undefined && !this.pidResolveFailed) {
+      this.cachedPanePid = this.tmux.getPanePid(this.sessionName)
+      if (this.cachedPanePid === undefined) {
+        this.pidResolveFailed = true
+        return undefined
+      }
+    }
 
-    const pids = [panePid, ...this.childPids(panePid)]
+    if (this.cachedPanePid === undefined) return undefined
+
+    const pids = [this.cachedPanePid, ...this.childPids(this.cachedPanePid)]
     // Prefer the `devin acp` child log; it holds the real trace.
     for (const pid of pids) {
       if (this.isAcpProcess(pid)) {
@@ -94,7 +108,7 @@ export class LogTailer {
         if (path) return path
       }
     }
-    return this.findLogForPid(panePid)
+    return this.findLogForPid(this.cachedPanePid)
   }
 
   private childPids(pid: number): number[] {

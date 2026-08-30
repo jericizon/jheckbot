@@ -26,6 +26,7 @@ export class CEOController {
     const body = typeof req.body === 'object' && req.body !== null ? req.body : {}
     const request = typeof body.request === 'string' ? body.request.trim() : ''
     const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
+    const model = typeof body.model === 'string' ? body.model : undefined
 
     if (!request) {
       res.status(400).json({ error: 'Request is required' })
@@ -33,7 +34,7 @@ export class CEOController {
     }
 
     try {
-      const result = await this.service.sendMessage({ officeId, request, projectId })
+      const result = await this.service.sendMessage({ officeId, request, projectId, model })
       res.status(201).json(result)
     } catch (err) {
       if (err instanceof CEOServiceError) {

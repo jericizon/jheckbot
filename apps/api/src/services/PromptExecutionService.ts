@@ -1,6 +1,6 @@
 import { withTransaction, type DbExecutor } from '../db/pool.js'
 import { AgentManager, AgentManagerError, type AgentRun } from '../agent/AgentManager.js'
-import { ConversationRepository } from '../repositories/ConversationRepository.js'
+import { ConversationRepository, type ConversationRecord } from '../repositories/ConversationRepository.js'
 import { ProjectRepository } from '../repositories/ProjectRepository.js'
 import { MessageRepository, type MessageRecord } from '../repositories/MessageRepository.js'
 import { AgentEventRepository } from '../repositories/AgentEventRepository.js'
@@ -94,12 +94,15 @@ export class PromptExecutionService {
         throw new AgentManagerError('Maximum concurrent agent sessions reached', 429)
       }
 
+      const requestedModel = input.model?.trim() || DEFAULT_DEVIN_MODEL
+
       const message = await this.messageRepo.create(
         {
           conversationId: input.conversationId,
           role: 'user',
           content: input.prompt,
           messageType: 'prompt',
+          model: requestedModel,
         },
         client as DbExecutor,
       )
@@ -120,6 +123,33 @@ export class PromptExecutionService {
         client as DbExecutor,
       )
 
+      // Honor model selection. Devin CLI ignores --model when resuming a session,
+      // so if the requested model differs from the one used by the active session
+      // we must clear the session ID and start fresh.
+      const currentModel = await this.resolveCurrentModel(conversation, client as DbExecutor)
+
+      if (currentModel !== null && currentModel !== requestedModel) {
+        // Model changed mid-conversation: discard the resumed session so the
+        // new model is actually used. The old tmux session is cleaned up before
+        // the next session is launched.
+        await this.conversationRepo.clearAgentSessionId(
+          input.conversationId,
+          client as DbExecutor,
+        )
+        conversation.agent_session_id = null
+      }
+
+      await this.conversationRepo.update(
+        input.conversationId,
+        {
+          providerConfig: {
+            ...(conversation.provider_config ?? {}),
+            model: requestedModel,
+          },
+        },
+        client as DbExecutor,
+      )
+
       let prepared: ReturnType<typeof this.agentManager.prepareRun> | undefined
       try {
         prepared = this.agentManager.prepareRun({
@@ -129,7 +159,7 @@ export class PromptExecutionService {
           cwd,
           prompt: input.prompt,
           devinSessionId: conversation.agent_session_id ?? undefined,
-          model: input.model || DEFAULT_DEVIN_MODEL,
+          model: requestedModel,
           userMessageId: message.id,
           bypass: input.bypass,
         })
@@ -165,6 +195,23 @@ export class PromptExecutionService {
     const trimmed = prompt.trim()
     if (trimmed.length <= 60) return trimmed
     return trimmed.slice(0, 57).trimEnd() + '...'
+  }
+
+  private async resolveCurrentModel(
+    conversation: ConversationRecord,
+    executor: DbExecutor,
+  ): Promise<string | null> {
+    const configured = conversation.provider_config?.model
+    if (typeof configured === 'string' && configured.trim()) {
+      return configured
+    }
+
+    if (conversation.agent_session_id) {
+      const last = await this.messageRepo.findLastAssistantMessage(conversation.id, executor)
+      return last?.model ?? null
+    }
+
+    return null
   }
 }
 

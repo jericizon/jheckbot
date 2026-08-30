@@ -83,4 +83,12 @@ export class OfficeEventRepository {
     )
     return rows.map(toOfficeEvent)
   }
+
+  async officeExists(officeId: string, executor: DbExecutor = pool): Promise<boolean> {
+    const { rows } = await executor.query<{ exists: boolean }>(
+      'SELECT EXISTS(SELECT 1 FROM offices WHERE id = $1) AS exists',
+      [officeId],
+    )
+    return rows[0]?.exists === true
+  }
 }

@@ -29,7 +29,7 @@ function makeEvent(eventType: string, content: string): any {
 
 describe('CEOService', () => {
   let planner: Pick<CEOPlanner, 'plan'>
-  let eventService: Pick<OfficeEventService, 'create' | 'listByOfficeAndTypes'>
+  let eventService: Pick<OfficeEventService, 'create' | 'listByOfficeAndTypes' | 'officeExists'>
   let service: CEOService
 
   beforeEach(() => {
@@ -39,7 +39,8 @@ describe('CEOService', () => {
     eventService = {
       create: vi.fn().mockResolvedValue(makeEvent('CEO_RESPONSE', 'response')),
       listByOfficeAndTypes: vi.fn().mockResolvedValue([]),
-    } as unknown as Pick<OfficeEventService, 'create' | 'listByOfficeAndTypes'>
+      officeExists: vi.fn().mockResolvedValue(true),
+    } as unknown as Pick<OfficeEventService, 'create' | 'listByOfficeAndTypes' | 'officeExists'>
     service = new CEOService(planner as CEOPlanner, eventService as OfficeEventService)
   })
 
@@ -70,6 +71,15 @@ describe('CEOService', () => {
 
   it('throws for empty request', async () => {
     await expect(service.sendMessage({ officeId, request: '' })).rejects.toBeInstanceOf(CEOServiceError)
+  })
+
+  it('throws 404 when office does not exist', async () => {
+    vi.mocked(eventService.officeExists).mockResolvedValueOnce(false)
+    await expect(service.sendMessage({ officeId, request: 'Add login' })).rejects.toMatchObject({
+      message: 'Office not found',
+      statusCode: 404,
+    })
+    expect(eventService.create).not.toHaveBeenCalled()
   })
 
   it('lists conversation events filtered by type', async () => {

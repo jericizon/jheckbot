@@ -8,6 +8,7 @@
     "dev:clean": "node scripts/kill-ports.mjs",
     "tunnel": "node scripts/tunnel.mjs",
     "build": "pnpm -r build",
+    "build:android": "bash scripts/build-android.sh",
     "test": "pnpm -r test",
     "test:unit": "pnpm -r test:unit",
     "test:e2e": "pnpm -r test:e2e",

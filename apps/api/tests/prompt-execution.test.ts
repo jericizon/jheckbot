@@ -59,8 +59,10 @@ describe('PromptExecutionService', () => {
       title: 'New Conversation',
       status: 'active',
       agent_type: 'devin',
+      provider_config: null,
       agent_session_id: null,
       agent_status: 'idle',
+      is_pinned: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       last_message_at: null,
@@ -93,6 +95,7 @@ describe('PromptExecutionService', () => {
       findById: vi.fn().mockResolvedValue(mockConversation),
       setAgentStatus: vi.fn().mockResolvedValue(undefined),
       updateAgentStatus: vi.fn().mockResolvedValue(undefined),
+      clearAgentSessionId: vi.fn().mockResolvedValue(undefined),
       touchLastMessage: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(mockConversation),
       countActiveAgents: vi.fn().mockResolvedValue(0),
@@ -107,6 +110,7 @@ describe('PromptExecutionService', () => {
 
     messageRepo = {
       create: vi.fn().mockResolvedValue(mockMessage),
+      findLastAssistantMessage: vi.fn().mockResolvedValue(null),
     } as unknown as MessageRepository
 
     eventRepo = {
@@ -164,15 +168,24 @@ describe('PromptExecutionService', () => {
       role: 'user',
       content: 'Fix the tests',
       messageType: 'prompt',
+      model: 'glm-5-2',
     }, client)
     // Conversation marked starting
     expect(conversationRepo.setAgentStatus).toHaveBeenCalledWith('conv-1', 'starting', client)
-    // Agent prepared
+    // Model is tracked in provider_config for future comparisons
+    expect(conversationRepo.update).toHaveBeenCalledWith(
+      'conv-1',
+      { providerConfig: { model: 'glm-5-2' } },
+      client,
+    )
+    // Agent prepared with default model and no resume
     expect(agentManager.prepareRun).toHaveBeenCalledWith(expect.objectContaining({
       conversationId: 'conv-1',
       projectSlug: 'test-project',
       prompt: 'Fix the tests',
       userMessageId: 'msg-1',
+      model: 'glm-5-2',
+      devinSessionId: undefined,
     }))
     // Initial status event persisted
     expect(eventRepo.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -182,6 +195,76 @@ describe('PromptExecutionService', () => {
     // Prepared run committed after transaction
     expect(preparedCommit).toHaveBeenCalledOnce()
     expect(preparedRollback).not.toHaveBeenCalled()
+  })
+
+  it('resumes an existing session when the model has not changed', async () => {
+    mockConversation = {
+      ...mockConversation,
+      agent_session_id: 'prior-session',
+      provider_config: { model: 'glm-5-2' },
+    }
+    vi.mocked(conversationRepo.findByIdForUpdate).mockResolvedValueOnce(mockConversation)
+
+    await service.send({
+      conversationId: 'conv-1',
+      prompt: 'Continue',
+      model: 'glm-5-2',
+    })
+
+    expect(conversationRepo.clearAgentSessionId).not.toHaveBeenCalled()
+    expect(agentManager.prepareRun).toHaveBeenCalledWith(expect.objectContaining({
+      devinSessionId: 'prior-session',
+      model: 'glm-5-2',
+    }))
+  })
+
+  it('clears the session and starts fresh when the model changes', async () => {
+    mockConversation = {
+      ...mockConversation,
+      agent_session_id: 'prior-session',
+      provider_config: { model: 'glm-5-2' },
+    }
+    vi.mocked(conversationRepo.findByIdForUpdate).mockResolvedValueOnce(mockConversation)
+
+    await service.send({
+      conversationId: 'conv-1',
+      prompt: 'Continue with a better model',
+      model: 'swe-1-7',
+    })
+
+    expect(conversationRepo.clearAgentSessionId).toHaveBeenCalledWith('conv-1', client)
+    expect(agentManager.prepareRun).toHaveBeenCalledWith(expect.objectContaining({
+      devinSessionId: undefined,
+      model: 'swe-1-7',
+    }))
+  })
+
+  it('infers the current model from the last assistant message when provider_config is stale', async () => {
+    mockConversation = {
+      ...mockConversation,
+      agent_session_id: 'prior-session',
+      provider_config: null,
+    }
+    vi.mocked(conversationRepo.findByIdForUpdate).mockResolvedValueOnce(mockConversation)
+    vi.mocked(messageRepo.findLastAssistantMessage).mockResolvedValueOnce({
+      ...mockMessage,
+      role: 'assistant',
+      message_type: 'output',
+      model: 'claude-sonnet-5-low',
+    })
+
+    await service.send({
+      conversationId: 'conv-1',
+      prompt: 'Switch models',
+      model: 'glm-5-2',
+    })
+
+    expect(messageRepo.findLastAssistantMessage).toHaveBeenCalledWith('conv-1', client)
+    expect(conversationRepo.clearAgentSessionId).toHaveBeenCalled()
+    expect(agentManager.prepareRun).toHaveBeenCalledWith(expect.objectContaining({
+      devinSessionId: undefined,
+      model: 'glm-5-2',
+    }))
   })
 
   it('rolls back the prompt and calls prepared.rollback when tmux startup fails', async () => {

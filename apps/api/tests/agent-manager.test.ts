@@ -337,7 +337,7 @@ describe('AgentManager', () => {
     }
   })
 
-  it('rollback kills the prepared tmux session and clears pending state', () => {
+  it('rollback clears pending state without killing a tmux session', () => {
     const forceKillSpy = vi.spyOn(devin, 'forceKill').mockImplementation(() => {})
     const prepared = manager.prepareRun({
       conversationId: 'conv-1',
@@ -348,7 +348,9 @@ describe('AgentManager', () => {
 
     prepared.rollback()
 
-    expect(forceKillSpy).toHaveBeenCalledWith('jheckbot-test-project-conv-1')
+    // prepareRun no longer creates a tmux session (deferred to commit), so
+    // rollback has nothing to force-kill — it just clears the pending state.
+    expect(forceKillSpy).not.toHaveBeenCalled()
     expect(manager.getStatus('conv-1')).toBeNull()
     expect(manager.isConversationActive('conv-1')).toBe(false)
   })

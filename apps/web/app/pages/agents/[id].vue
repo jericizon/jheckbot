@@ -206,7 +206,13 @@ async function removeCapability(capability: string) {
   }
 }
 
+const projectId = computed(() => (route.query.project as string) || undefined)
+
 function goBack() {
+  if (projectId.value) {
+    navigateTo(`/projects/${projectId.value}`)
+    return
+  }
   const officeId = agent.value?.officeId || ''
   const query = officeId ? `?office=${encodeURIComponent(officeId)}` : ''
   navigateTo(`/agents${query}`)

@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">JheckBot</string>
+    <string name="url_hint">http://host:port</string>
+    <string name="save_and_load">Save &amp; Load</string>
+    <string name="error_unreachable">Could not reach the server. Enter the URL below.</string>
+    <string name="notification_channel_name">JheckBot</string>
+    <string name="notification_channel_description">Task and conversation updates</string>
+</resources>

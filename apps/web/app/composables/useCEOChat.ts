@@ -14,7 +14,7 @@ export function useCEOChat() {
     listEvents: (officeId: string) =>
       api.get<OfficeEvent[]>(`/api/offices/${officeId}/ceo/events`),
 
-    sendMessage: (officeId: string, request: string, projectId?: string) =>
+    sendMessage: (officeId: string, request: string, projectId?: string, model?: string) =>
       api.post<{
         userMessage: OfficeEvent
         ceoResponse: OfficeEvent
@@ -27,6 +27,7 @@ export function useCEOChat() {
       }>(`/api/offices/${officeId}/ceo/messages`, {
         request,
         projectId,
+        model,
       }),
   }
 }

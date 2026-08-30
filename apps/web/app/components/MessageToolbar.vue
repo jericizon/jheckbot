@@ -50,6 +50,7 @@
       <span>Skills</span>
     </button>
     <button
+      v-if="showBypass"
       @click="$emit('update:bypassMode', !bypassMode)"
       :disabled="disabled"
       class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
@@ -114,10 +115,12 @@ const props = withDefaults(
     modelValue: string
     families: ModelFamily[]
     bypassMode?: boolean
+    showBypass?: boolean
     disabled?: boolean
   }>(),
   {
     bypassMode: false,
+    showBypass: true,
     disabled: false,
   },
 )
