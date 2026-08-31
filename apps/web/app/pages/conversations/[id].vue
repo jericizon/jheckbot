@@ -30,9 +30,7 @@
         v-if="conversation?.project_id"
         :class="[
           'flex-col h-full min-w-0 border-border bg-surface-elevated',
-          mobileChatOpen
-            ? 'fixed inset-0 z-30 w-full flex'
-            : 'hidden xl:flex relative xl:border-l',
+          mobileChatOpen ? 'fixed inset-0 z-30 w-full flex' : 'hidden xl:flex relative xl:border-l',
         ]"
         :style="mobileChatOpen ? { width: '100%' } : { width: `${chatPanelWidth}px` }"
         aria-label="Conversation chat"
@@ -44,153 +42,234 @@
           aria-orientation="vertical"
           @mousedown="startChatResize"
         />
-      <!-- Header -->
-      <ProjectHeader
-        :project="project"
-        :branch="projectBranch"
-        @project-updated="onProjectUpdated"
-        @project-deleted="onProjectDeleted"
-        @branch-switched="handleBranchSwitched"
-      >
-        <template #subtitle>
-          <div class="flex items-center gap-1.5 min-w-0">
-            <input
-              v-if="editingTitle"
-              v-model="titleDraft"
-              @blur="saveTitle"
-              @keydown.enter.exact.prevent="saveTitle"
-              @keydown.escape="cancelEditTitle"
-              ref="titleInputEl"
-              aria-label="Conversation title"
-              class="flex-1 min-w-0 text-xs bg-transparent border-b border-content-subtle focus:outline-none focus:border-content text-content py-0.5"
-            />
+        <!-- Header -->
+        <ProjectHeader
+          :project="project"
+          :branch="projectBranch"
+          @project-updated="onProjectUpdated"
+          @project-deleted="onProjectDeleted"
+          @branch-switched="handleBranchSwitched"
+        >
+          <template #subtitle>
+            <div class="flex items-center gap-1.5 min-w-0">
+              <input
+                v-if="editingTitle"
+                v-model="titleDraft"
+                @blur="saveTitle"
+                @keydown.enter.exact.prevent="saveTitle"
+                @keydown.escape="cancelEditTitle"
+                ref="titleInputEl"
+                aria-label="Conversation title"
+                class="flex-1 min-w-0 text-xs bg-transparent border-b border-content-subtle focus:outline-none focus:border-content text-content py-0.5"
+              />
+              <button v-else @click="startEditTitle" class="flex items-center gap-1 min-w-0 group">
+                <span class="text-xs text-content-subtle truncate">{{
+                  conversation?.title || 'Conversation'
+                }}</span>
+                <svg
+                  class="w-3 h-3 text-content-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            </div>
+          </template>
+
+          <template #extra-actions>
             <button
-              v-else
-              @click="startEditTitle"
-              class="flex items-center gap-1 min-w-0 group"
+              v-if="mobileChatOpen"
+              @click="closeMobileChat"
+              class="xl:hidden p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label="Close chat"
+              title="Close chat"
             >
-              <span class="text-xs text-content-subtle truncate">{{
-                conversation?.title || 'Conversation'
-              }}</span>
               <svg
-                class="w-3 h-3 text-content-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                class="w-5 h-5"
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
                 viewBox="0 0 24 24"
               >
-                <path
-                  stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
-        </template>
+          </template>
+        </ProjectHeader>
 
-        <template #extra-actions>
-          <button
-            v-if="mobileChatOpen"
-            @click="closeMobileChat"
-            class="xl:hidden p-1.5 rounded-md text-content-subtle hover:text-content hover:bg-surface-subtle transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-            aria-label="Close chat"
-            title="Close chat"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </template>
-      </ProjectHeader>
-
-      <!-- Messages -->
-      <div ref="messagesContainer" class="flex-1 overflow-y-auto">
-        <div class="w-full px-4 py-4 space-y-4">
-          <!-- Empty state -->
-          <div
-            v-if="messages.length === 0 && !liveOutput && !agentStarting && !agentRunning"
-            class="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in"
-          >
+        <!-- Messages -->
+        <div ref="messagesContainer" class="flex-1 overflow-y-auto">
+          <div class="w-full px-4 py-4 space-y-4">
+            <!-- Empty state -->
             <div
-              class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4"
+              v-if="messages.length === 0 && !liveOutput && !agentStarting && !agentRunning"
+              class="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in"
             >
-              <svg
-                class="w-6 h-6 text-content-subtle"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                viewBox="0 0 24 24"
+              <div
+                class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z"
-                />
-              </svg>
+                <svg
+                  class="w-6 h-6 text-content-subtle"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z"
+                  />
+                </svg>
+              </div>
+              <p class="text-content-muted text-sm">Send a message to start working with Devin.</p>
             </div>
-            <p class="text-content-muted text-sm">Send a message to start working with Devin.</p>
-          </div>
 
-          <!-- Message list -->
-          <template v-for="msg in messages" :key="msg.id">
-            <!-- User message -->
-            <div v-if="msg.role === 'user'" class="group flex justify-end animate-slide-up">
-              <div class="flex flex-col items-end gap-1 max-w-[80%]">
-                <div
-                  class="rounded-2xl rounded-br-md bg-accent-muted px-4 py-2.5 text-sm text-content whitespace-pre-wrap break-words"
-                >
-                  {{ msg.content }}
-                </div>
-                <!-- Copy prompt to clipboard -->
-                <button
-                  @click="copyMessage(msg.content, `user-${msg.id}`)"
-                  class="invisible group-hover:visible flex items-center gap-1 text-[11px] text-content-subtle hover:text-content transition-colors px-1"
-                  :title="copiedId === `user-${msg.id}` ? 'Copied!' : 'Copy message'"
-                >
-                  <svg
-                    v-if="copiedId === `user-${msg.id}`"
-                    class="w-3 h-3 text-emerald-500"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
+            <!-- Message list -->
+            <template v-for="msg in messages" :key="msg.id">
+              <!-- User message -->
+              <div v-if="msg.role === 'user'" class="group flex justify-end animate-slide-up">
+                <div class="flex flex-col items-end gap-1 max-w-[80%]">
+                  <div
+                    class="rounded-2xl rounded-br-md bg-accent-muted px-4 py-2.5 text-sm text-content whitespace-pre-wrap break-words"
                   >
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
+                    {{ msg.content }}
+                  </div>
+                  <!-- Copy prompt to clipboard -->
+                  <button
+                    @click="copyMessage(msg.content, `user-${msg.id}`)"
+                    class="invisible group-hover:visible flex items-center gap-1 text-[11px] text-content-subtle hover:text-content transition-colors px-1"
+                    :title="copiedId === `user-${msg.id}` ? 'Copied!' : 'Copy message'"
+                  >
+                    <svg
+                      v-if="copiedId === `user-${msg.id}`"
+                      class="w-3 h-3 text-emerald-500"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <svg
+                      v-else
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <span>{{ copiedId === `user-${msg.id}` ? 'Copied' : 'Copy' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Assistant message -->
+              <div v-else-if="msg.role === 'assistant'" class="group flex gap-3 animate-slide-up">
+                <div
+                  class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
+                >
                   <svg
-                    v-else
-                    class="w-3 h-3"
+                    class="w-3.5 h-3.5 text-surface"
                     fill="none"
                     stroke="currentColor"
-                    stroke-width="2"
+                    stroke-width="2.5"
                     viewBox="0 0 24 24"
                   >
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
                     />
                   </svg>
-                  <span>{{ copiedId === `user-${msg.id}` ? 'Copied' : 'Copy' }}</span>
-                </button>
+                </div>
+                <div class="flex-1 min-w-0 pt-1">
+                  <div v-if="msg.model" class="flex items-center gap-1 mb-1">
+                    <span
+                      class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5"
+                      >{{ msg.model }}</span
+                    >
+                  </div>
+                  <div class="text-sm text-content leading-relaxed min-w-0">
+                    <Markdown :content="msg.content" />
+                  </div>
+                  <!-- Copy response to clipboard -->
+                  <button
+                    @click="copyMessage(msg.content, `assistant-${msg.id}`)"
+                    class="invisible group-hover:visible flex items-center gap-1 mt-1.5 text-[11px] text-content-subtle hover:text-content transition-colors"
+                    :title="copiedId === `assistant-${msg.id}` ? 'Copied!' : 'Copy response'"
+                  >
+                    <svg
+                      v-if="copiedId === `assistant-${msg.id}`"
+                      class="w-3 h-3 text-emerald-500"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <svg
+                      v-else
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <span>{{ copiedId === `assistant-${msg.id}` ? 'Copied' : 'Copy' }}</span>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <!-- Assistant message -->
+              <!-- System message -->
+              <div v-else class="flex gap-3 animate-slide-up">
+                <div
+                  class="w-7 h-7 rounded-full bg-surface-subtle flex items-center justify-center shrink-0 mt-0.5"
+                >
+                  <svg
+                    class="w-4 h-4 text-content-subtle"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <div class="flex-1 text-sm text-content-muted whitespace-pre-wrap break-words pt-1">
+                  {{ msg.content }}
+                </div>
+              </div>
+            </template>
+
+            <!-- Live output -->
             <div
-              v-else-if="msg.role === 'assistant'"
-              class="group flex gap-3 animate-slide-up"
+              v-if="liveOutput || (agentRunning && !agentStarting)"
+              class="flex gap-3 animate-fade-in"
             >
               <div
                 class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
@@ -210,34 +289,158 @@
                 </svg>
               </div>
               <div class="flex-1 min-w-0 pt-1">
-                <div v-if="msg.model" class="flex items-center gap-1 mb-1">
+                <div class="flex items-center gap-1 mb-1">
                   <span
                     class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5"
-                    >{{ msg.model }}</span
+                    >{{ selectedModel }}</span
                   >
                 </div>
                 <div class="text-sm text-content leading-relaxed min-w-0">
-                  <Markdown :content="msg.content" />
+                  <Markdown :content="liveOutput" />
                 </div>
-                <!-- Copy response to clipboard -->
-                <button
-                  @click="copyMessage(msg.content, `assistant-${msg.id}`)"
-                  class="invisible group-hover:visible flex items-center gap-1 mt-1.5 text-[11px] text-content-subtle hover:text-content transition-colors"
-                  :title="copiedId === `assistant-${msg.id}` ? 'Copied!' : 'Copy response'"
+                <!-- Background processing indicator -->
+                <div
+                  v-if="agentRunning"
+                  class="flex items-center gap-1.5 mt-2 text-xs text-content-subtle animate-fade-in"
                 >
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Processing · {{ elapsedLabel }}</span>
+                  <button
+                    v-if="liveLog"
+                    @click="toggleLogs"
+                    class="ml-auto flex items-center gap-1.5 text-[11px] text-content-subtle hover:text-content transition-colors min-h-[44px] px-2 rounded"
+                    :title="logsOpen ? 'Hide live logs' : 'Show live logs'"
+                  >
+                    <span class="font-medium">{{ logsOpen ? 'Hide logs' : 'Live logs' }}</span>
+                    <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  </button>
+                </div>
+
+                <!-- Live ACP trace logs -->
+                <div
+                  v-if="logsOpen && liveLog"
+                  class="mt-3 rounded-lg border border-border bg-surface-subtle overflow-hidden"
+                >
+                  <pre
+                    ref="logsContainer"
+                    class="p-3 text-[11px] font-mono text-content leading-relaxed max-h-[40vh] overflow-auto whitespace-pre-wrap break-words"
+                    >{{ liveLog }}</pre>
+                </div>
+              </div>
+            </div>
+
+            <!-- Typing indicator -->
+            <div v-if="agentStarting" class="flex gap-3 animate-fade-in">
+              <div
+                class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
+              >
+                <svg
+                  class="w-3.5 h-3.5 text-surface"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+              </div>
+              <div class="flex items-center gap-1 pt-2.5">
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+                  style="animation-delay: 0ms"
+                />
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+                  style="animation-delay: 150ms"
+                />
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+                  style="animation-delay: 300ms"
+                />
+              </div>
+            </div>
+
+            <!-- Error -->
+            <div v-if="sendError" class="flex justify-center animate-fade-in">
+              <div
+                class="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-sm text-red-500 flex items-center gap-2"
+              >
+                {{ sendError }}
+                <button @click="sendError = ''" class="text-red-400 hover:text-red-500">
                   <svg
-                    v-if="copiedId === `assistant-${msg.id}`"
-                    class="w-3 h-3 text-emerald-500"
+                    class="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
                     stroke-width="2"
                     viewBox="0 0 24 24"
                   >
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Changed files panel -->
+        <ChangedFilesPanel ref="changedFilesPanel" :project-id="conversation?.project_id" />
+
+        <!-- Input area -->
+        <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <div class="w-full px-4">
+            <!-- Input box -->
+            <div
+              class="relative rounded-2xl border border-border bg-white focus-within:border-content-subtle/60 focus-within:ring-1 focus-within:ring-content-subtle/30 transition-all"
+            >
+              <textarea
+                v-model="input"
+                @keydown.enter.exact.prevent="sendMessage"
+                @keydown.enter.shift.exact="input += '\n'"
+                @input="autoResize"
+                :placeholder="
+                  voice.listening.value
+                    ? 'Listening... speak now'
+                    : agentStarting || agentRunning
+                      ? 'Queue a message...'
+                      : 'Message Devin...'
+                "
+                rows="1"
+                ref="inputEl"
+                class="w-full rounded-2xl px-4 py-3 pr-28 text-sm text-content placeholder-content-subtle dark:text-gray-900 dark:placeholder-gray-400 bg-transparent focus:outline-none resize-none max-h-32 overflow-y-auto min-h-[52px]"
+              />
+              <!-- Interim transcript shown as a subtle hint while listening -->
+              <span
+                v-if="voice.listening.value && voice.interim.value"
+                class="absolute left-4 bottom-2.5 text-sm text-content-subtle dark:text-gray-500 italic pointer-events-none max-w-[60%] truncate"
+                >{{ voice.interim.value }}</span
+              >
+              <div class="absolute right-2 bottom-2 flex items-center gap-1 shrink-0">
+                <button
+                  @click="toggleVoice"
+                  :title="
+                    !voice.supported.value
+                      ? 'Voice input not available in this browser'
+                      : voice.listening.value
+                        ? 'Stop voice input'
+                        : 'Voice input'
+                  "
+                  :aria-pressed="voice.listening.value"
+                  class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95"
+                  :class="
+                    voice.listening.value
+                      ? 'bg-emerald-500/15 text-emerald-500'
+                      : voice.supported.value
+                        ? 'text-content-subtle hover:text-content hover:bg-surface-subtle dark:text-gray-500 dark:hover:text-gray-900 dark:hover:bg-gray-100'
+                        : 'text-content-subtle/40 dark:text-gray-400 cursor-not-allowed'
+                  "
+                >
                   <svg
-                    v-else
-                    class="w-3 h-3"
+                    v-if="!voice.listening.value"
+                    class="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
                     stroke-width="2"
@@ -246,267 +449,92 @@
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
                     />
                   </svg>
-                  <span>{{ copiedId === `assistant-${msg.id}` ? 'Copied' : 'Copy' }}</span>
+                  <svg
+                    v-else
+                    class="w-4 h-4 animate-pulse"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9A2.25 2.25 0 0118.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9 9.563C9 8.386 10.343 7.5 12 7.5s3 .886 3 2.063v4.875c0 1.177-1.343 2.062-3 2.062s-3-.885-3-2.062V9.563z"
+                    />
+                  </svg>
                 </button>
-              </div>
-            </div>
-
-            <!-- System message -->
-            <div v-else class="flex gap-3 animate-slide-up">
-              <div
-                class="w-7 h-7 rounded-full bg-surface-subtle flex items-center justify-center shrink-0 mt-0.5"
-              >
-                <svg
-                  class="w-4 h-4 text-content-subtle"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <div class="flex-1 text-sm text-content-muted whitespace-pre-wrap break-words pt-1">
-                {{ msg.content }}
-              </div>
-            </div>
-          </template>
-
-          <!-- Live output -->
-          <div v-if="liveOutput || (agentRunning && !agentStarting)" class="flex gap-3 animate-fade-in">
-            <div
-              class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
-            >
-              <svg
-                class="w-3.5 h-3.5 text-surface"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0 pt-1">
-              <div class="flex items-center gap-1 mb-1">
-                <span
-                  class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5"
-                  >{{ selectedModel }}</span
-                >
-              </div>
-              <div class="text-sm text-content leading-relaxed min-w-0">
-                <Markdown :content="liveOutput" />
-              </div>
-              <!-- Background processing indicator -->
-              <div
-                v-if="agentRunning"
-                class="flex items-center gap-1.5 mt-2 text-xs text-content-subtle animate-fade-in"
-              >
-                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Processing · {{ elapsedLabel }}</span>
                 <button
-                  v-if="liveLog"
-                  @click="toggleLogs"
-                  class="ml-auto flex items-center gap-1.5 text-[11px] text-content-subtle hover:text-content transition-colors min-h-[44px] px-2 rounded"
-                  :title="logsOpen ? 'Hide live logs' : 'Show live logs'"
+                  v-if="agentRunning"
+                  @click="stopModalOpen = true"
+                  class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95 bg-red-500/15 text-red-500 hover:bg-red-500/25 shrink-0"
+                  title="Stop agent"
+                  aria-label="Stop agent"
                 >
-                  <span class="font-medium">{{ logsOpen ? 'Hide logs' : 'Live logs' }}</span>
-                  <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span class="w-3 h-3 rounded-[3px] bg-current" />
+                </button>
+                <button
+                  @click="sendMessage"
+                  :disabled="!input.trim()"
+                  class="rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
+                  :class="
+                    input.trim()
+                      ? 'bg-content text-surface hover:opacity-80 dark:bg-gray-900 dark:text-white'
+                      : 'bg-surface-subtle text-content-subtle dark:bg-gray-100 dark:text-gray-400'
+                  "
+                  :title="
+                    (agentStarting || agentRunning) && input.trim()
+                      ? 'Queue message'
+                      : 'Send message'
+                  "
+                >
+                  <svg
+                    v-if="agentStarting || agentRunning"
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <svg
+                    v-else
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M5 10l7-7m0 0l7 7m-7-7v18"
+                    />
+                  </svg>
                 </button>
               </div>
+            </div>
 
-              <!-- Live ACP trace logs -->
+            <!-- Queued messages -->
+            <div v-if="queue.length > 0" class="mt-2 space-y-1.5">
               <div
-                v-if="logsOpen && liveLog"
-                class="mt-3 rounded-lg border border-border bg-surface-subtle overflow-hidden"
-              >
-                <pre
-                  ref="logsContainer"
-                  class="p-3 text-[11px] font-mono text-content leading-relaxed max-h-[40vh] overflow-auto whitespace-pre-wrap break-words"
-                >{{ liveLog }}</pre>
-              </div>
-            </div>
-          </div>
-
-          <!-- Typing indicator -->
-          <div v-if="agentStarting" class="flex gap-3 animate-fade-in">
-            <div
-              class="w-7 h-7 rounded-full bg-content flex items-center justify-center shrink-0 mt-0.5"
-            >
-              <svg
-                class="w-3.5 h-3.5 text-surface"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div class="flex items-center gap-1 pt-2.5">
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
-                style="animation-delay: 0ms"
-              />
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
-                style="animation-delay: 150ms"
-              />
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
-                style="animation-delay: 300ms"
-              />
-            </div>
-          </div>
-
-          <!-- Error -->
-          <div v-if="sendError" class="flex justify-center animate-fade-in">
-            <div
-              class="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-sm text-red-500 flex items-center gap-2"
-            >
-              {{ sendError }}
-              <button @click="sendError = ''" class="text-red-400 hover:text-red-500">
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Changed files panel -->
-      <ChangedFilesPanel ref="changedFilesPanel" :project-id="conversation?.project_id" />
-
-      <!-- Input area -->
-      <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div class="w-full px-4">
-          <!-- Input box -->
-          <div
-            class="relative rounded-2xl border border-border bg-white focus-within:border-content-subtle/60 focus-within:ring-1 focus-within:ring-content-subtle/30 transition-all"
-          >
-            <textarea
-              v-model="input"
-              @keydown.enter.exact.prevent="sendMessage"
-              @keydown.enter.shift.exact="input += '\n'"
-              @input="autoResize"
-              :placeholder="
-                voice.listening.value
-                  ? 'Listening... speak now'
-                  : agentStarting || agentRunning
-                    ? 'Queue a message...'
-                    : 'Message Devin...'
-              "
-              rows="1"
-              ref="inputEl"
-              class="w-full rounded-2xl px-4 py-3 pr-28 text-sm text-content placeholder-content-subtle dark:text-gray-900 dark:placeholder-gray-400 bg-transparent focus:outline-none resize-none max-h-32 overflow-y-auto min-h-[52px]"
-            />
-            <!-- Interim transcript shown as a subtle hint while listening -->
-            <span
-              v-if="voice.listening.value && voice.interim.value"
-              class="absolute left-4 bottom-2.5 text-sm text-content-subtle dark:text-gray-500 italic pointer-events-none max-w-[60%] truncate"
-              >{{ voice.interim.value }}</span
-            >
-            <div class="absolute right-2 bottom-2 flex items-center gap-1 shrink-0">
-              <button
-                @click="toggleVoice"
-                :title="
-                  !voice.supported.value
-                    ? 'Voice input not available in this browser'
-                    : voice.listening.value
-                      ? 'Stop voice input'
-                      : 'Voice input'
-                "
-                :aria-pressed="voice.listening.value"
-                class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95"
-                :class="
-                  voice.listening.value
-                    ? 'bg-emerald-500/15 text-emerald-500'
-                    : voice.supported.value
-                      ? 'text-content-subtle hover:text-content hover:bg-surface-subtle dark:text-gray-500 dark:hover:text-gray-900 dark:hover:bg-gray-100'
-                      : 'text-content-subtle/40 dark:text-gray-400 cursor-not-allowed'
-                "
+                class="text-[10px] font-medium uppercase tracking-wide text-content-subtle px-1 flex items-center gap-1.5"
               >
                 <svg
-                  v-if="!voice.listening.value"
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
-                  />
-                </svg>
-                <svg
-                  v-else
-                  class="w-4 h-4 animate-pulse"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9A2.25 2.25 0 0118.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 9.563C9 8.386 10.343 7.5 12 7.5s3 .886 3 2.063v4.875c0 1.177-1.343 2.062-3 2.062s-3-.885-3-2.062V9.563z"
-                  />
-                </svg>
-              </button>
-              <button
-                v-if="agentRunning"
-                @click="stopModalOpen = true"
-                class="rounded-lg w-8 h-8 flex items-center justify-center transition-all active:scale-95 bg-red-500/15 text-red-500 hover:bg-red-500/25 shrink-0"
-                title="Stop agent"
-                aria-label="Stop agent"
-              >
-                <span class="w-3 h-3 rounded-[3px] bg-current" />
-              </button>
-              <button
-                @click="sendMessage"
-                :disabled="!input.trim()"
-                class="rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
-                :class="
-                  input.trim()
-                    ? 'bg-content text-surface hover:opacity-80 dark:bg-gray-900 dark:text-white'
-                    : 'bg-surface-subtle text-content-subtle dark:bg-gray-100 dark:text-gray-400'
-                "
-                :title="
-                  (agentStarting || agentRunning) && input.trim() ? 'Queue message' : 'Send message'
-                "
-              >
-                <svg
-                  v-if="agentStarting || agentRunning"
-                  class="w-4 h-4"
+                  class="w-3 h-3"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="2"
@@ -518,31 +546,112 @@
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <svg
-                  v-else
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M5 10l7-7m0 0l7 7m-7-7v18"
-                  />
-                </svg>
-              </button>
+                <span>Queued ({{ queue.length }})</span>
+              </div>
+              <div
+                v-for="(item, idx) in queue"
+                :key="item.id"
+                class="rounded-lg border border-border bg-surface-subtle/50 px-3 py-2 animate-slide-up"
+              >
+                <div class="flex items-start gap-2">
+                  <span class="text-[10px] font-mono text-content-subtle shrink-0 mt-0.5">{{
+                    idx + 1
+                  }}</span>
+                  <div class="flex-1 min-w-0">
+                    <template v-if="editingQueueId === item.id">
+                      <textarea
+                        v-model="item.content"
+                        rows="1"
+                        class="w-full text-sm text-content bg-transparent focus:outline-none resize-none"
+                        style="min-height: 20px"
+                      />
+                    </template>
+                    <p
+                      v-else
+                      class="text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3"
+                    >
+                      {{ item.content }}
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button
+                      v-if="editingQueueId === item.id"
+                      @click="saveEditQueueItem(item.id)"
+                      class="text-content-subtle hover:text-emerald-500 transition-colors p-0.5"
+                      title="Save"
+                    >
+                      <svg
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                    <button
+                      v-else
+                      @click="startEditQueueItem(item.id)"
+                      class="text-content-subtle hover:text-content transition-colors p-0.5"
+                      title="Edit"
+                    >
+                      <svg
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      @click="removeQueueItem(item.id)"
+                      class="text-content-subtle hover:text-red-500 transition-colors p-0.5"
+                      title="Remove"
+                    >
+                      <svg
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <!-- Queued messages -->
-          <div v-if="queue.length > 0" class="mt-2 space-y-1.5">
+            <!-- Voice listening indicator with live soundwave -->
             <div
-              class="text-[10px] font-medium uppercase tracking-wide text-content-subtle px-1 flex items-center gap-1.5"
+              v-if="voice.listening.value"
+              class="flex items-center justify-center gap-2 mt-2 animate-fade-in"
+            >
+              <VoiceWaveform :active="voice.listening.value" />
+              <span class="text-xs text-emerald-500 whitespace-nowrap"
+                >Listening — tap mic when done</span
+              >
+            </div>
+
+            <!-- Voice error (dismissible) -->
+            <div
+              v-if="voice.error.value"
+              class="flex items-start gap-2 mt-2 px-1 text-xs text-red-500 animate-fade-in"
             >
               <svg
-                class="w-3 h-3"
+                class="w-3.5 h-3.5 mt-0.5 shrink-0"
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
@@ -551,220 +660,120 @@
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <span>Queued ({{ queue.length }})</span>
+              <span class="flex-1">{{ voice.error.value }}</span>
+              <button @click="voice.clearError()" class="shrink-0 text-red-400 hover:text-red-500">
+                <svg
+                  class="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <div
-              v-for="(item, idx) in queue"
-              :key="item.id"
-              class="rounded-lg border border-border bg-surface-subtle/50 px-3 py-2 animate-slide-up"
+
+            <!-- Model selector + bypass toggle + hint -->
+            <MessageToolbar
+              v-model="selectedModel"
+              :families="availableFamilies"
+              v-model:bypass-mode="bypassMode"
+              @open-skills="skillsPickerOpen = true"
+              @open-models="modelPickerOpen = true"
             >
-              <div class="flex items-start gap-2">
-                <span class="text-[10px] font-mono text-content-subtle shrink-0 mt-0.5">{{
-                  idx + 1
-                }}</span>
-                <div class="flex-1 min-w-0">
-                  <template v-if="editingQueueId === item.id">
-                    <textarea
-                      v-model="item.content"
-                      rows="1"
-                      class="w-full text-sm text-content bg-transparent focus:outline-none resize-none"
-                      style="min-height: 20px"
+              <template #actions>
+                <button
+                  @click="insertMediaPrompt"
+                  class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all shrink-0"
+                  title="Insert media generation prompt"
+                  aria-label="Insert media generation prompt"
+                >
+                  <svg
+                    class="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                     />
-                  </template>
-                  <p
-                    v-else
-                    class="text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3"
-                  >
-                    {{ item.content }}
-                  </p>
-                </div>
-                <div class="flex items-center gap-1 shrink-0">
-                  <button
-                    v-if="editingQueueId === item.id"
-                    @click="saveEditQueueItem(item.id)"
-                    class="text-content-subtle hover:text-emerald-500 transition-colors p-0.5"
-                    title="Save"
-                  >
-                    <svg
-                      class="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                  <button
-                    v-else
-                    @click="startEditQueueItem(item.id)"
-                    class="text-content-subtle hover:text-content transition-colors p-0.5"
-                    title="Edit"
-                  >
-                    <svg
-                      class="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    @click="removeQueueItem(item.id)"
-                    class="text-content-subtle hover:text-red-500 transition-colors p-0.5"
-                    title="Remove"
-                  >
-                    <svg
-                      class="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
+                  </svg>
+                  <span>Media</span>
+                </button>
+              </template>
+            </MessageToolbar>
           </div>
-
-          <!-- Voice listening indicator with live soundwave -->
-          <div
-            v-if="voice.listening.value"
-            class="flex items-center justify-center gap-2 mt-2 animate-fade-in"
-          >
-            <VoiceWaveform :active="voice.listening.value" />
-            <span class="text-xs text-emerald-500 whitespace-nowrap"
-              >Listening — tap mic when done</span
-            >
-          </div>
-
-          <!-- Voice error (dismissible) -->
-          <div
-            v-if="voice.error.value"
-            class="flex items-start gap-2 mt-2 px-1 text-xs text-red-500 animate-fade-in"
-          >
-            <svg
-              class="w-3.5 h-3.5 mt-0.5 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <span class="flex-1">{{ voice.error.value }}</span>
-            <button @click="voice.clearError()" class="shrink-0 text-red-400 hover:text-red-500">
-              <svg
-                class="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <!-- Model selector + bypass toggle + hint -->
-          <MessageToolbar
-            v-model="selectedModel"
-            :families="availableFamilies"
-            v-model:bypass-mode="bypassMode"
-            @open-skills="skillsPickerOpen = true"
-            @open-models="modelPickerOpen = true"
-          />
         </div>
-      </div>
-    </aside>
+      </aside>
 
-    <!-- Delete conversation modal -->
-    <ConfirmModal
-      :open="deleteModalOpen"
-      title="Delete Conversation"
-      :message="
-        deleteTarget
-          ? `Delete \u201C${deleteTargetTitle}\u201D? This cannot be undone.`
-          : 'Delete this conversation? This cannot be undone.'
-      "
-      confirm-label="Yes, delete"
-      loading-label="Deleting..."
-      :loading="deletingConv"
-      :error="deleteConvError"
-      @confirm="confirmDeleteConversation"
-      @cancel="closeDeleteModal"
-    />
+      <!-- Delete conversation modal -->
+      <ConfirmModal
+        :open="deleteModalOpen"
+        title="Delete Conversation"
+        :message="
+          deleteTarget
+            ? `Delete \u201C${deleteTargetTitle}\u201D? This cannot be undone.`
+            : 'Delete this conversation? This cannot be undone.'
+        "
+        confirm-label="Yes, delete"
+        loading-label="Deleting..."
+        :loading="deletingConv"
+        :error="deleteConvError"
+        @confirm="confirmDeleteConversation"
+        @cancel="closeDeleteModal"
+      />
 
-    <!-- Stop agent modal -->
-    <ConfirmModal
-      :open="stopModalOpen"
-      title="Stop Agent"
-      message="Stop the running agent? Any in-progress work will be interrupted. Queued messages will still be sent after the agent stops."
-      confirm-label="Yes, stop"
-      loading-label="Stopping..."
-      :loading="stoppingAgent"
-      @confirm="confirmStopAgent"
-      @cancel="stopModalOpen = false"
-    />
+      <!-- Stop agent modal -->
+      <ConfirmModal
+        :open="stopModalOpen"
+        title="Stop Agent"
+        message="Stop the running agent? Any in-progress work will be interrupted. Queued messages will still be sent after the agent stops."
+        confirm-label="Yes, stop"
+        loading-label="Stopping..."
+        :loading="stoppingAgent"
+        @confirm="confirmStopAgent"
+        @cancel="stopModalOpen = false"
+      />
 
-    <!-- Skills picker -->
-    <SkillsPicker
-      :open="skillsPickerOpen"
-      @select="insertSkill"
-      @close="skillsPickerOpen = false"
-    />
+      <!-- Skills picker -->
+      <SkillsPicker
+        :open="skillsPickerOpen"
+        @select="insertSkill"
+        @close="skillsPickerOpen = false"
+      />
 
-    <!-- Model picker -->
-    <ModelPicker
-      :open="modelPickerOpen"
-      :families="availableFamilies"
-      :current="selectedModel"
-      @select="selectedModel = $event"
-      @close="modelPickerOpen = false"
-    />
+      <!-- Model picker -->
+      <ModelPicker
+        :open="modelPickerOpen"
+        :families="availableFamilies"
+        :current="selectedModel"
+        @select="selectedModel = $event"
+        @close="modelPickerOpen = false"
+      />
 
-    <!-- Mobile chat toggle -->
-    <button
-      v-if="chatViewportReady && !mobileChatOpen"
-      @click="openMobileChat"
-      class="fixed bottom-4 right-4 z-20 xl:hidden rounded-full w-12 h-12 bg-content text-surface shadow-lg flex items-center justify-center active:scale-95 transition-transform"
-      aria-label="Open chat"
-      title="Open chat"
-    >
-      <svg
-        class="w-5 h-5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        viewBox="0 0 24 24"
+      <!-- Mobile chat toggle -->
+      <button
+        v-if="chatViewportReady && !mobileChatOpen"
+        @click="openMobileChat"
+        class="fixed bottom-4 right-4 z-20 xl:hidden rounded-full w-12 h-12 bg-content text-surface shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+        aria-label="Open chat"
+        title="Open chat"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 0 01-2 2h-5l-5 3v-3z"
-        />
-      </svg>
-    </button>
-
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 0 01-2 2h-5l-5 3v-3z"
+          />
+        </svg>
+      </button>
     </div>
   </div>
 </template>
@@ -772,6 +781,7 @@
 <script setup lang="ts">
 import type { ModelFamily } from '~/components/MessageToolbar.vue'
 import type { Office } from '@jheckbot/shared'
+import { insertMediaPrompt as insertMediaPromptBase } from '~/utils/mediaPrompt'
 import ConversationOfficePanel from '~/components/office/ConversationOfficePanel.vue'
 
 const route = useRoute()
@@ -838,11 +848,7 @@ const { bypassMode } = useBypassMode()
 const voice = useVoiceInput(input)
 const { getDraft, setDraft, clearDraft } = useConversationDrafts()
 const { getQueue, setQueue, clearQueue } = useConversationQueues()
-const {
-  getLogsOpen,
-  hasLogsOpenPreference,
-  setLogsOpen,
-} = useConversationLogsOpen()
+const { getLogsOpen, hasLogsOpenPreference, setLogsOpen } = useConversationLogsOpen()
 const editingTitle = ref(false)
 const titleDraft = ref('')
 const titleInputEl = ref<HTMLInputElement | null>(null)
@@ -1029,6 +1035,10 @@ function insertSkill(command: string) {
     inputEl.value?.focus()
     autoResize()
   })
+}
+
+function insertMediaPrompt() {
+  insertMediaPromptBase(input, inputEl, autoResize, conversation.value?.project_id)
 }
 
 async function loadSidebarConversations() {

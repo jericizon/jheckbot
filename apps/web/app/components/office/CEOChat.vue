@@ -7,9 +7,7 @@
         v-if="!loading && messages.length === 0"
         class="flex flex-col items-center justify-center min-h-[50vh] text-center text-content-subtle animate-fade-in"
       >
-        <div
-          class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4"
-        >
+        <div class="w-12 h-12 rounded-full bg-surface-subtle flex items-center justify-center mb-4">
           <svg
             class="w-6 h-6 text-content-subtle"
             fill="none"
@@ -49,13 +47,27 @@
               <svg
                 v-if="copiedId === `user-${message.id}`"
                 class="w-3 h-3 text-emerald-500"
-                fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
-              ><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
               <svg
                 v-else
                 class="w-3 h-3"
-                fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
-              ><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
               <span>{{ copiedId === `user-${message.id}` ? 'Copied' : 'Copy' }}</span>
             </button>
           </div>
@@ -67,15 +79,27 @@
             >
               <svg
                 class="w-3.5 h-3.5 text-surface"
-                fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
-              ><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
             </div>
             <div class="flex-1 min-w-0 pt-1">
               <div class="flex items-center gap-1 mb-1">
-                <span class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5">CEO</span>
+                <span
+                  class="text-[10px] font-medium uppercase tracking-wide text-content-subtle bg-surface-subtle rounded px-1.5 py-0.5"
+                  >CEO</span
+                >
               </div>
-              <div class="text-sm text-content leading-relaxed whitespace-pre-wrap break-words">
-                {{ message.content }}
+              <div class="text-sm text-content leading-relaxed min-w-0">
+                <Markdown :content="message.content" />
               </div>
               <button
                 @click="copyMessage(message.content ?? '', `ceo-${message.id}`)"
@@ -85,13 +109,27 @@
                 <svg
                   v-if="copiedId === `ceo-${message.id}`"
                   class="w-3 h-3 text-emerald-500"
-                  fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
-                ><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
                 <svg
                   v-else
                   class="w-3 h-3"
-                  fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
-                ><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
                 <span>{{ copiedId === `ceo-${message.id}` ? 'Copied' : 'Copy' }}</span>
               </button>
             </div>
@@ -106,13 +144,27 @@
         >
           <svg
             class="w-3.5 h-3.5 text-surface"
-            fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
-          ><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
         </div>
         <div class="flex items-center gap-1 pt-2.5">
-          <span class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce" style="animation-delay: 0ms" />
-          <span class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce" style="animation-delay: 150ms" />
-          <span class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce" style="animation-delay: 300ms" />
+          <span
+            class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+            style="animation-delay: 0ms"
+          />
+          <span
+            class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+            style="animation-delay: 150ms"
+          />
+          <span
+            class="h-1.5 w-1.5 rounded-full bg-content-subtle animate-bounce"
+            style="animation-delay: 300ms"
+          />
         </div>
       </div>
 
@@ -123,7 +175,13 @@
         >
           {{ error }}
           <button @click="error = ''" class="text-red-400 hover:text-red-500">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -154,10 +212,20 @@
           type="submit"
           :disabled="!canSubmit"
           class="absolute right-2 bottom-2 rounded-lg w-8 h-8 flex items-center justify-center transition-all shrink-0 active:scale-95"
-          :class="canSubmit ? 'bg-content text-surface hover:opacity-80' : 'bg-surface-subtle text-content-subtle'"
+          :class="
+            canSubmit
+              ? 'bg-content text-surface hover:opacity-80'
+              : 'bg-surface-subtle text-content-subtle'
+          "
           title="Send message"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
           </svg>
         </button>
@@ -171,16 +239,36 @@
         :disabled="loading"
         @open-skills="skillsPickerOpen = true"
         @open-models="modelPickerOpen = true"
-      />
+      >
+        <template #actions>
+          <button
+            @click="insertMediaPrompt"
+            class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all shrink-0"
+            title="Insert media generation prompt"
+            aria-label="Insert media generation prompt"
+          >
+            <svg
+              class="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <span>Media</span>
+          </button>
+        </template>
+      </MessageToolbar>
     </div>
   </div>
 
   <!-- Skills picker -->
-  <SkillsPicker
-    :open="skillsPickerOpen"
-    @select="insertSkill"
-    @close="skillsPickerOpen = false"
-  />
+  <SkillsPicker :open="skillsPickerOpen" @select="insertSkill" @close="skillsPickerOpen = false" />
 
   <!-- Model picker -->
   <ModelPicker
@@ -193,7 +281,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { insertMediaPrompt as insertMediaPromptBase } from '~/utils/mediaPrompt'
 import { useCEOChat } from '~/composables/useCEOChat'
 import { useOfficeEvents } from '~/composables/useOfficeEvents'
 import { useConversations } from '~/composables/useConversations'
@@ -252,8 +341,12 @@ async function copyMessage(content: string, key: string) {
     }
     copiedId.value = key
     if (copyResetTimer) clearTimeout(copyResetTimer)
-    copyResetTimer = setTimeout(() => { copiedId.value = null }, 2000)
-  } catch { /* clipboard rejected */ }
+    copyResetTimer = setTimeout(() => {
+      copiedId.value = null
+    }, 2000)
+  } catch {
+    /* clipboard rejected */
+  }
 }
 
 function toChatMessage(event: OfficeEvent): OfficeEvent & { sender: 'user' | 'ceo' } {
@@ -311,6 +404,10 @@ function insertSkill(command: string) {
     inputEl.value?.focus()
     autoResize()
   })
+}
+
+function insertMediaPrompt() {
+  insertMediaPromptBase(draft, inputEl, autoResize, props.projectId)
 }
 
 async function loadModels() {

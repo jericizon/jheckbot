@@ -38,7 +38,10 @@
           </div>
 
           <!-- Office workspace -->
-          <div v-if="project && officeId" class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+          <div
+            v-if="project && officeId"
+            class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in"
+          >
             <OfficeTaskPanel :tasks="tasks" :loading="tasksLoading" />
             <OfficeActivityPanel :events="events" :loading="eventsLoading" />
           </div>
@@ -106,7 +109,31 @@
             :disabled="sending"
             @open-skills="skillsPickerOpen = true"
             @open-models="modelPickerOpen = true"
-          />
+          >
+            <template #actions>
+              <button
+                @click="insertMediaPrompt"
+                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border bg-transparent border-border text-content-subtle hover:text-content-muted hover:border-content-subtle transition-all shrink-0"
+                title="Insert media generation prompt"
+                aria-label="Insert media generation prompt"
+              >
+                <svg
+                  class="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                <span>Media</span>
+              </button>
+            </template>
+          </MessageToolbar>
 
           <p v-if="sendError" class="mt-3 text-sm text-red-500">{{ sendError }}</p>
         </div>
@@ -151,6 +178,7 @@
 <script setup lang="ts">
 import type { ModelFamily } from '~/components/MessageToolbar.vue'
 import type { OfficeAgent, OfficeEvent, OfficeTask } from '@jheckbot/shared'
+import { insertMediaPrompt as insertMediaPromptBase } from '~/utils/mediaPrompt'
 import { findCeo, findEmployees } from '~/composables/useOffice'
 import { useTasks } from '~/composables/useTasks'
 import { useOfficeEvents } from '~/composables/useOfficeEvents'
@@ -233,6 +261,10 @@ function insertSkill(command: string) {
     inputEl.value?.focus()
     autoResize()
   })
+}
+
+function insertMediaPrompt() {
+  insertMediaPromptBase(input, inputEl, autoResize, id.value)
 }
 
 async function load() {
@@ -379,7 +411,10 @@ async function handleSidebarRename(convId: string, newTitle: string) {
 async function togglePin(convId: string, isPinned: boolean) {
   try {
     await convApi.update(convId, { isPinned })
-    const [convs] = await Promise.all([convApi.listByProject(id.value), refreshActiveConversations()])
+    const [convs] = await Promise.all([
+      convApi.listByProject(id.value),
+      refreshActiveConversations(),
+    ])
     conversations.value = convs
   } catch {
     // Ignore; the next poll will reconcile.
