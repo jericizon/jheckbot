@@ -3,7 +3,8 @@ import { buildLayout, NavigationGrid, WORLD_W, WORLD_H } from '../app/office'
 import { DemoTimeline, demoAgents } from '../app/office/simulation/DemoTimeline'
 import type { OfficeDirector } from '../app/office/simulation/OfficeDirector'
 import type { AgentDescriptor, AgentVisualState, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
-import { drawCharacterOps, rasterizeSilhouette, AgentSprite } from '../app/office/agents/AgentSprite'
+import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount } from '../app/office/agents/AgentSprite'
+import { AgentMovement } from '../app/office/agents/AgentMovement'
 import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
 
 // Unit tests for the pure (PIXI-free) office logic: the navigation grid /
@@ -307,5 +308,126 @@ describe('AgentSprite silhouettes', () => {
       return torso.length ? torso[0]!.w : 0
     }
     expect(torsoWidth(ceoOps)).toBeGreaterThan(torsoWidth(resOps))
+  })
+})
+
+describe('per-role walk animations (spec §9)', () => {
+  const EXPECTED_FRAMES: Record<AgentDescriptor['role'], number> = {
+    ceo: 2,
+    backend: 3,
+    frontend: 3,
+    qa: 3,
+    designer: 2,
+    devops: 2,
+  }
+
+  it('walkFrameCount returns the spec-mandated frame count per role', () => {
+    for (const role of ALL_ROLES) {
+      expect(walkFrameCount(role), `${role} frame count`).toBe(EXPECTED_FRAMES[role])
+    }
+  })
+
+  it('produces a non-empty rect set for every walk frame of every role', () => {
+    for (const role of ALL_ROLES) {
+      const count = walkFrameCount(role)
+      for (const dir of ['down', 'up', 'left', 'right'] as const) {
+        for (let f = 0; f < count; f++) {
+          const ops = drawCharacterOps(role, 'walk', dir, f)
+          expect(ops.length, `${role}/walk/${dir}/${f} produced no rects`).toBeGreaterThan(0)
+        }
+      }
+    }
+  })
+
+  it('walk textures differ from idle textures for each role (rect comparison)', () => {
+    for (const role of ALL_ROLES) {
+      const idleOps = drawCharacterOps(role, 'idle', 'down', 0)
+      const walkOps = drawCharacterOps(role, 'walk', 'down', 0)
+      const idleHash = rasterizeSilhouette(idleOps)
+      const walkHash = rasterizeSilhouette(walkOps)
+      expect(walkHash, `${role} walk silhouette should differ from idle`).not.toBe(idleHash)
+    }
+  })
+
+  it('gives frontend a wider stride than ceo on stride frames', () => {
+    // Frontend stride = 2px, CEO stride = 1px. Compare leg x-spread on the
+    // first stride frame (frame 0 for both).
+    const ceoLegs = drawCharacterOps('ceo', 'walk', 'down', 0)
+      .filter((o) => o.y === 13 && o.h === 4)
+      .map((o) => o.x)
+    const feLegs = drawCharacterOps('frontend', 'walk', 'down', 0)
+      .filter((o) => o.y === 13 && o.h === 4)
+      .map((o) => o.x)
+    const ceoSpread = ceoLegs.length === 2 ? Math.abs(ceoLegs[0]! - ceoLegs[1]!) : 0
+    const feSpread = feLegs.length === 2 ? Math.abs(feLegs[0]! - feLegs[1]!) : 0
+    expect(feSpread).toBeGreaterThan(ceoSpread)
+  })
+
+  it('QA frame 2 is a pause frame with legs together (no stride spread)', () => {
+    const pauseOps = drawCharacterOps('qa', 'walk', 'down', 2)
+    const pauseLegs = pauseOps.filter((o) => o.y === 13 && o.h === 4).map((o) => o.x)
+    const strideOps = drawCharacterOps('qa', 'walk', 'down', 0)
+    const strideLegs = strideOps.filter((o) => o.y === 13 && o.h === 4).map((o) => o.x)
+    expect(pauseLegs.length).toBe(2)
+    expect(strideLegs.length).toBe(2)
+    if (pauseLegs.length === 2 && strideLegs.length === 2) {
+      const pauseSpread = Math.abs(pauseLegs[0]! - pauseLegs[1]!)
+      const strideSpread = Math.abs(strideLegs[0]! - strideLegs[1]!)
+      // Pause frame has no stride spread; stride frame spreads wider.
+      expect(strideSpread).toBeGreaterThan(pauseSpread)
+    }
+  })
+})
+
+describe('AgentMovement per-role speed and QA micro-stops (spec §9, §5)', () => {
+  it('uses speedMultiplier * BASE_SPEED for movement speed', () => {
+    const BASE_SPEED = 3.0
+    for (const role of ALL_ROLES) {
+      const speed = CHARACTER_SHEET[role].walk.speedMultiplier * BASE_SPEED
+      const mv = new AgentMovement(speed)
+      // A 1-tile straight path should complete in ~1/speed seconds.
+      const px = { x: 0, y: 0 }
+      const target = { x: 1, y: 0 }
+      mv.setPath([target], px)
+      expect(mv.isMoving()).toBe(true)
+      // Step by small dt increments until arrived or timeout.
+      let arrived = false
+      for (let i = 0; i < 1000 && !arrived; i++) {
+        arrived = mv.update(0.016)
+      }
+      expect(arrived, `${role} should arrive at target tile`).toBe(true)
+    }
+  })
+
+  it('QA micro-stop: AgentMovement with QA params has a non-zero microStopInterval', () => {
+    const mv = new AgentMovement(2.7, { enabled: true, interval: 2.0, duration: 0.3 })
+    expect(mv.microStopInterval).toBeGreaterThan(0)
+  })
+
+  it('non-QA roles have a zero microStopInterval by default', () => {
+    const mv = new AgentMovement(3.0)
+    expect(mv.microStopInterval).toBe(0)
+  })
+
+  it('QA micro-stop pauses movement then resumes', () => {
+    const mv = new AgentMovement(3.0, { enabled: true, interval: 0.1, duration: 0.3 })
+    mv.setPath([{ x: 10, y: 0 }], { x: 0, y: 0 })
+    expect(mv.isMoving()).toBe(true)
+    // Walk until the micro-stop triggers (~0.1s).
+    let stopped = false
+    for (let i = 0; i < 20; i++) {
+      mv.update(0.01)
+      if (!mv.isMoving()) {
+        stopped = true
+        break
+      }
+    }
+    expect(stopped, 'QA should enter a micro-stop').toBe(true)
+    // After the stop duration, movement resumes.
+    for (let i = 0; i < 40; i++) {
+      mv.update(0.01)
+      if (mv.isMoving()) break
+    }
+    expect(mv.isMoving(), 'QA should resume walking after micro-stop').toBe(true)
   })
 })

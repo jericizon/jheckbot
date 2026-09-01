@@ -78,6 +78,93 @@ function headWidth(shape: 'round' | 'square' | 'oval' | 'wide'): number {
   }
 }
 
+// --- Per-role walk animation config (spec §9) ---
+//
+// Each role has a distinct walk cycle: frame count, stride spread, vertical
+// bounce, arm swing, and animation speed. The bounce is applied at runtime
+// via view.y (see AgentSprite.update) to avoid clipping the hair out of the
+// 16×18 texture frame; the stride/arm differences are baked into the rects
+// so tests can inspect them via drawCharacterOps.
+
+export function walkFrameCount(role: AgentRole): number {
+  switch (role) {
+    case 'ceo':
+      return 2
+    case 'backend':
+      return 3
+    case 'frontend':
+      return 3
+    case 'qa':
+      return 3
+    case 'devops':
+      return 2
+    case 'designer':
+      return 2
+  }
+}
+
+// Per-frame vertical bounce (px) applied to view.y while walking. The body
+// rises on the passing/neutral frame (weight on one leg mid-step).
+export function walkBounceOffsets(role: AgentRole): number[] {
+  switch (role) {
+    case 'ceo':
+      return [0, 0]
+    case 'backend':
+      return [0, 1, 0]
+    case 'frontend':
+      return [0, 2, 0]
+    case 'qa':
+      return [0, 0, 0]
+    case 'devops':
+      return [0, 1]
+    case 'designer':
+      return [0, 0]
+  }
+}
+
+// Walk-cycle animation speed (frames/sec) — varies by role personality.
+function walkFps(role: AgentRole): number {
+  switch (role) {
+    case 'ceo':
+      return 5 // deliberate
+    case 'backend':
+      return 7 // slightly faster
+    case 'frontend':
+      return 8 // energetic
+    case 'qa':
+      return 5 // cautious
+    case 'devops':
+      return 8 // purposeful, fast
+    case 'designer':
+      return 4 // relaxed, slow
+  }
+}
+
+// Whether a given frame is a "stride" frame (legs spread) vs a neutral/pause
+// frame (legs together). QA frame 2 is a deliberate micro-pause.
+function isWalkStrideFrame(role: AgentRole, frame: number): boolean {
+  switch (role) {
+    case 'ceo':
+      return frame === 0
+    case 'backend':
+      return frame === 0 || frame === 2
+    case 'frontend':
+      return frame === 0 || frame === 2
+    case 'qa':
+      return frame === 0 || frame === 1
+    case 'devops':
+      return frame === 0
+    case 'designer':
+      return frame === 0
+  }
+}
+
+// Stride spread (px each side) for stride frames. Energetic/purposeful roles
+// step wider.
+function walkStrideAmount(role: AgentRole): number {
+  return role === 'frontend' || role === 'devops' ? 2 : 1
+}
+
 // Pure description of one character frame as a list of rect fills. Each role
 // draws a genuinely different silhouette (spec §2–§7, §10, §11) driven by the
 // CharacterSheet: heightScale (applied on the sprite container), shoulderWidth
@@ -182,6 +269,8 @@ export function drawCharacterOps(
     if (state === 'talking' && frame === 1) {
       push(torsoX + torsoW, 8, 1, 1, S(skin))
     }
+  } else if (state === 'walk') {
+    drawWalkArms(push, role, frame, torsoX, torsoW, S, shirt)
   } else {
     push(torsoX - 1, 9, 1, 3, S(shirt))
     push(torsoX + torsoW, 9, 1, 3, S(shirt))
@@ -196,17 +285,7 @@ export function drawCharacterOps(
     push(legL - 1, 16, 2, 1, S(PALETTE.ink))
     push(legR - 1, 16, 2, 1, S(PALETTE.ink))
   } else if (state === 'walk') {
-    if (frame === 0) {
-      push(legL - 1, 13, 2, 4, S(pants))
-      push(legR - 1, 13, 2, 4, S(pants))
-      push(legL - 1, 17, 2, 1, S(PALETTE.ink))
-      push(legR - 1, 17, 2, 1, S(PALETTE.ink))
-    } else {
-      push(legL - 2, 13, 2, 4, S(pants))
-      push(legR, 13, 2, 4, S(pants))
-      push(legL - 2, 17, 2, 1, S(PALETTE.ink))
-      push(legR, 17, 2, 1, S(PALETTE.ink))
-    }
+    drawWalkLegs(push, role, frame, legL, legR, S, pants)
   } else {
     push(legL - 1, 13, 2, 4, S(pants))
     push(legR - 1, 13, 2, 4, S(pants))
@@ -427,6 +506,60 @@ function drawHandAccessory(
   }
 }
 
+// Per-role walk legs (spec §9). Stride frames spread the legs by the role's
+// stride amount; neutral/pause frames bring them together.
+function drawWalkLegs(
+  push: PushFn,
+  role: AgentRole,
+  frame: number,
+  legL: number,
+  legR: number,
+  S: DesatFn,
+  pants: string,
+): void {
+  const stride = isWalkStrideFrame(role, frame) ? walkStrideAmount(role) : 0
+  push(legL - 1 - stride, 13, 2, 4, S(pants))
+  push(legR - 1 + stride, 13, 2, 4, S(pants))
+  push(legL - 1 - stride, 17, 2, 1, S(PALETTE.ink))
+  push(legR - 1 + stride, 17, 2, 1, S(PALETTE.ink))
+}
+
+// Per-role walk arms (spec §9). Frontend/DevOps swing arms outward on stride
+// frames; CEO/Research barely move them; Backend/QA use a slight default swing.
+function drawWalkArms(
+  push: PushFn,
+  role: AgentRole,
+  frame: number,
+  torsoX: number,
+  torsoW: number,
+  S: DesatFn,
+  shirt: string,
+): void {
+  const isStride = isWalkStrideFrame(role, frame)
+  switch (role) {
+    case 'frontend':
+    case 'devops': {
+      // Exaggerated / purposeful swing — arms push outward on stride frames.
+      const off = isStride ? 1 : 0
+      push(torsoX - 1 - off, 9, 1, 3, S(shirt))
+      push(torsoX + torsoW + off, 9, 1, 3, S(shirt))
+      break
+    }
+    case 'ceo':
+    case 'designer': {
+      // Barely move — shorter arms, no swing.
+      push(torsoX - 1, 9, 1, 2, S(shirt))
+      push(torsoX + torsoW, 9, 1, 2, S(shirt))
+      break
+    }
+    default: {
+      // Backend/QA — slight default swing, full-length arms.
+      push(torsoX - 1, 9, 1, 3, S(shirt))
+      push(torsoX + torsoW, 9, 1, 3, S(shirt))
+    }
+  }
+}
+
 // Apply a list of rect ops to a PIXI Graphics.
 function applyRectOps(g: Graphics, ops: RectOp[]): void {
   for (const o of ops) g.rect(o.x, o.y, o.w, o.h).fill(o.color)
@@ -479,24 +612,20 @@ function makeTexture(renderer: Renderer, draw: (g: Graphics) => void): Texture {
 }
 
 function buildFrameSet(renderer: Renderer, role: AgentRole): FrameSet {
-  const dirs: Direction[] = ['down', 'up', 'left', 'right']
+  const wfCount = walkFrameCount(role)
   const walk: Record<Direction, Texture[]> = {
-    down: [
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'down', 0)),
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'down', 1)),
-    ],
-    up: [
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'up', 0)),
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'up', 1)),
-    ],
-    left: [
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'left', 0)),
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'left', 1)),
-    ],
-    right: [
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'right', 0)),
-      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'right', 1)),
-    ],
+    down: Array.from({ length: wfCount }, (_, f) =>
+      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'down', f)),
+    ),
+    up: Array.from({ length: wfCount }, (_, f) =>
+      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'up', f)),
+    ),
+    left: Array.from({ length: wfCount }, (_, f) =>
+      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'left', f)),
+    ),
+    right: Array.from({ length: wfCount }, (_, f) =>
+      makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'right', f)),
+    ),
   }
   return {
     ...walk,
@@ -524,10 +653,11 @@ function stateToFrames(
   set: FrameSet,
   state: AgentVisualState,
   dir: Direction,
+  role: AgentRole,
 ): { textures: Texture[]; fps: number; loop: boolean } {
   switch (state) {
     case 'walking':
-      return { textures: set[dir], fps: 6, loop: true }
+      return { textures: set[dir], fps: walkFps(role), loop: true }
     case 'working':
     case 'coding':
     case 'testing':
@@ -561,10 +691,12 @@ export class AgentSprite {
   private currentState: AgentVisualState = 'idle'
   private currentDir: Direction = 'down'
   private baseY = 0
+  private walkBounces: number[]
 
   constructor(private renderer: Renderer, private role: AgentRole) {
     this.set = buildFrameSet(renderer, role)
-    const initial = stateToFrames(this.set, 'idle', 'down')
+    this.walkBounces = walkBounceOffsets(role)
+    const initial = stateToFrames(this.set, 'idle', 'down', role)
     this.sprite = new AnimatedSprite(initial.textures)
     this.sprite.anchor.set(0.5, 1.0) // feet at bottom-center of the tile
     // Per-role height scale (spec §11): taller roles read larger, shorter
@@ -595,7 +727,7 @@ export class AgentSprite {
   }
 
   private applyFrames(state: AgentVisualState): void {
-    const { textures, fps, loop } = stateToFrames(this.set, state, this.currentDir)
+    const { textures, fps, loop } = stateToFrames(this.set, state, this.currentDir, this.role)
     // Avoid restarting the animation if the texture set is identical.
     if (this.sprite.textures !== textures) {
       this.sprite.textures = textures
@@ -622,10 +754,14 @@ export class AgentSprite {
 
   // Subtle vertical bob while idle (breathing) — a 0.5px amplitude bob
   // rounded to whole pixels so it stays crisp under nearest-neighbor scaling.
+  // While walking, applies the per-frame bounce offset (spec §9).
   update(t: number): void {
     if (this.currentState === 'idle' || this.currentState === 'waiting') {
       const bob = Math.round(Math.sin(t * 2) * 0.5)
       this.view.y = this.baseY + bob
+    } else if (this.currentState === 'walking') {
+      const b = this.walkBounces[this.sprite.currentFrame] ?? 0
+      this.view.y = this.baseY - b
     } else {
       this.view.y = this.baseY
     }
