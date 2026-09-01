@@ -74,6 +74,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { OfficeAgent } from '@jheckbot/shared'
 import {
+  CollaborationTimeline,
   EventBus,
   VirtualOffice,
   type AgentDescriptor,
@@ -129,6 +130,8 @@ const liveAgentStates = new Map<string, AgentVisualState>()
 
 const hasAgents = ref(false)
 const officeReady = ref(false)
+const collabRunning = ref(false)
+let collabTimeline: CollaborationTimeline | null = null
 
 function roleLabel(role: SelectionInfo['role']): string {
   switch (role) {
@@ -216,6 +219,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  collabTimeline?.cancel()
+  collabTimeline = null
   const o = office as unknown as { _ro?: ResizeObserver } | null
   o?._ro?.disconnect()
   office?.destroy()
@@ -378,6 +383,23 @@ function clearSelection(): void {
 function openCeoChat(): void {
   emit('open-ceo-chat')
 }
+
+// Run the collaboration choreography: everyone gathers in the collaboration
+// room for a chit-chat, returns to their workstation, QA works last, walks to
+// the CEO office to report, and confetti celebrates the completed task.
+function runCollaboration(): void {
+  if (!office || !officeReady.value || collabRunning.value) return
+  collabRunning.value = true
+  collabTimeline = new CollaborationTimeline(office, { speed: 1 })
+  collabTimeline.run().finally(() => {
+    collabRunning.value = false
+    collabTimeline = null
+  })
+}
+
+// Expose runCollaboration so the parent page can trigger it automatically
+// when the user submits a prompt, instead of via a manual button.
+defineExpose({ runCollaboration })
 </script>
 
 <style scoped>

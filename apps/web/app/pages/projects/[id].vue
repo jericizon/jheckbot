@@ -73,6 +73,7 @@
       <div class="flex-1 min-h-0">
         <OfficePixi
           v-if="project"
+          ref="officePixiRef"
           :agents="officeAgents"
           :ceo="ceo"
           :employees="employees"
@@ -98,6 +99,7 @@
       <!-- Office fills the remaining space -->
       <div class="flex-1 min-h-0 min-w-0 relative">
         <OfficePixi
+          ref="officePixiFullscreenRef"
           :agents="officeAgents"
           :ceo="ceo"
           :employees="employees"
@@ -531,6 +533,10 @@ const mobileChatOpen = ref(false)
 const chatViewportReady = ref(false)
 const fullscreen = ref(false)
 const fullscreenContainer = ref<HTMLElement | null>(null)
+// Refs to the two OfficePixi instances so the page can trigger the
+// collaboration choreography on the one that's currently visible.
+const officePixiRef = ref<{ runCollaboration: () => void } | null>(null)
+const officePixiFullscreenRef = ref<{ runCollaboration: () => void } | null>(null)
 
 // Enter real browser fullscreen (covers the whole monitor) using the
 // Fullscreen API on the overlay container, then show the overlay layout.
@@ -841,7 +847,14 @@ async function sendMessage() {
   try {
     const conv = await convApi.create(id.value)
     await convApi.sendMessage(conv.id, prompt, selectedModel.value, bypassMode.value)
-    await navigateTo(`/conversations/${conv.id}`)
+    // Trigger the collaboration choreography on the visible office instance
+    // so the user sees the characters gather, work, and celebrate — instead
+    // of navigating away immediately. The conversation is still created and
+    // processed in the background; the user can open it from the sidebar.
+    const office = fullscreen.value ? officePixiFullscreenRef.value : officePixiRef.value
+    office?.runCollaboration()
+    input.value = ''
+    nextTick(() => autoResize())
   } catch (err: unknown) {
     const message =
       err && typeof err === 'object' && 'data' in err
@@ -850,6 +863,7 @@ async function sendMessage() {
           ? err.message
           : 'Failed to start conversation'
     sendError.value = message ?? 'Failed to start conversation'
+  } finally {
     sending.value = false
   }
 }
