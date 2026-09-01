@@ -78,8 +78,10 @@
           :employees="employees"
           :loading="officeLoading"
           :agent-messages="agentMessages"
+          :fullscreen="fullscreen"
           full-height
           @open-ceo-chat="ceoChatOpen = true"
+          @toggle-fullscreen="toggleFullscreen"
         />
       </div>
     </div>
@@ -98,8 +100,10 @@
           :employees="employees"
           :loading="officeLoading"
           :agent-messages="agentMessages"
+          :fullscreen="fullscreen"
           full-height
           @open-ceo-chat="ceoChatOpen = true"
+          @toggle-fullscreen="toggleFullscreen"
         />
       </div>
 
