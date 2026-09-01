@@ -2,13 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { buildLayout, NavigationGrid, WORLD_W, WORLD_H } from '../app/office'
 import { DemoTimeline, demoAgents } from '../app/office/simulation/DemoTimeline'
 import type { OfficeDirector } from '../app/office/simulation/OfficeDirector'
-import type { ActivityKind, AgentDescriptor, AgentVisualState, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
+import type { ActivityKind, AgentDescriptor, AgentVisualState, Direction, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
 import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount, workingFrameCount } from '../app/office/agents/AgentSprite'
 import { AgentMovement } from '../app/office/agents/AgentMovement'
 import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
 import { WorkActivityRunner, type WorkAgentController, activityDurationRangeFor } from '../app/office/agents/WorkActivityRunner'
 import { iconForKind, KIND_CONFIG, type MessageIcon } from '../app/office/effects/OfficeEffects'
-import { isPhysicalMessageKind, conversationApproachTile, faceDirection } from '../app/office/VirtualOffice'
+import { isPhysicalMessageKind, conversationApproachTile, faceDirection, runIntroduction, runExit, type LifecycleAgent, type IntroductionPlan } from '../app/office/VirtualOffice'
+import { ReactionGlance } from '../app/office/agents/AgentEntity'
 import { OfficeWorld } from '../app/office/world/OfficeWorld'
 import type { Renderer } from 'pixi.js'
 
@@ -907,6 +908,175 @@ describe('OfficeWorld micro-animations (spec §17)', () => {
     expect(world.notificationDots.length).toBe(boards)
     expect(world.clockHands.length).toBeGreaterThan(0)
     expect(world.notificationDots.length).toBeGreaterThan(0)
+  })
+})
+
+// --- Character introduction / exit sequences (spec §26/§27, Task 9) ---
+
+// A fake LifecycleAgent that records every call so the pure intro/exit
+// orchestration can be verified without a PIXI renderer.
+function makeFakeLifecycleAgent(): LifecycleAgent & {
+  faces: Direction[]
+  states: AgentVisualState[]
+  walkTargets: Vec2[]
+  offline: boolean
+  hidden: boolean
+} {
+  const fake = {
+    faces: [] as Direction[],
+    states: [] as AgentVisualState[],
+    walkTargets: [] as Vec2[],
+    offline: false,
+    hidden: false,
+    face(dir: Direction) {
+      fake.faces.push(dir)
+    },
+    setState(state: AgentVisualState) {
+      fake.states.push(state)
+    },
+    walkTo(tile: Vec2) {
+      fake.walkTargets.push(tile)
+      return Promise.resolve()
+    },
+    setOffline() {
+      fake.offline = true
+    },
+    hide() {
+      fake.hidden = true
+    },
+  }
+  return fake
+}
+
+// Instant delay so the async sequences resolve without waiting on real timers.
+const instantDelay = (): Promise<void> => Promise.resolve()
+
+describe('character introduction sequence (spec §26)', () => {
+  it('walks the agent from the entrance to the workstation seat', async () => {
+    const layout = buildLayout()
+    const ws = layout.workstations.find((w) => w.role === 'backend')!
+    const agent = makeFakeLifecycleAgent()
+    const plan: IntroductionPlan = {
+      entrance: layout.entrance,
+      workstationSeat: ws.seat,
+      workstationFace: ws.face as Direction,
+    }
+    await runIntroduction(agent, plan, instantDelay)
+    // The agent first faces down (into the office) and is idle for the look.
+    expect(agent.faces[0]).toBe('down')
+    expect(agent.states[0]).toBe('idle')
+    // Then it walks to its workstation seat.
+    expect(agent.walkTargets).toContainEqual(ws.seat)
+    // Then it faces the workstation and sits down (idle).
+    expect(agent.faces[agent.faces.length - 1]).toBe(ws.face)
+    expect(agent.states[agent.states.length - 1]).toBe('idle')
+  })
+
+  it('spawns at the office entrance tile which is walkable', () => {
+    const layout = buildLayout()
+    const nav = NavigationGrid.fromLayout(layout)
+    expect(layout.entrance).toBeDefined()
+    expect(nav.isWalkable(layout.entrance.x, layout.entrance.y)).toBe(true)
+  })
+
+  it('does not block: the delay promise gates the walk step', async () => {
+    const layout = buildLayout()
+    const ws = layout.workstations.find((w) => w.role === 'ceo')!
+    const agent = makeFakeLifecycleAgent()
+    let delayResolved = false
+    const delay = (): Promise<void> => {
+      delayResolved = true
+      return Promise.resolve()
+    }
+    const plan: IntroductionPlan = {
+      entrance: layout.entrance,
+      workstationSeat: ws.seat,
+      workstationFace: ws.face as Direction,
+    }
+    await runIntroduction(agent, plan, delay)
+    expect(delayResolved).toBe(true)
+    expect(agent.walkTargets.length).toBe(1)
+  })
+})
+
+describe('agent exit sequence (spec §27)', () => {
+  it('walks to the exit tile for a graceful offline then disappears', async () => {
+    const layout = buildLayout()
+    const agent = makeFakeLifecycleAgent()
+    await runExit(agent, layout.entrance, false, instantDelay)
+    expect(agent.walkTargets).toContainEqual(layout.entrance)
+    expect(agent.offline).toBe(true)
+    expect(agent.hidden).toBe(true)
+    // A graceful exit does not enter the error freeze pose.
+    expect(agent.states).not.toContain('error')
+  })
+
+  it('immediately freezes then dims for a crashed agent (no walk)', async () => {
+    const layout = buildLayout()
+    const agent = makeFakeLifecycleAgent()
+    await runExit(agent, layout.entrance, true, instantDelay)
+    // Crash path: error pose first, then offline — and no walk to the door.
+    expect(agent.states[0]).toBe('error')
+    expect(agent.offline).toBe(true)
+    expect(agent.walkTargets.length).toBe(0)
+    // Crashed agents stay visible (dimmed), they do not disappear.
+    expect(agent.hidden).toBe(false)
+  })
+
+  it('gates the crash freeze behind the delay before going offline', async () => {
+    const agent = makeFakeLifecycleAgent()
+    const order: string[] = []
+    const delay = (): Promise<void> => {
+      order.push('delayed')
+      return Promise.resolve()
+    }
+    await runExit(agent, { x: 23, y: 31 }, true, delay)
+    // error set before the delay, offline set after.
+    expect(agent.states[0]).toBe('error')
+    expect(order).toEqual(['delayed'])
+    expect(agent.offline).toBe(true)
+  })
+})
+
+// --- Contextual reactions (spec §18, Task 9) ---
+
+describe('ReactionGlance contextual reaction (spec §18)', () => {
+  it('turns the agent toward a nearby walker', () => {
+    const glance = new ReactionGlance()
+    // Agent at (5,5) facing up at its workstation; walker passes to the right.
+    const dir = glance.start('up', { x: 5, y: 5 }, { x: 7, y: 5 })
+    expect(dir).toBe('right')
+    expect(glance.active).toBe(true)
+    expect(glance.currentRestoreFace).toBe('up')
+  })
+
+  it('returns the previous facing after the glance duration elapses', () => {
+    const glance = new ReactionGlance()
+    glance.start('up', { x: 5, y: 5 }, { x: 5, y: 3 }) // walker above -> face up
+    // Before the duration expires, tick returns null (keep facing walker).
+    expect(glance.tick(0.5)).toBeNull()
+    expect(glance.tick(0.5)).toBeNull()
+    expect(glance.active).toBe(true)
+    // Crossing the 1.5s threshold restores the previous facing.
+    const restore = glance.tick(0.5)
+    expect(restore).toBe('up')
+    expect(glance.active).toBe(false)
+    expect(glance.currentRestoreFace).toBeNull()
+  })
+
+  it('does nothing when the walker is on the same tile', () => {
+    const glance = new ReactionGlance()
+    const dir = glance.start('down', { x: 5, y: 5 }, { x: 5, y: 5 })
+    expect(dir).toBeNull()
+    expect(glance.active).toBe(false)
+  })
+
+  it('chooses the correct cardinal direction for each neighbor', () => {
+    const glance = new ReactionGlance()
+    expect(glance.start('up', { x: 5, y: 5 }, { x: 6, y: 5 })).toBe('right')
+    expect(glance.start('up', { x: 5, y: 5 }, { x: 4, y: 5 })).toBe('left')
+    expect(glance.start('up', { x: 5, y: 5 }, { x: 5, y: 6 })).toBe('down')
+    expect(glance.start('up', { x: 5, y: 5 }, { x: 5, y: 4 })).toBe('up')
   })
 })
 

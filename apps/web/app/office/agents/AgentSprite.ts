@@ -1012,6 +1012,10 @@ export class AgentSprite {
     if (this.currentState === 'walking') this.applyFrames('walking')
   }
 
+  get direction(): Direction {
+    return this.currentDir
+  }
+
   setPixelPosition(x: number, y: number): void {
     this.baseY = y
     this.view.position.set(x, y)

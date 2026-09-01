@@ -114,9 +114,11 @@ export class VirtualOffice implements OfficeDirector {
     this.app.ticker.add((ticker) => this.tick(ticker.deltaMS / 1000, ticker.lastTime / 1000))
     this.wireInput()
     this.unsubscribe = this.bus.on((e) => this.handleEvent(e))
-    // Flush any agents queued before the renderer was ready.
+    // Flush any agents queued before the renderer was ready. Run the
+    // introduction sequence for each (spec §26); an explicit tile bypasses it.
     for (const { agent, tile } of this.pendingAgents) {
-      this.spawnAgent(agent, tile)
+      if (tile) this.spawnAgent(agent, tile)
+      else void this.introduceAgent(agent)
     }
     this.pendingAgents = []
     this.emitStats()
@@ -131,7 +133,34 @@ export class VirtualOffice implements OfficeDirector {
       this.pendingAgents.push({ agent, tile })
       return
     }
-    this.spawnAgent(agent, tile)
+    // An explicit tile overrides the introduction sequence — spawn directly
+    // where the caller asked (e.g. a runtime-supplied position). Otherwise run
+    // the door → look around → walk to workstation intro (spec §26).
+    if (tile) {
+      this.spawnAgent(agent, tile)
+    } else {
+      void this.introduceAgent(agent)
+    }
+  }
+
+  // Character introduction sequence (spec §26): the agent enters through the
+  // office door, looks around briefly, walks to their workstation seat, then
+  // sits down. Runs asynchronously and does not block other agents or the tick
+  // loop. The agent is spawned synchronously at the entrance first so it exists
+  // in the map for any concurrent calls.
+  private async introduceAgent(agent: AgentDescriptor, tile?: Vec2): Promise<void> {
+    const spawn = tile ?? this.layout.entrance
+    this.spawnAgent(agent, spawn)
+    const entity = this.agents.get(agent.id)
+    if (!entity) return
+    const ws = workstationForRole(this.layout, agent.role)
+    await runIntroduction(this.lifecycleAgent(entity, agent.id), {
+      entrance: spawn,
+      workstationSeat: ws?.seat,
+      workstationFace: ws?.face as Direction | undefined,
+    }, (s) => this.delay(s))
+    if (!this.agents.has(agent.id)) return
+    this.emit({ type: 'agent.idle', agentId: agent.id })
   }
 
   private spawnAgent(agent: AgentDescriptor, tile?: Vec2): void {
@@ -275,10 +304,44 @@ export class VirtualOffice implements OfficeDirector {
     agent.interrupt('CRITICAL', 'error')
     this.popStatus(agentId, 'error')
     this.emit({ type: 'agent.error', agentId })
+    // A crash freezes the agent then dims it offline (spec §27).
+    void this.exitAgent(agentId, true)
   }
 
   idle(agentId: string): void {
     this.setState(agentId, 'idle')
+  }
+
+  // Agent exit sequence (spec §27). For a graceful offline, the agent stands
+  // up, walks to the office entrance/door, then disappears. For a crash, the
+  // walk is skipped: the agent freezes in the error pose, then after a beat
+  // transitions to the dimmed offline state. Runs asynchronously and does not
+  // block other agents or the tick loop.
+  private async exitAgent(agentId: string, crashed: boolean): Promise<void> {
+    const agent = this.agents.get(agentId)
+    if (!agent) return
+    // Turn off the workstation monitor glow on either path.
+    if (this.isReady) {
+      const ws = workstationForRole(this.layout, agent.descriptor.role)
+      if (ws) this.world.setMonitorGlow(ws.desk, false)
+    }
+    await runExit(this.lifecycleAgent(agent, agentId), this.layout.entrance, crashed, (s) => this.delay(s))
+    this.emitStats()
+  }
+
+  // Build a LifecycleAgent controller around an AgentEntity so the intro/exit
+  // orchestration can be driven by pure, renderer-free helpers (and tested
+  // with a fake). walkTo routes through this.walk so walking/arrived events
+  // fire as they do for any other movement.
+  private lifecycleAgent(agent: AgentEntity, agentId: string): LifecycleAgent {
+    const alive = (): boolean => this.agents.has(agentId)
+    return {
+      face: (dir) => { if (alive()) agent.face(dir) },
+      setState: (state) => { if (alive()) agent.setState(state) },
+      walkTo: (tile) => (alive() ? this.walk(agentId, tile) : Promise.resolve()),
+      setOffline: () => { if (alive()) agent.setOffline() },
+      hide: () => { if (alive()) agent.view.visible = false },
+    }
   }
 
   // Resume the agent's previous activity after an interrupt resolves (§20).
@@ -353,8 +416,7 @@ export class VirtualOffice implements OfficeDirector {
         this.createAgent(event.agent, event.tile)
         break
       case 'agent.offline': {
-        const a = this.agents.get(event.agentId)
-        a?.setOffline()
+        void this.exitAgent(event.agentId, false)
         break
       }
       case 'agent.walking':
@@ -546,6 +608,7 @@ export class VirtualOffice implements OfficeDirector {
     for (const a of this.agents.values()) a.update(dt, t)
     this.effects?.update(dt)
     this.camera?.update(this.app.ticker)
+    this.updateContextualReactions(dt)
     if (this.selectedId) {
       // Live state refresh for the panel.
       const a = this.agents.get(this.selectedId)
@@ -557,6 +620,31 @@ export class VirtualOffice implements OfficeDirector {
   }
 
   private lastSelectedState: AgentVisualState | null = null
+  // Accumulator for the throttled contextual-reaction scan (spec §18).
+  private reactionScanAccum = 0
+
+  // Contextual reactions (spec §18): when an agent is walking, nearby seated
+  // agents briefly turn to look at them. Scanned at most every ~0.5s to avoid
+  // excessive calls. CEO walkers also catch the eye of nearby developers.
+  private updateContextualReactions(dt: number): void {
+    this.reactionScanAccum += dt
+    if (this.reactionScanAccum < REACTION_SCAN_INTERVAL) return
+    this.reactionScanAccum = 0
+    const agents = [...this.agents.values()]
+    for (const walker of agents) {
+      if (walker.currentState !== 'walking') continue
+      const wTile = walker.currentTile
+      for (const other of agents) {
+        if (other === walker) continue
+        if (!other.isSeated) continue
+        const oTile = other.currentTile
+        const dist = Math.hypot(oTile.x - wTile.x, oTile.y - wTile.y)
+        if (dist <= REACTION_RADIUS) {
+          other.reactToNearbyWalker(wTile, walker.descriptor.role)
+        }
+      }
+    }
+  }
 
   destroy(): void {
     this.destroyed = true
@@ -577,9 +665,70 @@ export class VirtualOffice implements OfficeDirector {
       this.emitting = false
     }
   }
+
+  // Promise-based delay used by the intro/exit sequences. Resolved on the next
+  // macrotask so it never blocks the PIXI ticker.
+  private delay(seconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, seconds * 1000))
+  }
 }
 
 // ---- Pure helpers for physical conversations (spec §14) ----
+
+// Minimal controller the intro/exit orchestration helpers drive. Extracted so
+// the sequences are testable without a PIXI renderer (tests pass a fake that
+// records walkTo targets and state changes).
+export interface LifecycleAgent {
+  face(dir: Direction): void
+  setState(state: AgentVisualState): void
+  walkTo(tile: Vec2): Promise<void>
+  setOffline(): void
+  hide(): void
+}
+
+export interface IntroductionPlan {
+  entrance: Vec2
+  workstationSeat?: Vec2
+  workstationFace?: Direction
+}
+
+// Character introduction sequence (spec §26), pure orchestration. The agent
+// faces into the office, pauses to "look around", walks to its workstation
+// seat, faces the desk, and sits down (idle).
+export async function runIntroduction(
+  agent: LifecycleAgent,
+  plan: IntroductionPlan,
+  delay: (seconds: number) => Promise<void>,
+): Promise<void> {
+  agent.face('down')
+  agent.setState('idle')
+  await delay(INTRO_LOOK_SECONDS)
+  if (plan.workstationSeat) {
+    await agent.walkTo(plan.workstationSeat)
+    if (plan.workstationFace) agent.face(plan.workstationFace)
+  }
+  agent.setState('idle')
+}
+
+// Agent exit sequence (spec §27), pure orchestration. A graceful exit walks to
+// the entrance then disappears; a crash freezes in the error pose, then dims
+// to offline after a beat.
+export async function runExit(
+  agent: LifecycleAgent,
+  entrance: Vec2,
+  crashed: boolean,
+  delay: (seconds: number) => Promise<void>,
+): Promise<void> {
+  if (crashed) {
+    agent.setState('error')
+    await delay(CRASH_FREEZE_SECONDS)
+    agent.setOffline()
+    return
+  }
+  await agent.walkTo(entrance)
+  agent.setOffline()
+  agent.hide()
+}
 
 // Kinds that trigger a physical walk instead of a traveling envelope.
 export function isPhysicalMessageKind(kind: MessageKind): boolean {
@@ -611,6 +760,15 @@ export function faceDirection(from: Vec2, to: Vec2): Direction {
 }
 
 const PALETTE_BG = '#1c1c22'
+
+// Intro/exit sequence timings (spec §26/§27).
+const INTRO_LOOK_SECONDS = 0.5 // "look around" pause after entering
+const CRASH_FREEZE_SECONDS = 1.0 // freeze in error pose before dimming offline
+// Contextual-reaction scan cadence (spec §18): check for nearby walkers at
+// most twice per second to avoid excessive reactToNearbyWalker calls.
+const REACTION_SCAN_INTERVAL = 0.5
+// A seated agent reacts to walkers within this tile radius (spec §18).
+const REACTION_RADIUS = 2
 
 function stateEvent(state: AgentVisualState): OfficeEvent['type'] {
   switch (state) {

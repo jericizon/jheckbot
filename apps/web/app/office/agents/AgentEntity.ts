@@ -75,6 +75,47 @@ export class InterruptStateMachine {
   }
 }
 
+// Pure contextual-reaction glance state (spec §18) — extracted from
+// AgentEntity so the turn-toward-walker-then-restore behavior is testable
+// without a PIXI renderer. The agent entity composes this and applies the
+// returned directions to its sprite.
+export class ReactionGlance {
+  private timer = 0
+  private restoreFace: Direction | null = null
+
+  get active(): boolean {
+    return this.timer > 0
+  }
+
+  get currentRestoreFace(): Direction | null {
+    return this.restoreFace
+  }
+
+  // Begin a glance from `fromTile` toward `towardTile`. Stores the current
+  // facing to restore later and returns the direction to face now. Returns
+  // null only if no direction can be computed (fromTile === towardTile).
+  start(currentFace: Direction, fromTile: Vec2, towardTile: Vec2): Direction | null {
+    if (fromTile.x === towardTile.x && fromTile.y === towardTile.y) return null
+    this.restoreFace = currentFace
+    this.timer = REACTION_GLANCE_SECONDS
+    return facingToward(fromTile, towardTile)
+  }
+
+  // Advance the glance by dt seconds. Returns the face to restore when the
+  // glance ends, or null while the glance continues or is inactive.
+  tick(dt: number): Direction | null {
+    if (this.timer <= 0) return null
+    this.timer -= dt
+    if (this.timer <= 0) {
+      this.timer = 0
+      const restore = this.restoreFace
+      this.restoreFace = null
+      return restore
+    }
+    return null
+  }
+}
+
 // One agent in the office: sprite + movement + visual state machine.
 // The VirtualOffice coordinator routes EventBus events into method calls here.
 export class AgentEntity {
@@ -94,6 +135,9 @@ export class AgentEntity {
   private suppressRunnerReset = false
   // Interrupt state machine tracking return-to-task memory (spec §19, §20).
   private interruptState = new InterruptStateMachine('idle')
+  // Contextual-reaction glance state (spec §18). Pure so the turn-then-restore
+  // behavior is testable without a PIXI renderer.
+  private reaction = new ReactionGlance()
 
   constructor(
     private renderer: Renderer,
@@ -149,6 +193,41 @@ export class AgentEntity {
 
   get workstationSeat(): Vec2 | undefined {
     return this.workstation?.seat
+  }
+
+  // Seated visual states — the agent is at its workstation chair (spec §18).
+  private static readonly SEATED_STATES: ReadonlySet<AgentVisualState> = new Set([
+    'idle',
+    'working',
+    'coding',
+    'testing',
+    'reviewing',
+    'reading',
+    'thinking',
+    'waiting',
+  ])
+
+  // True when the agent is stationary at its workstation seat in a seated pose.
+  get isSeated(): boolean {
+    if (this.movement.isMoving()) return false
+    if (!this.workstation) return false
+    if (this.tile.x !== this.workstation.seat.x || this.tile.y !== this.workstation.seat.y) return false
+    return AgentEntity.SEATED_STATES.has(this.state)
+  }
+
+  // Contextual reaction (spec §18): a seated agent briefly turns toward a
+  // nearby walker, then returns to its previous facing. This is a LOW-priority
+  // visual overlay — it does NOT go through the interrupt system and does not
+  // store previousState, so the agent's logical activity is untouched.
+  reactToNearbyWalker(walkerTile: Vec2, _walkerRole: AgentRole): void {
+    if (!this.isSeated) return
+    if (this.state === 'offline' || this.state === 'error') return
+    const dir = this.reaction.start(this.sprite.direction, this.tile, walkerTile)
+    if (dir !== null) this.face(dir)
+  }
+
+  get isReacting(): boolean {
+    return this.reaction.active
   }
 
   // Walk to a tile; resolves when the agent arrives.
@@ -258,6 +337,13 @@ export class AgentEntity {
       // Caller (coordinator) decides the next state; default to idle.
       this.setState('idle')
     }
+    // Tick the contextual-reaction glance (spec §18). Restore the previous
+    // facing when the glance expires. Movement overrides any glance, so only
+    // count down while stationary.
+    if (this.reaction.active && !this.movement.isMoving()) {
+      const restore = this.reaction.tick(dt)
+      if (restore !== null) this.face(restore)
+    }
     // Drive the idle behavior tree only while idle/waiting and stationary.
     if ((this.state === 'idle' || this.state === 'waiting') && !this.movement.isMoving()) {
       this.idleRunner.update(dt)
@@ -351,3 +437,16 @@ export class AgentEntity {
 const SPRITE_HEAD_OFFSET = 16 // sprite is 18 tall, feet-anchored; head ~16px up
 
 const BASE_SPEED = 3.0 // tiles/sec; per-role speedMultiplier scales this (§9)
+
+// Duration of the contextual-reaction glance (spec §18): 1-2s. Picked at the
+// middle of the range so the turn reads as a brief look, not a stare.
+const REACTION_GLANCE_SECONDS = 1.5
+
+// Cardinal direction from `from` toward `to`, based on tile positions. Mirrors
+// VirtualOffice.faceDirection but kept local to avoid a circular import.
+function facingToward(from: Vec2, to: Vec2): Direction {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left'
+  return dy > 0 ? 'down' : 'up'
+}
