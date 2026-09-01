@@ -268,10 +268,12 @@ export class VirtualOffice implements OfficeDirector {
     to.setState('communicating')
 
     // Speech indicators above both heads for the conversation duration.
+    // The bubbles follow each agent so they stay aligned even if the
+    // characters shift position during the conversation.
     if (this.isReady) {
       const duration = 2 + Math.random() * 2 // 2-4 seconds
-      this.effects.speechBubble(from.headPixelPosition(), duration)
-      this.effects.speechBubble(to.headPixelPosition(), duration)
+      this.effects.speechBubble(from.headPixelPosition(), duration, () => from.headPixelPosition())
+      this.effects.speechBubble(to.headPixelPosition(), duration, () => to.headPixelPosition())
       await new Promise<void>((resolve) => setTimeout(resolve, duration * 1000))
     }
 
@@ -316,24 +318,26 @@ export class VirtualOffice implements OfficeDirector {
 
   // Brief chit-chat beat: a speech bubble pops above the agent's head while
   // they are in the communicating state. Used by the collaboration timeline.
+  // The bubble follows the agent so it stays aligned during movement.
   chat(agentId: string, durationSec = 1.2): void {
     const agent = this.agents.get(agentId)
     if (!agent) return
     agent.interrupt('MEDIUM', 'communicating')
     if (this.isReady) {
-      this.effects.speechBubble(agent.headPixelPosition(), durationSec)
+      this.effects.speechBubble(agent.headPixelPosition(), durationSec, () => agent.headPixelPosition())
     }
     this.emit({ type: 'agent.communicating', agentId })
   }
 
   // Larger animated chat bubble for group conversations (collaboration room).
-  // Sets the agent to communicating and shows a bigger, animated bubble.
+  // Sets the agent to communicating and shows a bigger, animated bubble that
+  // follows the agent so it stays aligned during movement.
   groupChat(agentId: string, durationSec = 2): void {
     const agent = this.agents.get(agentId)
     if (!agent) return
     agent.interrupt('MEDIUM', 'communicating')
     if (this.isReady) {
-      this.effects.chatBubble(agent.headPixelPosition(), durationSec)
+      this.effects.chatBubble(agent.headPixelPosition(), durationSec, () => agent.headPixelPosition())
     }
     this.emit({ type: 'agent.communicating', agentId })
   }
@@ -437,6 +441,20 @@ export class VirtualOffice implements OfficeDirector {
 
   workstationSeat(role: AgentDescriptor['role']): Vec2 | undefined {
     return workstationForRole(this.layout, role)?.seat
+  }
+
+  // Current tile of an agent (where it stands or is moving toward), or
+  // undefined if the agent doesn't exist. Used to persist positions across
+  // browser refreshes.
+  getAgentTile(agentId: string): Vec2 | undefined {
+    const agent = this.agents.get(agentId)
+    return agent ? { ...agent.currentTile } : undefined
+  }
+
+  // Whether a tile is walkable in the office layout. Used to validate a
+  // restored position before spawning an agent on it.
+  isTileWalkable(tile: Vec2): boolean {
+    return this.nav.isWalkable(tile.x, tile.y)
   }
 
   // ---- EventBus -> director (for the real runtime, Phase 8) ----

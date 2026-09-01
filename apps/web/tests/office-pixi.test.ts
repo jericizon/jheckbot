@@ -314,17 +314,17 @@ describe('CollaborationTimeline', () => {
     seedLiveAgents(dir, LIVE_AGENTS)
     const collab = new CollaborationTimeline(dir, { speed: 100 })
     await collab.run()
-    // Each participating agent walks at least 3 times (gather + staging + disperse).
+    // Each participating agent walks at least 2 times (gather + disperse to workstation).
     for (const id of ['live-ceo', 'live-backend', 'live-frontend', 'live-qa']) {
       const walkCount = dir.calls.filter((c) => c === `walk:${id}`).length
-      expect(walkCount).toBeGreaterThanOrEqual(3)
+      expect(walkCount).toBeGreaterThanOrEqual(2)
     }
     // Engineering workers enter a coding state.
     expect(dir.calls).toContain('work:live-backend:coding')
     expect(dir.calls).toContain('work:live-frontend:coding')
   })
 
-  it('everyone leaves the collaboration room together — staging then disperse', async () => {
+  it('everyone leaves the collaboration room one by one after the chit-chat', async () => {
     const dir = makeRecordingDirector()
     seedLiveAgents(dir, LIVE_AGENTS)
     const collab = new CollaborationTimeline(dir, { speed: 100 })
@@ -335,19 +335,30 @@ describe('CollaborationTimeline', () => {
         c.startsWith('groupChat:') || c.startsWith('chat:') ? i : -1,
       ),
     )
-    // Phase 1: all four participants walk to staging tiles right after chit-chat.
-    const stagingWalks = participantIds.filter((id) =>
+    // After the last chat, each participant walks to their workstation.
+    const postChatWalks = participantIds.filter((id) =>
       dir.calls.some((c, i) => i > lastChatIdx && c === `walk:${id}`),
     )
-    expect(stagingWalks.length).toBe(4)
-    // Each participant walks at least 3 times total: gather + staging + disperse.
+    expect(postChatWalks.length).toBe(4)
+    // Each participant walks at least 2 times total: gather + disperse.
     for (const id of participantIds) {
       const walkCount = dir.calls.filter((c) => c === `walk:${id}`).length
-      expect(walkCount).toBeGreaterThanOrEqual(3)
+      expect(walkCount).toBeGreaterThanOrEqual(2)
     }
-    // CEO and QA go idle during the combined exit (not a separate step).
+    // CEO and QA go idle when they reach their workstation.
     expect(dir.calls).toContain('idle:live-ceo')
     expect(dir.calls).toContain('idle:live-qa')
+    // Exits are sequential: each agent's disperse walk starts after the
+    // previous agent's disperse walk (or work/idle) completes — no overlap.
+    const disperseWalkIndices = participantIds.map((id) => {
+      const gatherWalkIdx = dir.calls.findIndex((c) => c === `walk:${id}`)
+      // Find the second walk (the disperse walk) after the gather walk.
+      return dir.calls.findIndex((c, i) => i > gatherWalkIdx && c === `walk:${id}`)
+    })
+    // The disperse walks should appear in order (one-by-one), not interleaved.
+    for (let i = 1; i < disperseWalkIndices.length; i++) {
+      expect(disperseWalkIndices[i]).toBeGreaterThan(disperseWalkIndices[i - 1])
+    }
   })
 
   it('has QA work last, then walk to the CEO office to report', async () => {
@@ -380,6 +391,32 @@ describe('CollaborationTimeline', () => {
     expect(confettiIdx).toBeGreaterThan(-1)
     // Confetti fires after the task is marked completed.
     expect(confettiIdx).toBeGreaterThan(completedIdx)
+  })
+
+  it('waits for real task completion before QA reports and confetti fires', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    let resolveCompletion: (() => void) | null = null
+    const completionPromise = () =>
+      new Promise<void>((resolve) => {
+        resolveCompletion = resolve
+      })
+    const collab = new CollaborationTimeline(dir, {
+      speed: 100,
+      waitForTaskCompletion: completionPromise,
+    })
+    const runPromise = collab.run()
+    // Give the timeline time to reach the QA review phase (gather + chat + disperse + QA work).
+    await new Promise((r) => setTimeout(r, 150))
+    // QA should be reviewing but not yet succeeded — completion hasn't fired.
+    expect(dir.calls).toContain('work:live-qa:reviewing')
+    expect(dir.calls).not.toContain('succeed:live-qa')
+    expect(dir.calls.filter((c) => c.startsWith('confetti:'))).toHaveLength(0)
+    // Now resolve the completion promise — QA should finish and confetti fires.
+    resolveCompletion?.()
+    await runPromise
+    expect(dir.calls).toContain('succeed:live-qa')
+    expect(dir.calls.filter((c) => c.startsWith('confetti:')).length).toBeGreaterThan(0)
   })
 
   it('drives the task through planning -> in_progress -> review -> completed', async () => {

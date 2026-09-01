@@ -500,6 +500,13 @@ const eventsLoading = ref(false)
 const agentMessages = ref<Record<string, string>>({})
 let unsubscribeEvents: (() => void) | null = null
 
+// Deferred task-completion signal for the collaboration choreography. When
+// the user sends a prompt, we create a promise that resolves on the next
+// AGENT_COMPLETED office event — so the timeline's QA report + confetti only
+// fire when the real backend task is done, not on a fixed timer.
+let taskCompletionResolver: (() => void) | null = null
+let taskCompletionTimeout: ReturnType<typeof setTimeout> | null = null
+
 const ceo = computed(() => findCeo(officeAgents.value))
 const employees = computed(() => findEmployees(officeAgents.value, ceo.value))
 
@@ -533,8 +540,8 @@ const chatViewportReady = ref(false)
 const fullscreen = ref(false)
 // Refs to the two OfficePixi instances so the page can trigger the
 // collaboration choreography on the one that's currently visible.
-const officePixiRef = ref<{ runCollaboration: () => void } | null>(null)
-const officePixiFullscreenRef = ref<{ runCollaboration: () => void } | null>(null)
+const officePixiRef = ref<{ runCollaboration: (waitForTaskCompletion?: () => Promise<void>) => void } | null>(null)
+const officePixiFullscreenRef = ref<{ runCollaboration: (waitForTaskCompletion?: () => Promise<void>) => void } | null>(null)
 
 // Enter real browser fullscreen (covers the whole monitor) using the
 // Fullscreen API. We fullscreen document.documentElement (always visible)
@@ -722,6 +729,15 @@ function handleLiveEvent(event: OfficeEvent) {
   if (isAgentEvent(event.eventType)) {
     loadOffice()
   }
+  // Resolve the collaboration timeline's task-completion promise when the
+  // real backend task finishes, so QA can report and confetti can fire.
+  if (event.eventType === 'AGENT_COMPLETED' && taskCompletionResolver) {
+    clearTimeout(taskCompletionTimeout ?? undefined)
+    taskCompletionTimeout = null
+    const resolve = taskCompletionResolver
+    taskCompletionResolver = null
+    resolve()
+  }
   // Show agent-to-agent speech bubbles for the latest AGENT_MESSAGE.
   if (event.eventType === 'AGENT_MESSAGE' && event.metadata?.fromAgentId) {
     const from = event.metadata.fromAgentId as string
@@ -839,14 +855,12 @@ async function sendMessage() {
   try {
     const conv = await convApi.create(id.value)
     await convApi.sendMessage(conv.id, prompt, selectedModel.value, bypassMode.value)
-    // Trigger the collaboration choreography on the visible office instance
-    // so the user sees the characters gather, work, and celebrate — instead
-    // of navigating away immediately. The conversation is still created and
-    // processed in the background; the user can open it from the sidebar.
-    const office = fullscreen.value ? officePixiFullscreenRef.value : officePixiRef.value
-    office?.runCollaboration()
+    // Redirect to the new conversation so the user sees the agent's live
+    // output. The conversation page detects the running agent, connects SSE,
+    // and streams results automatically.
     input.value = ''
     nextTick(() => autoResize())
+    await navigateTo(`/conversations/${conv.id}`)
   } catch (err: unknown) {
     const message =
       err && typeof err === 'object' && 'data' in err
@@ -858,6 +872,28 @@ async function sendMessage() {
   } finally {
     sending.value = false
   }
+}
+
+// Returns a promise that resolves on the next AGENT_COMPLETED office event,
+// with a 5-minute timeout fallback so the timeline never hangs forever if
+// the event never arrives.
+function createTaskCompletionPromise(): () => Promise<void> {
+  return () =>
+    new Promise<void>((resolve) => {
+      // If a previous promise is still pending, resolve it first so it
+      // doesn't leak.
+      if (taskCompletionResolver) {
+        taskCompletionResolver()
+      }
+      taskCompletionResolver = resolve
+      if (taskCompletionTimeout) clearTimeout(taskCompletionTimeout)
+      taskCompletionTimeout = setTimeout(() => {
+        if (taskCompletionResolver === resolve) {
+          taskCompletionResolver = null
+          resolve()
+        }
+      }, 5 * 60 * 1000)
+    })
 }
 
 onMounted(async () => {
@@ -875,6 +911,11 @@ onUnmounted(() => {
     unsubscribeEvents()
     unsubscribeEvents = null
   }
+  if (taskCompletionTimeout) {
+    clearTimeout(taskCompletionTimeout)
+    taskCompletionTimeout = null
+  }
+  taskCompletionResolver = null
   window.removeEventListener('resize', updateViewport)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   // Make sure we don't leave the monitor fullscreen if the user navigates away.

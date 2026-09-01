@@ -571,9 +571,14 @@ class SpeechBubble {
   readonly view: Container
   private life = 0
   private readonly ttl: number
+  // Optional follow callback so the bubble tracks a moving agent's head.
+  private readonly follow?: () => Vec2
+  private readonly baseY: number
 
-  constructor(renderer: Renderer, at: Vec2, duration: number) {
+  constructor(renderer: Renderer, at: Vec2, duration: number, follow?: () => Vec2) {
     this.ttl = duration
+    this.follow = follow
+    this.baseY = at.y
     const g = new Graphics()
     // Small speech bubble with tail.
     g.rect(0, 0, 8, 6).fill(PALETTE.cream)
@@ -607,8 +612,13 @@ class SpeechBubble {
 
   update(dt: number): void {
     this.life += dt
-    // Gentle bob while active, then fade out over the last 25%.
-    this.view.y += Math.sin(this.life * 6) * dt * 2
+    // Track the agent's head if a follow callback was provided, so the
+    // bubble stays aligned while the character is moving.
+    const base = this.follow ? this.follow() : { x: this.view.x, y: this.baseY }
+    // Gentle bob (amplitude-based, not accumulated, so it stays anchored).
+    const bob = Math.sin(this.life * 6) * 2
+    this.view.position.set(base.x, base.y + bob)
+    // Fade out over the last 25%.
     const p = this.life / this.ttl
     if (p > 0.75) this.view.alpha = Math.max(0, 1 - (p - 0.75) / 0.25)
   }
@@ -631,9 +641,14 @@ class ChatBubble {
   private dots: Sprite
   private dotTex: Texture[]
   private time = 0
+  // Optional follow callback so the bubble tracks a moving agent's head.
+  private readonly follow?: () => Vec2
+  private readonly baseY: number
 
-  constructor(renderer: Renderer, at: Vec2, duration: number) {
+  constructor(renderer: Renderer, at: Vec2, duration: number, follow?: () => Vec2) {
     this.ttl = duration
+    this.follow = follow
+    this.baseY = at.y
     const W = 14
     const H = 10
 
@@ -707,8 +722,12 @@ class ChatBubble {
     const frame = Math.floor(this.time / 0.25) % this.dotTex.length
     const tex = this.dotTex[frame]
     if (tex && this.dots.texture !== tex) this.dots.texture = tex
-    // Gentle bob.
-    this.view.y += Math.sin(this.time * 5) * dt * 1.5
+    // Track the agent's head if a follow callback was provided, so the
+    // bubble stays aligned while the character is moving.
+    const base = this.follow ? this.follow() : { x: this.view.x, y: this.baseY }
+    // Gentle bob (amplitude-based, not accumulated, so it stays anchored).
+    const bob = Math.sin(this.time * 5) * 1.5
+    this.view.position.set(base.x, base.y + bob)
     // Fade out over the last 20%.
     const p = this.life / this.ttl
     if (p > 0.8) this.view.alpha = Math.max(0, 1 - (p - 0.8) / 0.2)
@@ -965,16 +984,19 @@ export class OfficeEffects {
   }
 
   // Speech bubble above an agent's head for a physical conversation (spec §14).
-  speechBubble(position: Vec2, duration: number): void {
-    const b = new SpeechBubble(this.renderer, position, duration)
+  // When follow is provided, the bubble tracks the agent's head position each
+  // frame so it stays aligned even while the character is moving.
+  speechBubble(position: Vec2, duration: number, follow?: () => Vec2): void {
+    const b = new SpeechBubble(this.renderer, position, duration, follow)
     this.bubbles.push(b)
     this.view.addChild(b.view)
   }
 
   // Larger animated chat bubble for the collaboration chit-chat. Multiple
-  // can be active at once so it feels like a group conversation.
-  chatBubble(position: Vec2, duration: number): void {
-    const b = new ChatBubble(this.renderer, position, duration)
+  // can be active at once so it feels like a group conversation. When follow
+  // is provided, the bubble tracks the agent's head position each frame.
+  chatBubble(position: Vec2, duration: number, follow?: () => Vec2): void {
+    const b = new ChatBubble(this.renderer, position, duration, follow)
     this.chatBubbles.push(b)
     this.view.addChild(b.view)
   }

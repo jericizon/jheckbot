@@ -1,4 +1,4 @@
-import type { AgentRole, TaskDescriptor, Vec2 } from '../types'
+import type { AgentRole, TaskDescriptor } from '../types'
 import type { OfficeDirector } from './OfficeDirector'
 
 // Scripted collaboration choreography triggered by a prompt.
@@ -7,10 +7,13 @@ import type { OfficeDirector } from './OfficeDirector'
 // created. Participating roles: CEO, Engineering (backend + frontend), and QA.
 //
 // Flow:
-//   1. Existing CEO/Eng/QA characters gather in the COLLABORATION room for a chit-chat.
-//   2. Everyone returns to their respective rooms/workstations.
+//   1. Existing CEO/Eng/QA characters gather in the COLLABORATION room and
+//      stay seated while speech bubbles pop up (chit-chat).
+//   2. After the conversation ends, everyone returns to their respective
+//      rooms/workstations ONE BY ONE (sequential exit, not a group rush).
 //   3. Engineering agents work in parallel; QA works last (reviewing).
-//   4. QA walks to the CEO office to report.
+//   4. QA waits for the real task to complete (via waitForTaskCompletion)
+//      before finishing testing, then walks to the CEO office to report.
 //   5. Confetti celebrates the completed task.
 //
 // Drives the office purely through the OfficeDirector API, so it is fully
@@ -37,32 +40,38 @@ const WORK_STATE: Partial<Record<AgentRole, 'coding' | 'working' | 'reviewing' |
 // A walkable tile inside the CEO office for QA to stand at when reporting.
 const CEO_OFFICE_REPORT_TILE = { x: 7, y: 6 }
 
-// The collaboration room door — everyone gathers here before dispersing so
-// they visually leave the room together rather than trickling out one by one.
-const COLLAB_DOOR_TILE = { x: 23, y: 11 }
+// How long to wait after the last bubble fades before anyone starts leaving,
+// so agents stay seated during the entire conversation.
+const POST_CHAT_SETTLE_MS = 600
 
-// Tiles just outside the collaboration room door where agents wait for the
-// group before heading to their workstations. Staggered so they don't overlap.
-const EXIT_STAGING_TILES: Vec2[] = [
-  { x: 23, y: 10 },
-  { x: 22, y: 10 },
-  { x: 24, y: 10 },
-  { x: 23, y: 9 },
-]
+// Delay between each agent's departure so they leave one by one rather than
+// as a group.
+const EXIT_STAGGER_MS = 400
+
+// Fallback timeout for waitForTaskCompletion so the timeline never hangs
+// forever if the real task event never arrives.
+const TASK_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000
 
 export interface CollaborationTimelineOptions {
   speed?: number
+  // Optional callback that resolves when the real backend task has completed.
+  // When provided, the timeline waits for it before QA finishes testing and
+  // reports to the CEO — so confetti only fires on actual task completion.
+  // When omitted (e.g. in tests), the timeline falls back to a fixed delay.
+  waitForTaskCompletion?: () => Promise<void>
 }
 
 export class CollaborationTimeline {
   private running = false
   private cancelled = false
   private speed = 1
+  private waitForTaskCompletion?: () => Promise<void>
   // Resolved participant ids (role -> agentId), discovered from the director.
   private participants: AgentRole[] = []
 
   constructor(private director: OfficeDirector, options: CollaborationTimelineOptions = {}) {
     this.speed = options.speed ?? 1
+    this.waitForTaskCompletion = options.waitForTaskCompletion
   }
 
   get isRunning(): boolean {
@@ -107,16 +116,19 @@ export class CollaborationTimeline {
     const qaId = this.idForRole('qa')
     const ceoId = this.idForRole('ceo')
 
-    // 1. Everyone gathers in the collaboration room.
+    // 1. Everyone gathers in the collaboration room and stays seated.
     await this.gather(ids)
     this.director.updateTask({ ...COLLAB_TASK, status: 'planning' })
     await this.delay(300)
 
-    // 2. Chit-chat: round-robin speech bubbles around the table.
+    // 2. Chit-chat: round-robin speech bubbles around the table. Everyone
+    //    stays seated the whole time — no movement during the conversation.
     await this.chitChat(ids)
-    await this.delay(200)
 
-    // 3. Everyone leaves the collaboration room together and heads to their
+    // Let the last bubbles fully fade before anyone stands up.
+    await this.delay(POST_CHAT_SETTLE_MS)
+
+    // 3. Everyone leaves the collaboration room ONE BY ONE and heads to their
     //    respective workstations. Engineering agents start working immediately
     //    upon arrival; CEO and QA go idle at their stations.
     this.director.updateTask({ ...COLLAB_TASK, status: 'in_progress' })
@@ -124,18 +136,20 @@ export class CollaborationTimeline {
       const role = this.roleFor(id)
       return role === 'backend' || role === 'frontend'
     })
-    await this.disperseAndWork(ids, workerIds)
+    await this.disperseOneByOne(ids, workerIds)
     await this.delay(600)
 
-    // 5. QA works last (reviewing).
+    // 4. QA works last (reviewing). If a real task-completion signal is
+    //    available, wait for it before QA finishes testing — so the report
+    //    and confetti only fire when the actual work is done.
     if (qaId) {
       await d.workAt(qaId, 'reviewing')
       this.director.updateTask({ ...COLLAB_TASK, status: 'review' })
-      await this.delay(900)
+      await this.waitForRealCompletion()
       d.succeed(qaId)
     }
 
-    // 6. QA walks to the CEO office to report.
+    // 5. QA walks to the CEO office to report.
     if (qaId) {
       await d.walk(qaId, CEO_OFFICE_REPORT_TILE)
       if (ceoId) await d.message(qaId, ceoId, 'success')
@@ -143,13 +157,24 @@ export class CollaborationTimeline {
       await this.delay(300)
     }
 
-    // 7. Confetti celebrates the completed task.
+    // 6. Confetti celebrates the completed task.
     d.confetti(CEO_OFFICE_REPORT_TILE)
     if (ceoId) d.succeed(ceoId)
     await this.delay(600)
 
     // Settle everyone back to idle.
     for (const id of ids) d.idle(id)
+  }
+
+  // Wait for the real backend task to complete. When a completion callback
+  // was provided, await it (with a timeout fallback so we never hang forever).
+  // Otherwise fall back to a fixed delay (used in tests / scripted demos).
+  private async waitForRealCompletion(): Promise<void> {
+    if (this.waitForTaskCompletion) {
+      await this.waitForTaskCompletion()
+      return
+    }
+    await this.delay(900)
   }
 
   // Walk every agent to a meeting seat in the collaboration room.
@@ -188,32 +213,18 @@ export class CollaborationTimeline {
     }
   }
 
-  // Two-phase exit so everyone leaves together:
-  //   Phase 1: all participants walk to staging tiles just outside the collab
-  //            door and wait for everyone to arrive.
-  //   Phase 2: all participants walk to their workstations simultaneously and
-  //            transition to work/idle upon arrival.
-  private async disperseAndWork(allIds: string[], workerIds: string[]): Promise<void> {
+  // Sequential exit: each agent leaves the collaboration room one by one,
+  // walks to their workstation, and transitions to work/idle upon arrival.
+  // A short stagger between departures makes the exit read as individuals
+  // leaving rather than a group rushing out together.
+  private async disperseOneByOne(allIds: string[], workerIds: string[]): Promise<void> {
     const workerSet = new Set(workerIds)
-
-    // Phase 1: gather at the door so the group exits together.
-    await Promise.all(
-      allIds.map((id, i) => {
-        const tile = EXIT_STAGING_TILES[i % EXIT_STAGING_TILES.length]!
-        return this.director.walk(id, tile)
-      }),
-    )
-    if (this.cancelled) return
-    // Brief beat so the group reads as "leaving together" before splitting.
-    await this.delay(150)
-
-    // Phase 2: disperse to workstations in parallel.
-    await Promise.all(
-      allIds.map((id) => {
-        const role = this.roleFor(id)
-        const seat = role ? this.director.workstationSeat(role) : undefined
-        if (!seat) return Promise.resolve()
-        return this.director.walk(id, seat).then(() => {
+    for (const id of allIds) {
+      if (this.cancelled) return
+      const role = this.roleFor(id)
+      const seat = role ? this.director.workstationSeat(role) : undefined
+      if (seat) {
+        await this.director.walk(id, seat).then(() => {
           if (this.cancelled) return
           if (workerSet.has(id)) {
             const state = (role && WORK_STATE[role]) || 'working'
@@ -222,8 +233,10 @@ export class CollaborationTimeline {
           this.director.idle(id)
           return Promise.resolve()
         })
-      }),
-    )
+      }
+      // Stagger the next agent's departure.
+      await this.delay(EXIT_STAGGER_MS)
+    }
   }
 
   private roleFor(id: string): AgentRole | undefined {

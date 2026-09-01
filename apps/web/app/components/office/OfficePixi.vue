@@ -73,8 +73,10 @@ import {
   VirtualOffice,
   type AgentDescriptor,
   type AgentVisualState,
+  type OfficeEvent,
   type SelectionInfo,
 } from '~/office'
+import { clearAgentTile, getSavedAgentTile, saveAgentTile } from '~/utils/agentPositions'
 
 const props = withDefaults(
   defineProps<{
@@ -126,6 +128,35 @@ const hasAgents = ref(false)
 const officeReady = ref(false)
 const collabRunning = ref(false)
 let collabTimeline: CollaborationTimeline | null = null
+
+// Events that indicate an agent has settled on a tile (not mid-move). Used to
+// decide when to persist a position. `agent.walking` is excluded because the
+// tile is in flux; `agent.offline` means the agent is gone.
+const SETTLE_EVENTS = new Set<OfficeEvent['type']>([
+  'agent.arrived',
+  'agent.idle',
+  'agent.working',
+  'agent.coding',
+  'agent.thinking',
+  'agent.testing',
+  'agent.reviewing',
+  'agent.reading',
+  'agent.communicating',
+  'agent.meeting',
+  'agent.waiting',
+  'agent.blocked',
+  'agent.success',
+  'agent.error',
+])
+let unsubscribeBus: (() => void) | null = null
+
+function handleBusEvent(event: OfficeEvent): void {
+  if (!office) return
+  if (!('agentId' in event)) return
+  if (!SETTLE_EVENTS.has(event.type)) return
+  const tile = office.getAgentTile(event.agentId)
+  if (tile) saveAgentTile(event.agentId, tile)
+}
 
 function roleLabel(role: SelectionInfo['role']): string {
   switch (role) {
@@ -209,12 +240,17 @@ onMounted(async () => {
   // Wait for the Pixi app to finish async init before driving agents.
   await office.ready
   officeReady.value = true
+  // Subscribe before syncing so settle events from the initial spawn are
+  // captured and persisted.
+  unsubscribeBus = bus.on((e) => handleBusEvent(e))
   syncLiveAgents()
 })
 
 onBeforeUnmount(() => {
   collabTimeline?.cancel()
   collabTimeline = null
+  unsubscribeBus?.()
+  unsubscribeBus = null
   const o = office as unknown as { _ro?: ResizeObserver } | null
   o?._ro?.disconnect()
   office?.destroy()
@@ -273,8 +309,17 @@ function syncLiveAgents(): void {
       model: a.model,
     }
     const isNew = !liveAgentIds.has(a.id)
+    // Restore a previously persisted tile so a refresh spawns the agent where
+    // it was instead of replaying the entrance intro. Only used on first spawn.
+    let restored = false
     if (isNew) {
-      office.createAgent(desc)
+      const saved = getSavedAgentTile(a.id)
+      if (saved && office.isTileWalkable(saved)) {
+        office.createAgent(desc, saved)
+        restored = true
+      } else {
+        office.createAgent(desc)
+      }
       liveAgentIds.add(a.id)
     }
 
@@ -293,8 +338,9 @@ function syncLiveAgents(): void {
         office.fail(a.id)
       } else if (visual === 'success') {
         office.succeed(a.id)
-      } else if (isNew) {
-        // New idle agents walk to their workstation and sit.
+      } else if (isNew && !restored) {
+        // New idle agents with no saved position walk to their workstation.
+        // Restored agents already sit at their saved tile.
         void office.workAt(a.id, 'idle')
       } else {
         office.setState(a.id, visual)
@@ -306,6 +352,7 @@ function syncLiveAgents(): void {
     if (!seen.has(id)) {
       office.setState(id, 'offline')
       liveAgentStates.delete(id)
+      clearAgentTile(id)
     }
   }
 }
@@ -381,10 +428,16 @@ function openCeoChat(): void {
 // Run the collaboration choreography: everyone gathers in the collaboration
 // room for a chit-chat, returns to their workstation, QA works last, walks to
 // the CEO office to report, and confetti celebrates the completed task.
-function runCollaboration(): void {
+// The optional waitForTaskCompletion callback lets the caller gate the QA
+// report + confetti on real backend task completion — so the celebration only
+// fires when the actual work is done.
+function runCollaboration(waitForTaskCompletion?: () => Promise<void>): void {
   if (!office || !officeReady.value || collabRunning.value) return
   collabRunning.value = true
-  collabTimeline = new CollaborationTimeline(office, { speed: 1 })
+  collabTimeline = new CollaborationTimeline(office, {
+    speed: 1,
+    waitForTaskCompletion,
+  })
   collabTimeline.run().finally(() => {
     collabRunning.value = false
     collabTimeline = null
