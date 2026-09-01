@@ -87,9 +87,11 @@
     </div>
 
     <!-- Fullscreen office overlay: office fills the viewport with the
-         chatbox as a side panel beside it. Toggled by the header button. -->
+         chatbox as a side panel beside it. Uses v-show (not v-if) so the
+         container always exists in the DOM and can be passed to
+         requestFullscreen() synchronously within the click handler. -->
     <div
-      v-if="fullscreen && project"
+      v-show="fullscreen && project"
       ref="fullscreenContainer"
       class="fixed inset-0 z-50 flex bg-[#1c1c22]"
     >
@@ -539,7 +541,10 @@ async function toggleFullscreen() {
     await exitFullscreen()
   } else {
     fullscreen.value = true
-    await nextTick()
+    // requestFullscreen() must be called synchronously within the click
+    // handler — awaiting nextTick breaks the user-gesture chain and the
+    // browser silently ignores the call. The overlay uses v-show so the
+    // container already exists in the DOM.
     const el = fullscreenContainer.value
     if (el && el.requestFullscreen) {
       try {
