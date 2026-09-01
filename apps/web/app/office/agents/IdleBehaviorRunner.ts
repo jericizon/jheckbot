@@ -48,6 +48,7 @@ const DURATION_RANGES: Record<IdleBehavior, { min: number; max: number }> = {
   check_task_board: { min: 2, max: 6 },
   look_around: { min: 1, max: 3 },
   walk: { min: 1, max: 3 },
+  wander: { min: 2, max: 5 },
   observe: { min: 1, max: 3 },
   type: { min: 3.2, max: 7.8 },
   pause: { min: 2, max: 8 },
@@ -68,6 +69,7 @@ const DURATION_RANGES: Record<IdleBehavior, { min: number; max: number }> = {
 // Steps that move the agent to a POI (or back to seat) before dwelling.
 const MOVEMENT_STEPS: ReadonlySet<IdleBehavior> = new Set([
   'walk',
+  'wander',
   'inspect_board',
   'walk_to_server',
   'inspect',
@@ -96,6 +98,12 @@ export class IdleBehaviorRunner {
   private duration = 0
   private lookSegment = 0
   private started = false
+  // Shuffled working copy — reshuffled after each full cycle so the agent
+  // doesn't repeat the exact same behavior loop every time.
+  private shuffled: IdleBehavior[]
+  // How many steps we've completed in the current cycle. When this reaches
+  // the sequence length, we reshuffle before starting the next cycle.
+  private stepsThisCycle = 0
 
   constructor(
     private readonly controller: IdleAgentController,
@@ -105,6 +113,10 @@ export class IdleBehaviorRunner {
     if (sequence.length === 0) {
       throw new Error('IdleBehaviorRunner requires a non-empty idle sequence')
     }
+    // Start with the original sequence order; reshuffle happens after each
+    // full cycle. Random starting offset so agents don't all begin at step 0.
+    this.shuffled = [...sequence]
+    this.index = Math.floor(this.rand() * this.shuffled.length)
   }
 
   get stepIndex(): number {
@@ -112,7 +124,7 @@ export class IdleBehaviorRunner {
   }
 
   get currentStep(): IdleBehavior {
-    return this.sequence[this.index] ?? this.sequence[0]!
+    return this.shuffled[this.index] ?? this.shuffled[0]!
   }
 
   get currentPhase(): Phase {
@@ -122,7 +134,9 @@ export class IdleBehaviorRunner {
   // Reset to the first step (e.g. after the agent leaves idle for a real task
   // and later returns). The next update() re-enters step 0.
   reset(): void {
+    this.shuffled = [...this.sequence]
     this.index = 0
+    this.stepsThisCycle = 0
     this.phase = 'active'
     this.elapsed = 0
     this.lookSegment = 0
@@ -247,8 +261,37 @@ export class IdleBehaviorRunner {
   }
 
   private advance(): void {
-    this.index = (this.index + 1) % this.sequence.length
+    this.stepsThisCycle++
+    // Occasionally repeat the current step (~20% chance) for natural variation
+    // — e.g. an agent types, pauses, then types again before moving on.
+    // Uses > 0.8 so a deterministic rand()=0 never repeats (test compatibility).
+    if (this.rand() > 0.8) {
+      this.started = false
+      return
+    }
+    // Completed a full cycle — reshuffle so the next cycle has a different order.
+    if (this.stepsThisCycle >= this.shuffled.length) {
+      this.stepsThisCycle = 0
+      this.shuffled = this.reshuffle()
+      this.index = 0
+    } else {
+      this.index = (this.index + 1) % this.shuffled.length
+    }
     this.started = false // re-enter on next update()
+  }
+
+  // Fisher-Yates shuffle of the base sequence. Uses `j = i - floor(rand * (i+1))`
+  // so that rand=0 produces j=i (self-swap → identity), keeping deterministic
+  // tests stable. With real Math.random the distribution is still uniform [0, i].
+  private reshuffle(): IdleBehavior[] {
+    const arr = [...this.sequence]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = i - Math.floor(this.rand() * (i + 1))
+      const tmp = arr[i]!
+      arr[i] = arr[j]!
+      arr[j] = tmp
+    }
+    return arr
   }
 
   private movementTarget(step: IdleBehavior): Vec2 | undefined {
@@ -263,6 +306,9 @@ export class IdleBehaviorRunner {
       const face = this.controller.faceDirection()
       if (face) this.controller.face(face)
       this.controller.setPose('working')
+    } else if (step === 'wander') {
+      // Roaming — just stand idle at the random tile and look around.
+      this.controller.setPose('idle')
     } else {
       // Inspecting a board / server rack — seated/reviewing pose.
       this.controller.setPose('reviewing')

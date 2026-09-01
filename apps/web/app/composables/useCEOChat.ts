@@ -24,6 +24,13 @@ export function useCEOChat() {
           tasks: { id: string; title: string; status: string }[]
           dependencies: { taskId: string; dependsOnTaskId: string }[]
         }
+        execution: {
+          taskId: string
+          conversationId?: string
+          agentId?: string
+          status: 'started' | 'failed'
+          error?: string
+        }
       }>(`/api/offices/${officeId}/ceo/messages`, {
         request,
         projectId,

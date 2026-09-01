@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildLayout, NavigationGrid, WORLD_W, WORLD_H } from '../app/office'
 import { DemoTimeline, demoAgents } from '../app/office/simulation/DemoTimeline'
+import { CollaborationTimeline } from '../app/office/simulation/CollaborationTimeline'
 import type { OfficeDirector } from '../app/office/simulation/OfficeDirector'
 import type { ActivityKind, AgentDescriptor, AgentVisualState, Direction, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
 import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount, workingFrameCount } from '../app/office/agents/AgentSprite'
@@ -167,6 +168,15 @@ function makeRecordingDirector(): OfficeDirector & {
       return { x: 23, y: 13 }
     },
     workstationSeat: seat,
+    chat(agentId, durationSec) {
+      calls.push(`chat:${agentId}:${durationSec ?? 1.2}`)
+    },
+    groupChat(agentId, durationSec) {
+      calls.push(`groupChat:${agentId}:${durationSec ?? 2}`)
+    },
+    confetti(at) {
+      calls.push(`confetti:${at.x},${at.y}`)
+    },
   }
   return { ...dir, calls, agents, tasks }
 }
@@ -225,6 +235,190 @@ describe('DemoTimeline', () => {
     expect(dir.calls.filter((c) => c === 'idle:demo-ceo').length).toBeGreaterThanOrEqual(1)
     expect(dir.calls.filter((c) => c === 'idle:demo-backend').length).toBeGreaterThanOrEqual(1)
     expect(dir.calls.filter((c) => c === 'idle:demo-qa').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+// Pre-seed live agents into a recording director, simulating the office
+// already being populated by the backend before the collaboration runs.
+function seedLiveAgents(
+  dir: ReturnType<typeof makeRecordingDirector>,
+  agents: AgentDescriptor[],
+): void {
+  for (const a of agents) dir.agents.set(a.id, a)
+}
+
+const LIVE_AGENTS: AgentDescriptor[] = [
+  { id: 'live-ceo', name: 'Pat', role: 'ceo', provider: 'JheckBot', model: 'orchestrator' },
+  { id: 'live-backend', name: 'Sam', role: 'backend', provider: 'Claude', model: 'sonnet' },
+  { id: 'live-frontend', name: 'Jules', role: 'frontend', provider: 'Claude', model: 'sonnet' },
+  { id: 'live-qa', name: 'Riley', role: 'qa', provider: 'Claude', model: 'haiku' },
+  { id: 'live-designer', name: 'Mika', role: 'designer', provider: 'GPT', model: 'gpt-4o' },
+  { id: 'live-devops', name: 'Noor', role: 'devops', provider: 'GPT', model: 'gpt-4o-mini' },
+]
+
+describe('CollaborationTimeline', () => {
+  it('does not create any new agents — uses only existing live characters', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    // No createAgent calls should appear — agents already exist.
+    expect(dir.calls.filter((c) => c.startsWith('create:'))).toHaveLength(0)
+  })
+
+  it('only involves CEO, Engineering, and QA — not designer or devops', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    const seq = dir.calls.join('\n')
+    // Participating roles are walked/chatted/idled.
+    expect(seq).toContain('walk:live-ceo')
+    expect(seq).toContain('walk:live-backend')
+    expect(seq).toContain('walk:live-frontend')
+    expect(seq).toContain('walk:live-qa')
+    // Non-participating roles are never touched.
+    expect(seq).not.toContain('live-designer')
+    expect(seq).not.toContain('live-devops')
+  })
+
+  it('gathers the participating characters into the collaboration room for a chit-chat', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    const seq = dir.calls.join('\n')
+    for (const id of ['live-ceo', 'live-backend', 'live-frontend', 'live-qa']) {
+      expect(seq).toContain(`walk:${id}`)
+      // Each participant speaks at least once via either a chat or groupChat bubble.
+      const spoke = seq.includes(`chat:${id}:`) || seq.includes(`groupChat:${id}:`)
+      expect(spoke).toBe(true)
+    }
+  })
+
+  it('shows overlapping group chat bubbles so multiple agents talk at once', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    // The larger groupChat bubble is used for the lead speaker and most responders.
+    const groupChatCalls = dir.calls.filter((c) => c.startsWith('groupChat:'))
+    expect(groupChatCalls.length).toBeGreaterThan(0)
+    // Multiple distinct agents use the groupChat bubble.
+    const groupChatters = new Set(groupChatCalls.map((c) => c.split(':')[1]))
+    expect(groupChatters.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it('returns everyone to their workstation after the chit-chat', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    // Each participating agent walks at least 3 times (gather + staging + disperse).
+    for (const id of ['live-ceo', 'live-backend', 'live-frontend', 'live-qa']) {
+      const walkCount = dir.calls.filter((c) => c === `walk:${id}`).length
+      expect(walkCount).toBeGreaterThanOrEqual(3)
+    }
+    // Engineering workers enter a coding state.
+    expect(dir.calls).toContain('work:live-backend:coding')
+    expect(dir.calls).toContain('work:live-frontend:coding')
+  })
+
+  it('everyone leaves the collaboration room together — staging then disperse', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    const participantIds = ['live-ceo', 'live-backend', 'live-frontend', 'live-qa']
+    const lastChatIdx = Math.max(
+      ...dir.calls.map((c, i) =>
+        c.startsWith('groupChat:') || c.startsWith('chat:') ? i : -1,
+      ),
+    )
+    // Phase 1: all four participants walk to staging tiles right after chit-chat.
+    const stagingWalks = participantIds.filter((id) =>
+      dir.calls.some((c, i) => i > lastChatIdx && c === `walk:${id}`),
+    )
+    expect(stagingWalks.length).toBe(4)
+    // Each participant walks at least 3 times total: gather + staging + disperse.
+    for (const id of participantIds) {
+      const walkCount = dir.calls.filter((c) => c === `walk:${id}`).length
+      expect(walkCount).toBeGreaterThanOrEqual(3)
+    }
+    // CEO and QA go idle during the combined exit (not a separate step).
+    expect(dir.calls).toContain('idle:live-ceo')
+    expect(dir.calls).toContain('idle:live-qa')
+  })
+
+  it('has QA work last, then walk to the CEO office to report', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    const calls = dir.calls
+    const qaWorkIdx = calls.findIndex((c) => c === 'work:live-qa:reviewing')
+    const backendWorkIdx = calls.findIndex((c) => c === 'work:live-backend:coding')
+    expect(qaWorkIdx).toBeGreaterThan(-1)
+    expect(backendWorkIdx).toBeGreaterThan(-1)
+    // QA starts working after the backend developer.
+    expect(qaWorkIdx).toBeGreaterThan(backendWorkIdx)
+    // QA reports to the CEO via a success message.
+    expect(calls).toContain('msg:live-qa->live-ceo:success')
+    // QA succeeds before reporting.
+    expect(calls).toContain('succeed:live-qa')
+  })
+
+  it('fires confetti at the CEO office after the task completes', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    const calls = dir.calls
+    const completedIdx = calls.findIndex((c) => c === 'task:update:task-collab-1:completed')
+    const confettiIdx = calls.findIndex((c) => c.startsWith('confetti:'))
+    expect(completedIdx).toBeGreaterThan(-1)
+    expect(confettiIdx).toBeGreaterThan(-1)
+    // Confetti fires after the task is marked completed.
+    expect(confettiIdx).toBeGreaterThan(completedIdx)
+  })
+
+  it('drives the task through planning -> in_progress -> review -> completed', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    const statuses = dir.calls
+      .filter((c) => c.startsWith('task:update:task-collab-1:'))
+      .map((c) => c.split(':')[3])
+    expect(statuses).toContain('planning')
+    expect(statuses).toContain('in_progress')
+    expect(statuses).toContain('review')
+    expect(statuses[statuses.length - 1]).toBe('completed')
+  })
+
+  it('settles all participating characters back to idle at the end', async () => {
+    const dir = makeRecordingDirector()
+    seedLiveAgents(dir, LIVE_AGENTS)
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    for (const id of ['live-ceo', 'live-backend', 'live-frontend', 'live-qa']) {
+      expect(dir.calls).toContain(`idle:${id}`)
+    }
+  })
+
+  it('is a no-op when no participating agents exist', async () => {
+    const dir = makeRecordingDirector()
+    // Only seed non-participating roles.
+    seedLiveAgents(dir, [
+      { id: 'live-designer', name: 'Mika', role: 'designer', provider: 'GPT', model: 'gpt-4o' },
+      { id: 'live-devops', name: 'Noor', role: 'devops', provider: 'GPT', model: 'gpt-4o-mini' },
+    ])
+    const collab = new CollaborationTimeline(dir, { speed: 100 })
+    await collab.run()
+    // No task, no walks, no chat — nothing happens.
+    expect(dir.calls.filter((c) => c.startsWith('walk:'))).toHaveLength(0)
+    expect(dir.calls.filter((c) => c.startsWith('chat:') || c.startsWith('groupChat:'))).toHaveLength(0)
+    expect(dir.tasks).toHaveLength(0)
   })
 })
 

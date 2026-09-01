@@ -27,6 +27,7 @@ function fakeTaskRecord(overrides: Partial<OfficeTaskRecord> = {}): OfficeTaskRe
     assigned_agent_id: null,
     created_by: null,
     workflow_type: null,
+    execution_conversation_id: null,
     metadata: null,
     started_at: null,
     completed_at: null,

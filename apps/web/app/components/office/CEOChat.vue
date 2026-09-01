@@ -132,6 +132,35 @@
                 </svg>
                 <span>{{ copiedId === `ceo-${message.id}` ? 'Copied' : 'Copy' }}</span>
               </button>
+
+              <div
+                v-if="getExecution(message)"
+                class="mt-3 rounded-lg border px-3 py-2 text-xs"
+                :class="getExecution(message)?.status === 'started' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' : 'bg-red-500/5 border-red-500/20 text-red-600'"
+              >
+                <div class="flex items-center gap-1.5 font-medium">
+                  <svg v-if="getExecution(message)?.status === 'started'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {{ getExecution(message)?.status === 'started' ? 'Devin started' : 'Devin could not start' }}
+                </div>
+                <div v-if="getExecution(message)?.error" class="mt-1 text-content-subtle">
+                  {{ getExecution(message)?.error }}
+                </div>
+                <NuxtLink
+                  v-if="conversationPath(getExecution(message)?.conversationId)"
+                  :to="conversationPath(getExecution(message)?.conversationId)"
+                  class="mt-1.5 inline-flex items-center gap-1 hover:underline"
+                >
+                  Open conversation
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </NuxtLink>
+              </div>
             </div>
           </div>
         </div>
@@ -193,6 +222,23 @@
   <!-- Input area -->
   <div class="shrink-0 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
     <div class="max-w-3xl mx-auto w-full px-4">
+      <div
+        v-if="activeExecution"
+        class="mb-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 flex items-center justify-between gap-2 text-xs text-emerald-700"
+      >
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Devin is working on this request.</span>
+        </div>
+        <NuxtLink
+          v-if="conversationPath(activeExecution.conversationId)"
+          :to="conversationPath(activeExecution.conversationId)"
+          class="hover:underline"
+        >
+          Open conversation
+        </NuxtLink>
+      </div>
+
       <form
         class="relative rounded-2xl border border-border bg-surface-elevated focus-within:border-content-subtle/60 focus-within:ring-1 focus-within:ring-content-subtle/30 transition-all"
         @submit.prevent="submit"
@@ -201,8 +247,8 @@
           v-model="draft"
           ref="inputEl"
           rows="1"
-          placeholder="Message CEO..."
-          :disabled="loading"
+          :placeholder="activeExecution ? 'Waiting for Devin to finish...' : 'Message CEO...'"
+          :disabled="loading || !!activeExecution"
           @input="autoResize"
           @keydown.enter.exact.prevent="submit"
           @keydown.enter.shift.exact="draft += '\n'"
@@ -236,7 +282,7 @@
         v-model="selectedModel"
         :families="availableFamilies"
         :show-bypass="false"
-        :disabled="loading"
+        :disabled="loading || !!activeExecution"
         @open-skills="skillsPickerOpen = true"
         @open-models="modelPickerOpen = true"
       >
@@ -306,6 +352,7 @@ const messages = ref<ChatMessage[]>([])
 const draft = ref('')
 const loading = ref(false)
 const error = ref('')
+const activeExecution = ref<{ taskId: string; conversationId?: string; agentId?: string; status: 'started' | 'failed'; error?: string } | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 const copiedId = ref<string | null>(null)
@@ -315,7 +362,7 @@ const availableFamilies = ref<ModelFamily[]>([])
 const modelPickerOpen = ref(false)
 const skillsPickerOpen = ref(false)
 
-const canSubmit = computed(() => !loading.value && draft.value.trim().length > 0)
+const canSubmit = computed(() => !loading.value && !activeExecution.value && draft.value.trim().length > 0)
 
 function autoResize() {
   const el = inputEl.value
@@ -354,20 +401,50 @@ function toChatMessage(event: OfficeEvent): OfficeEvent & { sender: 'user' | 'ce
   return { ...event, sender }
 }
 
+function getExecution(event: OfficeEvent) {
+  const execution = event.metadata?.execution as
+    | { taskId: string; conversationId?: string; agentId?: string; status: 'started' | 'failed'; error?: string }
+    | undefined
+  return execution
+}
+
+function conversationPath(id?: string) {
+  return id ? `/conversations/${id}` : undefined
+}
+
 function isChatEvent(event: OfficeEvent): boolean {
   return event.eventType === 'CEO_MESSAGE' || event.eventType === 'CEO_RESPONSE'
+}
+
+function updateActiveExecution(event: OfficeEvent) {
+  if (event.eventType === 'CEO_RESPONSE' && event.metadata?.execution) {
+    const execution = event.metadata.execution as { taskId: string; conversationId?: string; agentId?: string; status: 'started' | 'failed'; error?: string }
+    activeExecution.value = execution.status === 'started' ? execution : null
+    return
+  }
+
+  const terminalTypes = new Set(['AGENT_COMPLETED', 'AGENT_FAILED', 'TASK_COMPLETED', 'TASK_FAILED'])
+  if (terminalTypes.has(event.eventType) && event.metadata?.taskId === activeExecution.value?.taskId) {
+    activeExecution.value = null
+  }
 }
 
 async function loadMessages() {
   try {
     const events = await chat.listEvents(props.officeId)
     messages.value = events.filter(isChatEvent).map(toChatMessage).reverse()
+    activeExecution.value = null
+    for (let i = events.length - 1; i >= 0; i--) {
+      updateActiveExecution(events[i])
+    }
   } catch {
     messages.value = []
+    activeExecution.value = null
   }
 }
 
 function handleLiveEvent(event: OfficeEvent) {
+  updateActiveExecution(event)
   if (!isChatEvent(event)) return
   if (messages.value.some((m) => m.id === event.id)) return
   messages.value = [...messages.value, toChatMessage(event)]
@@ -388,7 +465,12 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
-    await chat.sendMessage(props.officeId, draft.value, props.projectId, selectedModel.value)
+    const result = await chat.sendMessage(props.officeId, draft.value, props.projectId, selectedModel.value)
+    if (result.execution.status === 'started') {
+      activeExecution.value = result.execution
+    } else {
+      activeExecution.value = null
+    }
     draft.value = ''
     nextTick(() => autoResize())
   } catch (err) {

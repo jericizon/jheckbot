@@ -18,6 +18,7 @@
     "@jheckbot/shared": "workspace:*",
     "marked": "^18.0.10",
     "nuxt": "^4.5.2",
+    "pixi.js": "^8.20.1",
     "vue": "^3.5.13"
   },
   "devDependencies": {

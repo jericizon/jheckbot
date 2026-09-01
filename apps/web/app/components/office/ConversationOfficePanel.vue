@@ -21,18 +21,27 @@
     </header>
 
     <div class="flex-1 min-h-0">
-      <OfficeScene
+      <OfficePixi
+        ref="officePixiRef"
         :agents="agents"
         :ceo="ceo"
         :employees="employees"
         :loading="loading"
-        :busy="busy"
+        :busy="busy || !!activeExecution"
         :reacting="reacting"
         :reaction-message="reactionMessage"
         :agent-messages="agentMessages"
         full-height
+        @open-ceo-chat="chatOpen = true"
       />
     </div>
+
+    <CEOChatPanel
+      :open="chatOpen"
+      :office-id="office?.id ?? ''"
+      :project-id="props.projectId"
+      @close="chatOpen = false"
+    />
   </section>
 </template>
 
@@ -42,7 +51,8 @@ import type { Office, OfficeAgent, OfficeEvent } from '@jheckbot/shared'
 import { useOffices } from '~/composables/useOffices'
 import { useOfficeEvents } from '~/composables/useOfficeEvents'
 import { findCeo, findEmployees } from '~/composables/useOffice'
-import OfficeScene from './OfficeScene.vue'
+import OfficePixi from './OfficePixi.vue'
+import CEOChatPanel from './CEOChatPanel.vue'
 
 const props = defineProps<{
   projectId: string
@@ -61,8 +71,11 @@ const { toggle: toggleSidebar } = useSidebar()
 
 const loading = ref(false)
 const office = ref<Office | null>(null)
+const officePixiRef = ref<{ runCollaboration: () => void } | null>(null)
 const agents = ref<OfficeAgent[]>([])
 const agentMessages = ref<Record<string, string>>({})
+const chatOpen = ref(false)
+const activeExecution = ref<{ taskId: string; conversationId?: string; status: string } | null>(null)
 let unsubscribe: (() => void) | null = null
 
 const ceo = computed(() => findCeo(agents.value))
@@ -78,6 +91,18 @@ function handleEvent(event: OfficeEvent) {
   if (event.eventType === 'AGENT_MESSAGE' && event.metadata?.fromAgentId) {
     const from = event.metadata.fromAgentId as string
     agentMessages.value = { ...agentMessages.value, [from]: event.content ?? '' }
+  }
+
+  // Track the active CEO execution so the CEO stays in the thinking room while
+  // work is happening and the chat can guard duplicate submissions.
+  if (event.eventType === 'CEO_RESPONSE' && event.metadata?.execution) {
+    const execution = event.metadata.execution as { taskId: string; conversationId?: string; status: string }
+    activeExecution.value = execution.status === 'started' ? execution : null
+  }
+
+  const terminalTypes = new Set(['AGENT_COMPLETED', 'AGENT_FAILED', 'TASK_COMPLETED', 'TASK_FAILED'])
+  if (terminalTypes.has(event.eventType) && event.metadata?.taskId === activeExecution.value?.taskId) {
+    activeExecution.value = null
   }
 }
 
@@ -142,4 +167,12 @@ onUnmounted(() => {
 })
 
 watch(() => props.projectId, loadOffice)
+
+// Forward the collaboration choreography trigger to the parent page so a
+// prompt can fire the gather -> work -> QA -> CEO -> confetti sequence.
+function runCollaboration(): void {
+  officePixiRef.value?.runCollaboration()
+}
+
+defineExpose({ runCollaboration })
 </script>

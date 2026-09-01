@@ -12,6 +12,10 @@ import { CEOPlanner } from '../src/services/orchestration/CEOPlanner.js'
 import { TaskDispatcher } from '../src/services/orchestration/TaskDispatcher.js'
 import { WorkflowEngine } from '../src/services/orchestration/WorkflowEngine.js'
 import type { AgentSelector } from '../src/services/orchestration/AgentSelector.js'
+import { OfficeTaskExecutionService } from '../src/services/orchestration/OfficeTaskExecutionService.js'
+import { OfficeRepository } from '../src/repositories/OfficeRepository.js'
+import { ProjectService } from '../src/services/ProjectService.js'
+import type { ProjectRecord } from '../src/repositories/ProjectRepository.js'
 
 let idCounter = 0
 function nextId(prefix: string): string {
@@ -21,6 +25,48 @@ function nextId(prefix: string): string {
 
 function now(): string {
   return new Date().toISOString()
+}
+
+class FakeOfficeRepository extends OfficeRepository {
+  private offices: Map<string, Office> = new Map()
+
+  override async findById(id: string): Promise<Office | null> {
+    return this.offices.get(id) ?? null
+  }
+
+  override async findByProjectId(projectId: string): Promise<Office | null> {
+    return Array.from(this.offices.values()).find((o) => o.projectId === projectId) ?? null
+  }
+
+  seed(office: Office): void {
+    this.offices.set(office.id, office)
+  }
+}
+
+class FakeProjectService {
+  private projects: Map<string, ProjectRecord> = new Map()
+
+  seed(project: ProjectRecord): void {
+    this.projects.set(project.id, project)
+  }
+
+  async get(id: string): Promise<ProjectRecord | null> {
+    return this.projects.get(id) ?? null
+  }
+}
+
+class FakeOfficeTaskExecutionService {
+  async start(
+    taskId: string,
+    options?: { model?: string },
+  ): Promise<import('../src/services/orchestration/OfficeTaskExecutionService.js').OfficeTaskExecutionResult> {
+    return {
+      taskId,
+      conversationId: nextId('conv'),
+      agentId: nextId('agent'),
+      status: 'started',
+    }
+  }
 }
 
 class FakeOfficeEventRepository extends OfficeEventRepository {
@@ -136,6 +182,24 @@ class FakeOfficeTaskRepository extends OfficeTaskRepository {
       .filter((d) => d.taskId === taskId)
       .map((d) => this.tasks.find((t) => t.id === d.dependsOnTaskId))
       .filter((t): t is OfficeTask => t !== undefined)
+  }
+
+  override async findActiveCeoExecution(officeId: string): Promise<OfficeTask | null> {
+    return (
+      this.tasks
+        .filter(
+          (t) =>
+            t.officeId === officeId &&
+            t.createdBy === 'ceo' &&
+            t.workflowType === 'simple' &&
+            ['backlog', 'planning', 'ready', 'assigned', 'working'].includes(t.status),
+        )
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+    )
+  }
+
+  override async linkExecutionConversation(taskId: string): Promise<OfficeTask | null> {
+    return this.getById(taskId)
   }
 
   override async addDependency(taskId: string, dependsOnTaskId: string): Promise<OfficeTaskDependency | null> {
@@ -317,8 +381,19 @@ function createOrchestrationFixture() {
   const agentRepo = new FakeOfficeAgentRepository()
   const agentService = new OfficeAgentService(agentRepo, eventService)
 
+  const officeRepo = new FakeOfficeRepository()
+  const projectService = new FakeProjectService()
+  const executionService = new FakeOfficeTaskExecutionService()
+
   const planner = new CEOPlanner(taskService, eventService, agentService)
-  const ceoService = new CEOService(planner, eventService)
+  const ceoService = new CEOService({
+    planner,
+    eventService,
+    executionService: executionService as unknown as OfficeTaskExecutionService,
+    taskService,
+    officeRepo,
+    projectService: projectService as unknown as ProjectService,
+  })
 
   const fakeSelector: Pick<AgentSelector, 'select'> = {
     select: async ({ task, officeId, agentService: svc }) => {
@@ -338,6 +413,9 @@ function createOrchestrationFixture() {
     taskService,
     agentRepo,
     agentService,
+    officeRepo,
+    projectService,
+    executionService,
     ceoService,
     workflowEngine,
     taskDispatcher,
@@ -345,150 +423,116 @@ function createOrchestrationFixture() {
 }
 
 describe('Office orchestration E2E', () => {
+  const officeId = '00000000-0000-0000-0000-000000000001'
+  const projectId = '11111111-1111-1111-1111-111111111111'
+
+  function seedOffice(fixture: ReturnType<typeof createOrchestrationFixture>) {
+    fixture.officeRepo.seed({
+      id: officeId,
+      name: 'Test Office',
+      projectId,
+      status: 'active',
+      createdAt: now(),
+      updatedAt: now(),
+    })
+    fixture.projectService.seed({
+      id: projectId,
+      name: 'Test Project',
+      slug: 'test',
+      path: '/tmp/test',
+      description: null,
+      enabled: true,
+      default_provider_id: null,
+      default_provider_config: null,
+      created_at: now(),
+      updated_at: now(),
+    })
+  }
+
   beforeEach(() => {
     idCounter = 0
   })
 
-  it('CEO request creates a plan, tasks, dependencies and events', async () => {
-    const { ceoService, eventRepo, taskRepo, agentService } = createOrchestrationFixture()
+  it('CEO single-task request creates one task and starts an execution', async () => {
+    const fixture = createOrchestrationFixture()
+    const { ceoService, eventRepo, taskRepo, agentService } = fixture
+    seedOffice(fixture)
 
-    await agentService.create({ officeId: 'office-1', name: 'CEO', role: 'CEO' })
-    await agentService.create({ officeId: 'office-1', name: 'Dev', role: 'Senior Backend Developer' })
-    await agentService.create({ officeId: 'office-1', name: 'QA', role: 'QA Engineer' })
+    await agentService.create({ officeId, name: 'CEO', role: 'CEO' })
+    await agentService.create({ officeId, name: 'Support', role: 'Support' })
 
-    const result = await ceoService.sendMessage({ officeId: 'office-1', request: 'add endpoint for users' })
+    const result = await ceoService.sendMessage({ officeId, request: 'add endpoint for users' })
 
     expect(result.userMessage.eventType).toBe('CEO_MESSAGE')
     expect(result.ceoResponse.eventType).toBe('CEO_RESPONSE')
-    expect(result.plan.complexity).toBe('medium')
-    expect(result.plan.tasks).toHaveLength(3)
+    expect(result.plan.complexity).toBe('simple')
+    expect(result.plan.tasks).toHaveLength(1)
+    expect(result.execution.status).toBe('started')
 
-    const tasks = await taskRepo.listByOffice('office-1')
-    expect(tasks).toHaveLength(3)
-    expect(tasks.map((t) => t.title)).toEqual([
-      'Implement add endpoint for users',
-      'QA: add endpoint for users',
-      'Review: add endpoint for users',
-    ])
-
-    const deps = await taskRepo.listDependencies(tasks[2].id)
-    expect(deps.map((d) => d.title)).toContain('QA: add endpoint for users')
+    const tasks = await taskRepo.listByOffice(officeId)
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0].title).toBe('Implement add endpoint for users')
+    expect(tasks[0].createdBy).toBe('ceo')
+    expect(tasks[0].workflowType).toBe('simple')
 
     const events = eventRepo.all()
     expect(events.some((e) => e.eventType === 'CEO_MESSAGE')).toBe(true)
     expect(events.some((e) => e.eventType === 'CEO_RESPONSE')).toBe(true)
-    expect(events.some((e) => e.eventType === 'CEO_PLANNING' && e.content === 'Planning completed')).toBe(true)
-    expect(events.filter((e) => e.eventType === 'TASK_CREATED')).toHaveLength(3)
+    expect(events.some((e) => e.eventType === 'CEO_PLANNING')).toBe(true)
+    expect(events.filter((e) => e.eventType === 'TASK_CREATED')).toHaveLength(1)
   })
 
-  it('CEO joins the conference room meeting and speaks first, then returns to idle', async () => {
-    vi.useFakeTimers()
-    try {
-      const { eventRepo, eventService, agentService, agentRepo, taskService } = createOrchestrationFixture()
-      // Wire the CEO service with the agent service so holdMeeting can run.
-      const planner = new CEOPlanner(taskService, eventService, agentService)
-      const ceoService = new CEOService(planner, eventService, agentService)
+  it('rejects a second CEO request while an execution is active', async () => {
+    const fixture = createOrchestrationFixture()
+    seedOffice(fixture)
 
-      const ceo = await agentService.create({ officeId: 'office-1', name: 'CEO', role: 'CEO' })
-      await agentService.create({ officeId: 'office-1', name: 'Support', role: 'Support' })
-      await agentService.create({ officeId: 'office-1', name: 'QA', role: 'QA' })
+    await fixture.agentService.create({ officeId, name: 'CEO', role: 'CEO' })
+    await fixture.agentService.create({ officeId, name: 'Support', role: 'Support' })
 
-      const updateSpy = vi.spyOn(agentService, 'update')
+    await fixture.ceoService.sendMessage({ officeId, request: 'add login' })
 
-      const promise = ceoService.sendMessage({ officeId: 'office-1', request: 'add login' })
-      await promise
-      // Drive the background meeting forward, flushing microtasks between
-      // timer advances so dialogue + status updates complete in order.
-      for (let i = 0; i < 30; i++) {
-        await vi.advanceTimersByTimeAsync(1000)
-      }
-
-      const allEvents = eventRepo.all()
-
-      // CEO was called into the conference room.
-      expect(updateSpy).toHaveBeenCalledWith(ceo.id, { status: 'communicating' })
-
-      // CEO opens the planning phase as the first speaker (chronological
-      // order — the fake repo unshifts, so the first emitted is last in array).
-      const agentMessages = allEvents.filter((e) => e.eventType === 'AGENT_MESSAGE')
-      expect(agentMessages.length).toBeGreaterThan(0)
-      const firstMessage = agentMessages[agentMessages.length - 1]
-      expect(firstMessage.metadata?.fromAgentId).toBe(ceo.id)
-
-      // After the meeting, the CEO is restored to idle.
-      const finalCeo = (await agentRepo.listByOffice('office-1')).find((a) => a.id === ceo.id)
-      expect(finalCeo?.status).toBe('idle')
-    } finally {
-      vi.useRealTimers()
-    }
+    await expect(
+      fixture.ceoService.sendMessage({ officeId, request: 'add another endpoint' }),
+    ).rejects.toMatchObject({
+      message: 'An active CEO execution is already in progress',
+      statusCode: 409,
+    })
   })
 
-  it('CEO plans alone, then Support is called for work, then QA for finalizing', async () => {
-    vi.useFakeTimers()
-    try {
-      const { eventRepo, eventService, agentService, agentRepo, taskService } = createOrchestrationFixture()
-      const planner = new CEOPlanner(taskService, eventService, agentService)
-      const ceoService = new CEOService(planner, eventService, agentService)
+  it('surfaces a failed execution without leaking internal errors', async () => {
+    const fixture = createOrchestrationFixture()
+    seedOffice(fixture)
 
-      const ceo = await agentService.create({ officeId: 'office-1', name: 'CEO', role: 'CEO' })
-      const support = await agentService.create({ officeId: 'office-1', name: 'Support', role: 'Support' })
-      const qa = await agentService.create({ officeId: 'office-1', name: 'QA', role: 'QA' })
+    fixture.executionService.start = vi.fn().mockResolvedValue({
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+      agentId: 'agent-1',
+      status: 'failed',
+      error: 'devin_start_failed',
+    })
 
-      const updateSpy = vi.spyOn(agentService, 'update')
-      const updateCalls: { id: string; status: string }[] = []
-      updateSpy.mockImplementation(async (id, data) => {
-        if (data.status) updateCalls.push({ id, status: data.status })
-        return agentRepo.update(id, data)
-      })
+    await fixture.agentService.create({ officeId, name: 'CEO', role: 'CEO' })
+    await fixture.agentService.create({ officeId, name: 'Support', role: 'Support' })
 
-      const promise = ceoService.sendMessage({ officeId: 'office-1', request: 'add login' })
-      await promise
+    const result = await fixture.ceoService.sendMessage({ officeId, request: 'add login' })
 
-      // Phase 1: CEO enters alone for planning (2s delay).
-      // Advance just 1.5s — CEO should be the only one communicating.
-      await vi.advanceTimersByTimeAsync(1500)
-      const communicatingDuringPlanning = updateCalls.filter((c) => c.status === 'communicating')
-      expect(communicatingDuringPlanning).toHaveLength(1)
-      expect(communicatingDuringPlanning[0].id).toBe(ceo.id)
-
-      // Drive the rest of the meeting forward.
-      for (let i = 0; i < 40; i++) {
-        await vi.advanceTimersByTimeAsync(1000)
-      }
-
-      // By the end, Support and QA were both called in.
-      const allCommunicating = updateCalls.filter((c) => c.status === 'communicating').map((c) => c.id)
-      expect(allCommunicating).toContain(support.id)
-      expect(allCommunicating).toContain(qa.id)
-
-      // CEO was called first (planning), then Support (work), then QA (finalizing).
-      const ceoIdx = updateCalls.findIndex((c) => c.id === ceo.id && c.status === 'communicating')
-      const supportIdx = updateCalls.findIndex((c) => c.id === support.id && c.status === 'communicating')
-      const qaIdx = updateCalls.findIndex((c) => c.id === qa.id && c.status === 'communicating')
-      expect(ceoIdx).toBeLessThan(supportIdx)
-      expect(supportIdx).toBeLessThan(qaIdx)
-
-      // Everyone returns to idle after the meeting.
-      const finalAgents = await agentRepo.listByOffice('office-1')
-      expect(finalAgents.every((a) => a.status === 'idle')).toBe(true)
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(result.execution.status).toBe('failed')
+    expect(result.execution.error).toBe('devin_start_failed')
   })
 
-  it('WorkflowEngine dispatches dependent tasks and completes the run', async () => {
-    const { ceoService, workflowEngine, taskService, eventRepo, agentService } = createOrchestrationFixture()
+  it('WorkflowEngine dispatches a single task and completes the run', async () => {
+    const fixture = createOrchestrationFixture()
+    const { ceoService, workflowEngine, taskService, eventRepo, agentService } = fixture
+    seedOffice(fixture)
 
-    await agentService.create({ officeId: 'office-1', name: 'Dev', role: 'Senior Backend Developer' })
-    await agentService.create({ officeId: 'office-1', name: 'QA', role: 'QA Engineer' })
-    await agentService.create({ officeId: 'office-1', name: 'Reviewer', role: 'Reviewer' })
+    await agentService.create({ officeId, name: 'Dev', role: 'Senior Backend Developer' })
 
-    const { plan } = await ceoService.sendMessage({ officeId: 'office-1', request: 'fix typo in README' })
+    const { plan } = await ceoService.sendMessage({ officeId, request: 'fix typo in README' })
 
     expect(plan.tasks).toHaveLength(1)
     const rootTask = plan.tasks[0]
 
-    const { run, steps } = await workflowEngine.startWorkflow('office-1', rootTask.id, plan.tasks)
+    const { run, steps } = await workflowEngine.startWorkflow(officeId, rootTask.id, plan.tasks)
 
     expect(run.status).toBe('running')
     expect(steps).toHaveLength(1)

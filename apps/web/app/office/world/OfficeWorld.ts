@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, Sprite, type Renderer, Texture } from 'pixi.js'
+import { Container, Graphics, Rectangle, Sprite, Text, type Renderer, Texture } from 'pixi.js'
 import { PALETTE } from '../Palette'
 import { TILE, type OfficeLayout, type FurniturePlacement, type FloorCode } from './layout'
 
@@ -298,17 +298,33 @@ export class OfficeWorld {
     return g
   }
 
-  private drawRoomSign(add: (g: Graphics) => void, f: FurniturePlacement, px: number, py: number): void {
-    const g = new Graphics()
+  private drawRoomSign(add: (g: Container) => void, f: FurniturePlacement, px: number, py: number): void {
     const W = f.w * TILE
-    g.rect(0, 0, W, TILE - 4).fill(PALETTE.woodDark)
-    g.rect(1, 1, W - 2, TILE - 6).fill(PALETTE.cream)
-    // Label dots instead of text (pixel font rendering is heavy); a colored
-    // bar identifies the room. The Vue overlay shows the real label.
+    const sign = new Container()
+    const bg = new Graphics()
+    bg.rect(0, 0, W, TILE - 4).fill(PALETTE.woodDark)
+    bg.rect(1, 1, W - 2, TILE - 6).fill(PALETTE.cream)
+    // Colored accent bar identifies the room at a glance.
     const bar = roomAccent(f.label ?? '')
-    g.rect(2, 3, 4, TILE - 10).fill(bar)
-    add(g)
-    g.position.set(px, py)
+    bg.rect(2, 3, 4, TILE - 10).fill(bar)
+    sign.addChild(bg)
+    // Room label text. Rendered at native tile scale so it zooms with the
+    // world; small monospace keeps it readable without bloating the sign.
+    const label = new Text({
+      text: f.label ?? '',
+      style: {
+        fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
+        fontSize: 7,
+        fill: PALETTE.charcoal,
+        letterSpacing: 0.5,
+        align: 'left',
+      },
+    })
+    label.anchor.set(0, 0.5)
+    label.position.set(8, (TILE - 4) / 2)
+    sign.addChild(label)
+    add(sign)
+    sign.position.set(px, py)
   }
 
   private drawWindow(add: (g: Graphics) => void, px: number, py: number, w: number): void {

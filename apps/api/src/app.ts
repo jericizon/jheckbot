@@ -32,6 +32,7 @@ import { OfficeService } from './services/OfficeService.js'
 import { OfficeNotificationService } from './services/OfficeNotificationService.js'
 import { CEOPlanner } from './services/orchestration/CEOPlanner.js'
 import { CEOService } from './services/orchestration/CEOService.js'
+import { OfficeTaskExecutionService } from './services/orchestration/OfficeTaskExecutionService.js'
 import { WorkflowEngine } from './services/orchestration/WorkflowEngine.js'
 import { TaskDispatcher } from './services/orchestration/TaskDispatcher.js'
 import { AgentSelector } from './services/orchestration/AgentSelector.js'
@@ -231,8 +232,25 @@ export function createApp(): express.Express {
   const taskDispatcher = new TaskDispatcher(officeTaskService, officeAgentService, officeEventService, agentSelector)
   const workflowEngine = new WorkflowEngine(workflowRunRepo, officeTaskService, officeEventService, taskDispatcher)
 
+  const officeTaskExecutionService = new OfficeTaskExecutionService({
+    taskService: officeTaskService,
+    taskDispatcher,
+    conversationService,
+    promptExecutionService,
+    agentManager,
+    agentService: officeAgentService,
+    eventService: officeEventService,
+  })
+
   const ceoPlanner = new CEOPlanner(officeTaskService, officeEventService, officeAgentService)
-  const ceoService = new CEOService(ceoPlanner, officeEventService, officeAgentService, workflowEngine)
+  const ceoService = new CEOService({
+    planner: ceoPlanner,
+    eventService: officeEventService,
+    executionService: officeTaskExecutionService,
+    taskService: officeTaskService,
+    officeRepo,
+    projectService,
+  })
   const ceoController = new CEOController(ceoService)
 
   const authMiddleware = createAuthMiddleware(authService)

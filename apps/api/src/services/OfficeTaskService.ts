@@ -3,6 +3,7 @@ import {
   isValidTaskPriority,
   isValidTaskStatus,
   isValidTaskStatusTransition,
+  isValidUuid,
 } from '@jheckbot/shared'
 import { OfficeTaskRepository } from '../repositories/OfficeTaskRepository.js'
 import { OfficeEventService } from './OfficeEventService.js'
@@ -248,6 +249,128 @@ export class OfficeTaskService {
       throw new OfficeTaskValidationError('Task ID is required')
     }
     return this.repo.getDependents(id)
+  }
+
+  async findActiveCeoExecution(officeId: string): Promise<OfficeTask | null> {
+    if (!officeId?.trim()) {
+      throw new OfficeTaskValidationError('Office ID is required')
+    }
+    if (!isValidUuid(officeId)) {
+      throw new OfficeTaskValidationError('Office ID must be a valid UUID')
+    }
+    return this.repo.findActiveCeoExecution(officeId)
+  }
+
+  async linkExecutionConversation(
+    taskId: string,
+    conversationId: string,
+  ): Promise<OfficeTask | null> {
+    if (!taskId?.trim()) {
+      throw new OfficeTaskValidationError('Task ID is required')
+    }
+    if (!conversationId?.trim()) {
+      throw new OfficeTaskValidationError('Conversation ID is required')
+    }
+    if (!isValidUuid(taskId)) {
+      throw new OfficeTaskValidationError('Task ID must be a valid UUID')
+    }
+    if (!isValidUuid(conversationId)) {
+      throw new OfficeTaskValidationError('Conversation ID must be a valid UUID')
+    }
+
+    const existing = await this.repo.getById(taskId)
+    if (!existing) return null
+
+    return this.repo.linkExecutionConversation(taskId, conversationId)
+  }
+
+  async failExecution(id: string, error?: string): Promise<OfficeTask | null> {
+    if (!id?.trim()) {
+      throw new OfficeTaskValidationError('Task ID is required')
+    }
+    if (!isValidUuid(id)) {
+      throw new OfficeTaskValidationError('Task ID must be a valid UUID')
+    }
+
+    const existing = await this.repo.getById(id)
+    if (!existing) return null
+    if (existing.status === 'failed' || existing.status === 'completed' || existing.status === 'cancelled') {
+      return existing
+    }
+
+    const failed = await this.repo.setStatus(id, 'failed')
+    if (!failed) return null
+
+    if (this.eventService) {
+      await this.eventService.create({
+        officeId: failed.officeId,
+        eventType: 'TASK_UPDATED',
+        content: `Task failed: ${failed.title}`,
+        metadata: {
+          taskId: failed.id,
+          status: failed.status,
+          previousStatus: existing.status,
+        },
+      })
+      await this.eventService.create({
+        officeId: failed.officeId,
+        eventType: 'TASK_FAILED',
+        content: `Task failed: ${failed.title}`,
+        metadata: {
+          taskId: failed.id,
+          status: failed.status,
+          error: error ?? 'failed',
+        },
+      })
+    }
+
+    return failed
+  }
+
+  async completeExecution(id: string): Promise<OfficeTask | null> {
+    if (!id?.trim()) {
+      throw new OfficeTaskValidationError('Task ID is required')
+    }
+    if (!isValidUuid(id)) {
+      throw new OfficeTaskValidationError('Task ID must be a valid UUID')
+    }
+
+    const task = await this.repo.getById(id)
+    if (!task) return null
+    if (!task.executionConversationId || task.status !== 'working') {
+      return null
+    }
+
+    const completed = await this.repo.update(id, {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+    })
+    if (!completed) return null
+
+    if (this.eventService) {
+      await this.eventService.create({
+        officeId: completed.officeId,
+        eventType: 'TASK_UPDATED',
+        content: `Task completed: ${completed.title}`,
+        metadata: {
+          taskId: completed.id,
+          conversationId: completed.executionConversationId,
+          status: completed.status,
+        },
+      })
+      await this.eventService.create({
+        officeId: completed.officeId,
+        eventType: 'TASK_COMPLETED',
+        content: `Task completed: ${completed.title}`,
+        metadata: {
+          taskId: completed.id,
+          conversationId: completed.executionConversationId,
+          status: completed.status,
+        },
+      })
+    }
+
+    return completed
   }
 
   private async wouldCreateCycle(

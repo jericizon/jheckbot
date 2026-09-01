@@ -1,8 +1,10 @@
 import type { EventType, OfficeEvent } from '@jheckbot/shared'
+import type { OfficeRepository } from '../../repositories/OfficeRepository.js'
+import type { ProjectService } from '../ProjectService.js'
 import type { OfficeEventService } from '../OfficeEventService.js'
-import type { OfficeAgentService } from '../OfficeAgentService.js'
-import type { WorkflowEngine } from './WorkflowEngine.js'
+import type { OfficeTaskService } from '../OfficeTaskService.js'
 import type { CEOPlan, CEOPlanner } from './CEOPlanner.js'
+import type { OfficeTaskExecutionResult, OfficeTaskExecutionService } from './OfficeTaskExecutionService.js'
 
 export interface CEOChatMessage {
   id: string
@@ -19,10 +21,28 @@ export interface CEOSendMessageInput {
   model?: string
 }
 
+export interface CEOExecutionSummary {
+  taskId: string
+  conversationId?: string
+  agentId?: string
+  status: 'started' | 'failed'
+  error?: string
+}
+
 export interface CEOSendMessageResult {
   userMessage: OfficeEvent
   ceoResponse: OfficeEvent
   plan: CEOPlan
+  execution: CEOExecutionSummary
+}
+
+export interface CEOServiceDependencies {
+  planner: CEOPlanner
+  eventService: OfficeEventService
+  executionService: OfficeTaskExecutionService
+  taskService: OfficeTaskService
+  officeRepo: OfficeRepository
+  projectService: ProjectService
 }
 
 export class CEOServiceError extends Error {
@@ -35,12 +55,7 @@ export class CEOServiceError extends Error {
 }
 
 export class CEOService {
-  constructor(
-    private planner: CEOPlanner,
-    private eventService: OfficeEventService,
-    private agentService: OfficeAgentService,
-    private workflowEngine?: WorkflowEngine,
-  ) {}
+  constructor(private deps: CEOServiceDependencies) {}
 
   async sendMessage(input: CEOSendMessageInput): Promise<CEOSendMessageResult> {
     if (!input.officeId?.trim()) {
@@ -53,161 +68,59 @@ export class CEOService {
     const officeId = input.officeId
     const request = input.request.trim()
 
-    const exists = await this.eventService.officeExists(officeId)
-    if (!exists) {
+    const office = await this.deps.officeRepo.findById(officeId)
+    if (!office) {
       throw new CEOServiceError('Office not found', 404)
     }
 
-    const userMessage = await this.eventService.create({
+    const effectiveProjectId = this.resolveProjectId(input.projectId, office.projectId)
+    if (!effectiveProjectId) {
+      throw new CEOServiceError('Project ID is required')
+    }
+
+    const project = await this.deps.projectService.get(effectiveProjectId)
+    if (!project) {
+      throw new CEOServiceError('Project not found', 404)
+    }
+    if (!project.enabled) {
+      throw new CEOServiceError('Project is disabled', 400)
+    }
+
+    const activeExecution = await this.deps.taskService.findActiveCeoExecution(officeId)
+    if (activeExecution) {
+      throw new CEOServiceError('An active CEO execution is already in progress', 409)
+    }
+
+    const userMessage = await this.deps.eventService.create({
       officeId,
       eventType: 'CEO_MESSAGE',
       content: request,
-      metadata: { projectId: input.projectId ?? null, sender: 'user', model: input.model ?? null },
+      metadata: { projectId: effectiveProjectId, sender: 'user', model: input.model ?? null },
     })
 
-    const plan = await this.planner.plan(request, officeId, input.projectId)
+    const plan = await this.deps.planner.planSingleTask(request, officeId, effectiveProjectId)
+    const task = plan.tasks[0]
+    if (!task) {
+      throw new CEOServiceError('No task was planned', 500)
+    }
 
-    const responseContent = this.buildResponse(request, plan)
-    const ceoResponse = await this.eventService.create({
+    const execution = await this.deps.executionService.start(task.id, { model: input.model })
+
+    const responseContent = this.buildResponse(request, plan, execution)
+    const ceoResponse = await this.deps.eventService.create({
       officeId,
       eventType: 'CEO_RESPONSE',
       content: responseContent,
       metadata: {
-        projectId: input.projectId ?? null,
+        projectId: effectiveProjectId,
         sender: 'ceo',
         complexity: plan.complexity,
-        taskCount: plan.tasks.length,
+        taskCount: 1,
+        execution,
       },
     })
 
-    // Kick off the conference-room meeting in the background so the API
-    // response returns immediately while agents gather and talk live.
-    this.holdMeeting(officeId, plan, userMessage, input.projectId).catch(() => {
-      // Non-fatal: the meeting is best-effort visual feedback.
-    })
-
-    return { userMessage, ceoResponse, plan }
-  }
-
-  private async holdMeeting(
-    officeId: string,
-    plan: CEOPlan,
-    userMessage: OfficeEvent,
-    projectId?: string,
-  ): Promise<void> {
-    const agents = await this.agentService.listByOffice(officeId)
-    const ceo = agents.find((a) => a.role.toLowerCase() === 'ceo' && a.status === 'idle')
-    const support = agents.find((a) => a.role.toLowerCase() === 'support' && a.status === 'idle')
-    const qa = agents.find((a) => a.role.toLowerCase().includes('qa') && a.status === 'idle')
-
-    // Phase 1: CEO plans alone in the thinking room.
-    if (ceo) {
-      await this.agentService.update(ceo.id, { status: 'communicating' })
-    }
-    await this.eventService.create({
-      officeId,
-      eventType: 'CEO_DELEGATING',
-      content: 'CEO is planning the approach',
-      metadata: { projectId: projectId ?? null, request: plan.request, phase: 'planning' },
-    })
-    await this.delay(2000)
-
-    if (ceo) {
-      await this.eventService.create({
-        officeId,
-        eventType: 'AGENT_MESSAGE',
-        content: `I have a plan for "${plan.request}". Complexity is ${plan.complexity} with ${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'}.`,
-        metadata: { projectId: projectId ?? null, fromAgentId: ceo.id, phase: 'planning' },
-      })
-    }
-    await this.delay(1500)
-
-    // Phase 2: Support is called in for implementation work.
-    if (support) {
-      await this.agentService.update(support.id, { status: 'communicating' })
-      await this.eventService.create({
-        officeId,
-        eventType: 'CEO_DELEGATING',
-        content: 'Calling Support to start implementation',
-        metadata: { projectId: projectId ?? null, request: plan.request, phase: 'work', agentId: support.id },
-      })
-      await this.delay(1500)
-
-      const implTasks = plan.tasks.filter(
-        (t) => !t.title.toLowerCase().includes('qa') && !t.title.toLowerCase().includes('review'),
-      )
-      if (ceo) {
-        await this.eventService.create({
-          officeId,
-          eventType: 'AGENT_MESSAGE',
-          content: `Support, please handle the implementation: ${implTasks.map((t) => t.title).join(', ')}.`,
-          metadata: { projectId: projectId ?? null, fromAgentId: ceo.id, toAgentId: support.id, phase: 'work' },
-        })
-      }
-      await this.delay(1000)
-
-      await this.eventService.create({
-        officeId,
-        eventType: 'AGENT_MESSAGE',
-        content: "On it. I'll get the implementation done.",
-        metadata: { projectId: projectId ?? null, fromAgentId: support.id, toAgentId: ceo?.id, phase: 'work' },
-      })
-      await this.delay(1500)
-    }
-
-    // Phase 3: QA is called in for finalizing.
-    if (qa) {
-      await this.agentService.update(qa.id, { status: 'communicating' })
-      await this.eventService.create({
-        officeId,
-        eventType: 'CEO_DELEGATING',
-        content: 'Calling QA for finalizing',
-        metadata: { projectId: projectId ?? null, request: plan.request, phase: 'finalizing', agentId: qa.id },
-      })
-      await this.delay(1500)
-
-      if (ceo) {
-        await this.eventService.create({
-          officeId,
-          eventType: 'AGENT_MESSAGE',
-          content: 'QA, please verify and review the work.',
-          metadata: { projectId: projectId ?? null, fromAgentId: ceo.id, toAgentId: qa.id, phase: 'finalizing' },
-        })
-      }
-      await this.delay(1000)
-
-      await this.eventService.create({
-        officeId,
-        eventType: 'AGENT_MESSAGE',
-        content: "I'll verify everything is correct.",
-        metadata: { projectId: projectId ?? null, fromAgentId: qa.id, toAgentId: ceo?.id, phase: 'finalizing' },
-      })
-      await this.delay(1500)
-    }
-
-    // Wrap up: everyone returns to idle before task dispatch.
-    if (ceo) await this.agentService.update(ceo.id, { status: 'idle' })
-    if (support) await this.agentService.update(support.id, { status: 'idle' })
-    if (qa) await this.agentService.update(qa.id, { status: 'idle' })
-
-    await this.eventService.create({
-      officeId,
-      eventType: 'CEO_WAITING',
-      content: 'Planning complete. Dispatching tasks.',
-      metadata: { projectId: projectId ?? null, request: plan.request },
-    })
-
-    if (this.workflowEngine && plan.tasks.length > 0) {
-      const rootTask = plan.tasks[0]
-      await this.workflowEngine.startWorkflow(officeId, rootTask.id, plan.tasks, {
-        stepType: 'task',
-        metadata: { request: plan.request, projectId: projectId ?? null, userMessageId: userMessage.id },
-      })
-    }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+    return { userMessage, ceoResponse, plan, execution: this.toSummary(execution) }
   }
 
   async listConversationEvents(officeId: string): Promise<OfficeEvent[]> {
@@ -215,11 +128,33 @@ export class CEOService {
       throw new CEOServiceError('Office ID is required')
     }
     const eventTypes: EventType[] = ['CEO_MESSAGE', 'CEO_RESPONSE', 'CEO_PLANNING']
-    return this.eventService.listByOfficeAndTypes(officeId, eventTypes)
+    return this.deps.eventService.listByOfficeAndTypes(officeId, eventTypes)
   }
 
-  private buildResponse(request: string, plan: CEOPlan): string {
-    const taskList = plan.tasks.map((t) => `• ${t.title}`).join('\n')
-    return `I have a plan for "${request}" (${plan.complexity}):\n${taskList}`
+  private resolveProjectId(inputProjectId: string | undefined, officeProjectId: string | undefined): string | undefined {
+    if (inputProjectId && officeProjectId && inputProjectId !== officeProjectId) {
+      throw new CEOServiceError('Project ID does not match office project', 400)
+    }
+    return inputProjectId ?? officeProjectId
+  }
+
+  private buildResponse(request: string, plan: CEOPlan, execution: OfficeTaskExecutionResult): string {
+    const task = plan.tasks[0]
+    const taskLine = task ? `\n• ${task.title}` : ''
+    const statusLine =
+      execution.status === 'started'
+        ? 'Devin has started working on this task.'
+        : 'Devin could not be started.'
+    return `I have a plan for "${request}" (${plan.complexity}):${taskLine}\n${statusLine}`
+  }
+
+  private toSummary(execution: OfficeTaskExecutionResult): CEOExecutionSummary {
+    return {
+      taskId: execution.taskId,
+      conversationId: execution.conversationId,
+      agentId: execution.agentId,
+      status: execution.status,
+      error: execution.error,
+    }
   }
 }

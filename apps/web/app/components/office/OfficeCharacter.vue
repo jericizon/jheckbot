@@ -1,7 +1,8 @@
 <template>
   <div
-    class="group relative flex flex-col items-center animate-pop-in"
+    class="group relative flex flex-col items-center animate-pop-in cursor-pointer"
     :aria-label="ariaLabel"
+    @click="$emit('select')"
   >
     <div class="relative">
       <!-- Speech bubble — only for actual messages, not generic status -->
@@ -64,6 +65,8 @@ const props = defineProps<{
   brainstorming?: boolean
   message?: string
 }>()
+
+const emit = defineEmits<{ select: [] }>()
 
 const MOVING_STATUSES: AgentStatus[] = ['working', 'thinking', 'communicating', 'reviewing', 'testing']
 

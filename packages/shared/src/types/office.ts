@@ -75,6 +75,7 @@ export interface OfficeTask {
   assignedAgentId?: string
   createdBy?: string
   workflowType?: string
+  executionConversationId?: string
   metadata?: Record<string, unknown>
   startedAt?: string
   completedAt?: string

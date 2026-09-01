@@ -120,6 +120,52 @@ export class CEOPlanner {
     }
   }
 
+  async planSingleTask(request: string, officeId: string, projectId?: string): Promise<CEOPlan> {
+    this.validateInput(request, officeId)
+
+    const normalized = request.trim()
+
+    await this.emit(officeId, 'CEO_PLANNING', 'Planning started', {
+      request: normalized,
+      projectId: projectId ?? null,
+      phase: 'start',
+      executionMode: 'single',
+    })
+
+    const task = await this.taskService.create({
+      officeId,
+      projectId,
+      title: `Implement ${normalized}`,
+      description: `Implement the requested change: ${normalized}`,
+      priority: 'low',
+      workflowType: 'simple',
+      createdBy: 'ceo',
+      metadata: {
+        request: normalized,
+        projectId: projectId ?? null,
+        complexity: 'simple',
+        executionMode: 'single',
+      },
+    })
+
+    await this.emit(officeId, 'CEO_PLANNING', 'Planning completed', {
+      request: normalized,
+      projectId: projectId ?? null,
+      phase: 'complete',
+      complexity: 'simple',
+      taskCount: 1,
+      dependencyCount: 0,
+      executionMode: 'single',
+    })
+
+    return {
+      request: normalized,
+      complexity: 'simple',
+      tasks: [task],
+      dependencies: [],
+    }
+  }
+
   private validateInput(request: string, officeId: string): void {
     if (!request?.trim()) {
       throw new CEOPlanningError('Request is required')

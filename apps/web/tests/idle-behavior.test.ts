@@ -111,42 +111,53 @@ describe('CHARACTER_SHEET idle sequences (spec §8)', () => {
     expect(new Set(joined).size).toBe(ROLES.length)
   })
 
-  it('matches the spec §8 sequences', () => {
+  it('matches the spec §8 sequences (with wander appended for idle roaming)', () => {
     expect(CHARACTER_SHEET.ceo.idleSequence).toEqual([
       'check_task_board',
       'look_around',
       'walk',
       'observe',
+      'wander',
     ])
     expect(CHARACTER_SHEET.backend.idleSequence).toEqual([
       'type',
       'pause',
-      'stretch',
       'type',
+      'look_at_monitor',
+      'type',
+      'stretch',
+      'wander',
     ])
     expect(CHARACTER_SHEET.frontend.idleSequence).toEqual([
-      'stand',
+      'type',
       'inspect_board',
       'sit',
       'type',
+      'look_at_monitor',
+      'stand',
+      'wander',
     ])
     expect(CHARACTER_SHEET.qa.idleSequence).toEqual([
       'look_at_monitor',
-      'stand',
+      'check_monitor',
       'inspect',
       'return',
+      'look_at_monitor',
+      'wander',
     ])
     expect(CHARACTER_SHEET.devops.idleSequence).toEqual([
       'check_monitor',
       'walk_to_server',
       'inspect',
       'return',
+      'wander',
     ])
     expect(CHARACTER_SHEET.designer.idleSequence).toEqual([
       'read',
       'write',
       'think',
       'read',
+      'wander',
     ])
   })
 })
@@ -427,6 +438,56 @@ describe('IdleBehaviorRunner reset', () => {
     expect(runner.stepIndex).toBe(0)
     runner.update(0.016)
     expect(runner.currentStep).toBe('type')
+  })
+})
+
+describe('IdleBehaviorRunner randomized cycling', () => {
+  it('reshuffles the sequence after a full cycle so the order varies', () => {
+    const ctrl = makeFakeController('backend', { startTile: { x: 16, y: 5 } })
+    // Use a stationary-only sequence to avoid movement complications.
+    const seq: IdleBehavior[] = ['type', 'pause', 'stretch', 'think']
+    // Pseudo-random RNG that produces a non-trivial shuffle.
+    let r = 0
+    const rng = () => {
+      r = (r * 9301 + 49297) % 233280
+      return r / 233280
+    }
+    const runner = new IdleBehaviorRunner(ctrl, seq, rng)
+
+    // Collect the order of steps visited in the first cycle.
+    const firstCycle: IdleBehavior[] = []
+    for (let i = 0; i < 2000; i++) {
+      if (!firstCycle.includes(runner.currentStep)) firstCycle.push(runner.currentStep)
+      runner.update(0.5)
+      if (firstCycle.length >= seq.length) break
+    }
+
+    // Collect the order of steps visited in the second cycle (after reshuffle).
+    const secondCycle: IdleBehavior[] = []
+    for (let i = 0; i < 2000; i++) {
+      const step = runner.currentStep
+      if (!secondCycle.includes(step)) secondCycle.push(step)
+      runner.update(0.5)
+      if (secondCycle.length >= seq.length) break
+    }
+
+    // Both cycles contain the same steps (same set).
+    expect(new Set(firstCycle)).toEqual(new Set(secondCycle))
+    // The order should differ — proving the reshuffle changed the sequence.
+    expect(secondCycle.join(',')).not.toBe(firstCycle.join(','))
+  })
+
+  it('occasionally repeats a step for natural variation', () => {
+    const ctrl = makeFakeController('backend', { startTile: { x: 16, y: 5 } })
+    // RNG that always returns 0.85 → triggers repeat (> 0.8) on every advance.
+    const runner = new IdleBehaviorRunner(ctrl, CHARACTER_SHEET.backend.idleSequence, () => 0.85)
+    // Enter step 0.
+    runner.update(0.016)
+    const stepBefore = runner.currentStep
+    // Advance past the duration — should repeat instead of advancing.
+    for (let i = 0; i < 250; i++) runner.update(0.016)
+    // Still on the same step (repeated, not advanced).
+    expect(runner.currentStep).toBe(stepBefore)
   })
 })
 

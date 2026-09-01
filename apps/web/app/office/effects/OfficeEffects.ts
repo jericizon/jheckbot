@@ -618,6 +618,108 @@ class SpeechBubble {
   }
 }
 
+// ---- Group chat bubble (collaboration chit-chat) ----
+//
+// A larger, more visible speech bubble with animated talking dots that cycle
+// through patterns. Used during the collaboration room chit-chat so it feels
+// like a real group conversation — multiple bubbles are visible at once.
+
+class ChatBubble {
+  readonly view: Container
+  private life = 0
+  private readonly ttl: number
+  private dots: Sprite
+  private dotTex: Texture[]
+  private time = 0
+
+  constructor(renderer: Renderer, at: Vec2, duration: number) {
+    this.ttl = duration
+    const W = 14
+    const H = 10
+
+    // Bubble background with tail.
+    const bg = new Graphics()
+    bg.rect(0, 0, W, H).fill(PALETTE.cream)
+    bg.rect(0, 0, W, 1).fill(PALETTE.ink)
+    bg.rect(0, H - 1, W, 1).fill(PALETTE.ink)
+    bg.rect(0, 0, 1, H).fill(PALETTE.ink)
+    bg.rect(W - 1, 0, 1, H).fill(PALETTE.ink)
+    // Tail pointing down.
+    bg.poly([5, H, 8, H, 5, H + 3]).fill(PALETTE.cream)
+    bg.poly([5, H, 6, H, 5, H + 2]).fill(PALETTE.ink)
+    bg.rect(4, H, 1, 1).fill(PALETTE.ink)
+    bg.rect(8, H, 1, 1).fill(PALETTE.ink)
+    const bgTex = renderer.generateTexture({
+      target: bg,
+      resolution: 1,
+      antialias: false,
+      frame: new Rectangle(0, 0, W + 2, H + 4),
+    })
+    bg.destroy()
+    const bgSprite = new Sprite(bgTex)
+    bgSprite.anchor.set(0.5, 1.0)
+    this.view = new Container()
+    this.view.addChild(bgSprite)
+
+    // Animated talking dots — 3 frames of dot patterns.
+    this.dotTex = []
+    const dotFrames: Array<[number, number][]> = [
+      [[3, 4], [6, 4], [9, 4]], // all dots
+      [[4, 4], [7, 4], [10, 4]], // shifted right
+      [[3, 3], [6, 5], [9, 3]], // varied heights
+    ]
+    for (const frame of dotFrames) {
+      const dg = new Graphics()
+      for (const [dx, dy] of frame) dg.rect(dx, dy, 2, 2).fill(PALETTE.ink)
+      const tex = renderer.generateTexture({
+        target: dg,
+        resolution: 1,
+        antialias: false,
+        frame: new Rectangle(0, 0, W, H),
+      })
+      dg.destroy()
+      this.dotTex.push(tex)
+    }
+    this.dots = new Sprite(this.dotTex[0]!)
+    this.dots.anchor.set(0.5, 0.5)
+    this.dots.position.set(0, -H / 2)
+    this.view.addChild(this.dots)
+
+    this.view.position.set(at.x, at.y)
+    this.view.scale.set(0.3) // pop-in
+  }
+
+  setPosition(p: Vec2): void {
+    this.view.position.set(p.x, p.y)
+  }
+
+  get done(): boolean {
+    return this.life >= this.ttl
+  }
+
+  update(dt: number): void {
+    this.life += dt
+    this.time += dt
+    // Pop-in scale.
+    const scale = Math.min(1, this.view.scale.x + dt * 6)
+    this.view.scale.set(scale)
+    // Animate talking dots every 0.25s.
+    const frame = Math.floor(this.time / 0.25) % this.dotTex.length
+    const tex = this.dotTex[frame]
+    if (tex && this.dots.texture !== tex) this.dots.texture = tex
+    // Gentle bob.
+    this.view.y += Math.sin(this.time * 5) * dt * 1.5
+    // Fade out over the last 20%.
+    const p = this.life / this.ttl
+    if (p > 0.8) this.view.alpha = Math.max(0, 1 - (p - 0.8) / 0.2)
+  }
+
+  destroy(): void {
+    for (const t of this.dotTex) t.destroy(true)
+    this.view.destroy({ children: true })
+  }
+}
+
 // ---- Persistent activity bubble (spec §16 visibility) ----
 //
 // A small thought-style bubble that floats above a working agent's head and
@@ -724,6 +826,108 @@ function easeOutBack(t: number): number {
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
 }
 
+// ---- Confetti burst (task completion celebration) ----
+
+// A burst of pixel-art confetti pieces that explode upward from a point,
+// arc under gravity, spin, and fade out. Used when a task is completed.
+class ConfettiPiece {
+  readonly view: Container
+  private vx: number
+  private vy: number
+  private rotSpeed: number
+  private life = 0
+  private readonly ttl: number
+  private readonly gravity: number
+  private sprite: Sprite
+
+  constructor(renderer: Renderer, origin: Vec2, color: string) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9
+    const speed = 60 + Math.random() * 90
+    this.vx = Math.cos(angle) * speed
+    this.vy = Math.sin(angle) * speed
+    this.rotSpeed = (Math.random() - 0.5) * 12
+    this.ttl = 1.6 + Math.random() * 0.8
+    this.gravity = 220
+
+    // 2x3 pixel rect piece.
+    const g = new Graphics()
+    g.rect(0, 0, 2, 3).fill(color)
+    const tex = renderer.generateTexture({
+      target: g,
+      resolution: 1,
+      antialias: false,
+      frame: new Rectangle(0, 0, 2, 3),
+    })
+    g.destroy()
+    this.sprite = new Sprite(tex)
+    this.sprite.anchor.set(0.5, 0.5)
+    this.view = new Container()
+    this.view.addChild(this.sprite)
+    this.view.position.set(origin.x, origin.y)
+  }
+
+  get done(): boolean {
+    return this.life >= this.ttl
+  }
+
+  update(dt: number): void {
+    this.life += dt
+    this.vy += this.gravity * dt
+    this.view.x += this.vx * dt
+    this.view.y += this.vy * dt
+    this.sprite.rotation += this.rotSpeed * dt
+    const p = this.life / this.ttl
+    if (p > 0.7) this.view.alpha = Math.max(0, 1 - (p - 0.7) / 0.3)
+  }
+
+  destroy(): void {
+    this.view.destroy({ children: true })
+  }
+}
+
+class ConfettiBurst {
+  readonly view: Container
+  private pieces: ConfettiPiece[] = []
+  private _done = false
+
+  constructor(renderer: Renderer, at: Vec2, count = 40) {
+    this.view = new Container()
+    const colors = [
+      PALETTE.accentYellow,
+      PALETTE.mutedGreen,
+      PALETTE.mutedBlue,
+      PALETTE.softOrange,
+      PALETTE.mutedRed,
+      PALETTE.cream,
+    ]
+    for (let i = 0; i < count; i++) {
+      const color = colors[i % colors.length] ?? PALETTE.cream
+      const piece = new ConfettiPiece(renderer, at, color)
+      this.pieces.push(piece)
+      this.view.addChild(piece.view)
+    }
+  }
+
+  get done(): boolean {
+    return this._done
+  }
+
+  update(dt: number): void {
+    let allDone = true
+    for (const p of this.pieces) {
+      p.update(dt)
+      if (!p.done) allDone = false
+    }
+    this._done = allDone
+  }
+
+  destroy(): void {
+    for (const p of this.pieces) p.destroy()
+    this.pieces = []
+    this.view.destroy({ children: true })
+  }
+}
+
 // ---- Effects manager ----
 
 export class OfficeEffects {
@@ -732,6 +936,8 @@ export class OfficeEffects {
   private notifications: Notification[] = []
   private statuses: StatusEffect[] = []
   private bubbles: SpeechBubble[] = []
+  private chatBubbles: ChatBubble[] = []
+  private confettiBursts: ConfettiBurst[] = []
   // Persistent activity bubbles keyed by agent id (spec §16 visibility).
   private activityBubbles = new Map<string, ActivityBubble>()
 
@@ -763,6 +969,21 @@ export class OfficeEffects {
     const b = new SpeechBubble(this.renderer, position, duration)
     this.bubbles.push(b)
     this.view.addChild(b.view)
+  }
+
+  // Larger animated chat bubble for the collaboration chit-chat. Multiple
+  // can be active at once so it feels like a group conversation.
+  chatBubble(position: Vec2, duration: number): void {
+    const b = new ChatBubble(this.renderer, position, duration)
+    this.chatBubbles.push(b)
+    this.view.addChild(b.view)
+  }
+
+  // Confetti celebration burst at a pixel position (task completion).
+  confetti(at: Vec2, count?: number): void {
+    const burst = new ConfettiBurst(this.renderer, at, count)
+    this.confettiBursts.push(burst)
+    this.view.addChild(burst.view)
   }
 
   // Show or update a persistent activity bubble for an agent. Creates the
@@ -804,6 +1025,8 @@ export class OfficeEffects {
     this.updateList(this.notifications, dt)
     this.updateList(this.statuses, dt)
     this.updateList(this.bubbles, dt)
+    this.updateList(this.chatBubbles, dt)
+    this.updateList(this.confettiBursts, dt)
     for (const b of this.activityBubbles.values()) b.update(dt)
   }
 
@@ -828,11 +1051,15 @@ export class OfficeEffects {
     for (const n of this.notifications) n.destroy()
     for (const s of this.statuses) s.destroy()
     for (const b of this.bubbles) b.destroy()
+    for (const c of this.chatBubbles) c.destroy()
+    for (const c of this.confettiBursts) c.destroy()
     for (const b of this.activityBubbles.values()) b.destroy()
     this.envelopes = []
     this.notifications = []
     this.statuses = []
     this.bubbles = []
+    this.chatBubbles = []
+    this.confettiBursts = []
     this.activityBubbles.clear()
     this.view.removeChildren()
   }

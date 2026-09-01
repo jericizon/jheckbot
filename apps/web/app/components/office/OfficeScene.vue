@@ -72,6 +72,7 @@
             :busy="busy"
             :reacting="reacting"
             :reaction-message="reactionMessage"
+            @select="$emit('open-ceo-chat')"
           />
         </div>
 
@@ -165,6 +166,8 @@ const props = withDefaults(
   }>(),
   { busy: false, reacting: false, reactionMessage: '', fullHeight: false, agentMessages: () => ({}) },
 )
+
+const emit = defineEmits<{ 'open-ceo-chat': [] }>()
 
 const windowWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth)
 

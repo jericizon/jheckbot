@@ -56,9 +56,12 @@ describe('CEOPlanner', () => {
           makeTask({
             id: `task-${taskIdCounter}`,
             title: input.title,
+            description: input.description,
             priority: input.priority ?? 'medium',
             workflowType: input.workflowType,
             projectId: input.projectId,
+            createdBy: input.createdBy,
+            metadata: input.metadata,
           }),
         )
       }),
@@ -217,5 +220,91 @@ describe('CEOPlanner', () => {
         expect.objectContaining({ taskId: 'task-3', dependsOnTaskId: 'task-2' }),
       ]),
     )
+  })
+})
+
+describe('CEOPlanner.planSingleTask', () => {
+  let taskService: OfficeTaskService
+  let eventService: OfficeEventService
+  let agentService: OfficeAgentService
+  let planner: CEOPlanner
+
+  beforeEach(() => {
+    taskService = {
+      create: vi.fn().mockImplementation((input: CreateOfficeTaskInput) => {
+        return Promise.resolve(
+          makeTask({
+            id: 'task-1',
+            title: input.title,
+            description: input.description,
+            priority: input.priority ?? 'medium',
+            workflowType: input.workflowType,
+            projectId: input.projectId,
+            createdBy: input.createdBy,
+            metadata: input.metadata,
+          }),
+        )
+      }),
+    } as unknown as OfficeTaskService
+
+    eventService = {
+      create: vi.fn().mockResolvedValue(makeEvent()),
+    } as unknown as OfficeEventService
+
+    agentService = {} as unknown as OfficeAgentService
+
+    planner = new CEOPlanner(taskService, eventService, agentService)
+  })
+
+  it('creates exactly one implementation task', async () => {
+    const plan = await planner.planSingleTask('add a health endpoint', 'office-1', 'project-1')
+
+    expect(plan.complexity).toBe('simple')
+    expect(plan.request).toBe('add a health endpoint')
+    expect(plan.tasks).toHaveLength(1)
+    expect(plan.tasks[0].title).toBe('Implement add a health endpoint')
+    expect(plan.tasks[0].description).toBe('Implement the requested change: add a health endpoint')
+    expect(plan.tasks[0].priority).toBe('low')
+    expect(plan.tasks[0].workflowType).toBe('simple')
+    expect(plan.tasks[0].createdBy).toBe('ceo')
+    expect(plan.dependencies).toHaveLength(0)
+    expect(taskService.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('always returns one task even for complex-looking requests', async () => {
+    const plan = await planner.planSingleTask('add auth payment component', 'office-1')
+
+    expect(plan.tasks).toHaveLength(1)
+    expect(plan.tasks[0].workflowType).toBe('simple')
+    expect(plan.tasks[0].createdBy).toBe('ceo')
+    expect(plan.tasks[0].metadata).toMatchObject({
+      request: 'add auth payment component',
+      complexity: 'simple',
+      executionMode: 'single',
+    })
+  })
+
+  it('rejects an empty request', async () => {
+    await expect(planner.planSingleTask('', 'office-1')).rejects.toThrow(CEOPlanningError)
+  })
+
+  it('rejects an empty officeId', async () => {
+    await expect(planner.planSingleTask('add a feature', '')).rejects.toThrow(CEOPlanningError)
+  })
+
+  it('emits CEO_PLANNING start and complete with single execution mode', async () => {
+    await planner.planSingleTask('add a feature', 'office-1', 'project-1')
+
+    const calls = vi.mocked(eventService.create).mock.calls
+    expect(calls[0][0]).toMatchObject({
+      eventType: 'CEO_PLANNING',
+      content: 'Planning started',
+      metadata: { phase: 'start', executionMode: 'single' },
+    })
+    expect(calls[calls.length - 1][0]).toMatchObject({
+      eventType: 'CEO_PLANNING',
+      content: 'Planning completed',
+      metadata: { phase: 'complete', complexity: 'simple', taskCount: 1, executionMode: 'single' },
+    })
   })
 })

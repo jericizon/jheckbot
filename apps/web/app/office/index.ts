@@ -1,0 +1,8 @@
+export { EventBus } from './EventBus'
+export { VirtualOffice } from './VirtualOffice'
+export type { SelectionInfo, VirtualOfficeCallbacks } from './VirtualOffice'
+export type { OfficeDirector } from './simulation/OfficeDirector'
+export { CollaborationTimeline } from './simulation/CollaborationTimeline'
+export * from './types'
+export { buildLayout, TILE, WORLD_W, WORLD_H } from './world/layout'
+export { NavigationGrid } from './world/NavigationGrid'

@@ -412,8 +412,7 @@ export class AgentEntity {
     }
   }
 
-  // Resolve the point-of-interest tile for a movement idle step (spec §23:
-  // all movement is to specific POIs, never random wandering).
+  // Resolve the point-of-interest tile for a movement idle step.
   private poiTileFor(step: IdleBehavior): Vec2 | undefined {
     const role = this.descriptor.role
     const findFurniture = (kind: FurnitureKind): Vec2 | undefined =>
@@ -423,10 +422,21 @@ export class AgentEntity {
 
     switch (step) {
       case 'walk':
-        // CEO → task board; DevOps → server rack; others → break room.
+        // CEO → task board; DevOps → server rack.
+        // Engineering (backend/frontend) → whiteboard (stay in work area).
+        // QA → bug board. Designer → design board.
+        // Only roles without a work POI go to the break room.
         if (role === 'ceo') return findFurniture('taskBoard')
         if (role === 'devops') return findFurniture('serverRack')
+        if (role === 'backend' || role === 'frontend')
+          return findFurniture('whiteboard') ?? roomDoor('break')
+        if (role === 'qa') return findFurniture('bugBoard') ?? findFurniture('taskBoard')
+        if (role === 'designer') return findFurniture('designBoard') ?? roomDoor('break')
         return roomDoor('break')
+      case 'wander':
+        // Random walkable tile within a few tiles of the current position —
+        // gives idle agents a reason to roam the office when not tasked.
+        return this.randomWalkableNearby(6)
       case 'inspect_board':
         return findFurniture('whiteboard') ?? findFurniture('designBoard')
       case 'walk_to_server':
@@ -436,6 +446,21 @@ export class AgentEntity {
       default:
         return undefined
     }
+  }
+
+  // Pick a random walkable tile within `radius` tiles of the agent's current
+  // position. Tries several random offsets; falls back to the current tile.
+  private randomWalkableNearby(radius: number): Vec2 | undefined {
+    const here = this.currentTile
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const dx = Math.floor(Math.random() * (radius * 2 + 1)) - radius
+      const dy = Math.floor(Math.random() * (radius * 2 + 1)) - radius
+      if (dx === 0 && dy === 0) continue
+      const tx = here.x + dx
+      const ty = here.y + dy
+      if (this.nav.isWalkable(tx, ty)) return { x: tx, y: ty }
+    }
+    return undefined
   }
 }
 

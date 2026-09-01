@@ -120,6 +120,7 @@ export type IdleBehavior =
   | 'check_task_board'
   | 'look_around'
   | 'walk'
+  | 'wander'
   | 'observe'
   | 'type'
   | 'pause'

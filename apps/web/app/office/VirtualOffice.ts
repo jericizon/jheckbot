@@ -11,7 +11,7 @@ import type {
   TaskDescriptor,
   Vec2,
 } from './types'
-import { buildLayout, type OfficeLayout, workstationForRole } from './world/layout'
+import { buildLayout, TILE, type OfficeLayout, workstationForRole } from './world/layout'
 import { NavigationGrid } from './world/NavigationGrid'
 import { OfficeWorld } from './world/OfficeWorld'
 import { Camera } from './camera/Camera'
@@ -312,6 +312,37 @@ export class VirtualOffice implements OfficeDirector {
 
   idle(agentId: string): void {
     this.setState(agentId, 'idle')
+  }
+
+  // Brief chit-chat beat: a speech bubble pops above the agent's head while
+  // they are in the communicating state. Used by the collaboration timeline.
+  chat(agentId: string, durationSec = 1.2): void {
+    const agent = this.agents.get(agentId)
+    if (!agent) return
+    agent.interrupt('MEDIUM', 'communicating')
+    if (this.isReady) {
+      this.effects.speechBubble(agent.headPixelPosition(), durationSec)
+    }
+    this.emit({ type: 'agent.communicating', agentId })
+  }
+
+  // Larger animated chat bubble for group conversations (collaboration room).
+  // Sets the agent to communicating and shows a bigger, animated bubble.
+  groupChat(agentId: string, durationSec = 2): void {
+    const agent = this.agents.get(agentId)
+    if (!agent) return
+    agent.interrupt('MEDIUM', 'communicating')
+    if (this.isReady) {
+      this.effects.chatBubble(agent.headPixelPosition(), durationSec)
+    }
+    this.emit({ type: 'agent.communicating', agentId })
+  }
+
+  // Fire a confetti celebration burst at a tile position (task completion).
+  confetti(at: Vec2): void {
+    if (!this.isReady) return
+    const px = { x: at.x * TILE + TILE / 2, y: at.y * TILE + TILE / 2 }
+    this.effects.confetti(px)
   }
 
   // Agent exit sequence (spec §27). For a graceful offline, the agent stands

@@ -12,11 +12,22 @@
     />
 
     <!-- Main content: office center + chat side panel -->
-    <div class="flex-1 flex h-full min-w-0">
+    <div
+      :class="[
+        'flex-1 h-full min-w-0',
+        mobileChatOpen ? 'flex flex-col' : 'flex',
+      ]"
+    >
       <!-- Main office area -->
-      <div class="flex-1 flex flex-col h-full min-w-0">
+      <div
+        :class="[
+          'flex flex-col min-w-0',
+          mobileChatOpen ? 'h-1/2 w-full' : 'h-full flex-1',
+        ]"
+      >
         <ConversationOfficePanel
           v-if="conversation?.project_id"
+          ref="officePanelRef"
           :project-id="conversation.project_id"
           :busy="agentRunning || agentStarting"
           :reacting="reacting"
@@ -29,10 +40,10 @@
       <aside
         v-if="conversation?.project_id"
         :class="[
-          'flex-col h-full min-w-0 border-border bg-surface-elevated',
-          mobileChatOpen ? 'fixed inset-0 z-30 w-full flex' : 'hidden xl:flex relative xl:border-l',
+          'flex-col min-w-0 border-border bg-surface-elevated',
+          mobileChatOpen ? 'flex h-1/2 w-full border-t' : 'hidden xl:flex relative h-full xl:border-l',
         ]"
-        :style="mobileChatOpen ? { width: '100%' } : { width: `${chatPanelWidth}px` }"
+        :style="mobileChatOpen ? {} : { width: `${chatPanelWidth}px` }"
         aria-label="Conversation chat"
       >
         <div
@@ -820,6 +831,7 @@ interface QueuedMessage {
 
 const conversation = ref<Conversation | null>(null)
 const office = ref<Office | null>(null)
+const officePanelRef = ref<{ runCollaboration: () => void } | null>(null)
 const messages = ref<Message[]>([])
 const liveOutput = ref('')
 const input = ref('')
@@ -1443,6 +1455,10 @@ async function sendNow(prompt: string) {
     if (idx >= 0) {
       messages.value[idx] = result.message
     }
+
+    // Trigger the collaboration choreography so the user sees the characters
+    // gather, work, QA, and celebrate — the prompt drives the scene.
+    officePanelRef.value?.runCollaboration()
 
     // Backend auto-generates a title from the first prompt; refresh the
     // header + sidebar so the new title shows without a full page reload.

@@ -33,12 +33,6 @@
       <button class="office-btn" title="Zoom in" @click="zoomIn">+</button>
       <button class="office-btn" title="Zoom out" @click="zoomOut">-</button>
       <button class="office-btn" title="Center office" @click="resetCamera">CENTER</button>
-      <button
-        class="office-btn"
-        :class="{ 'office-btn-active': fullscreen }"
-        :title="fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
-        @click="$emit('toggle-fullscreen')"
-      >{{ fullscreen ? 'EXIT' : 'FULL' }}</button>
     </div>
 
     <!-- Selected agent panel -->

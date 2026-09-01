@@ -14,6 +14,7 @@ export interface OfficeTaskRecord {
   assigned_agent_id: string | null
   created_by: string | null
   workflow_type: string | null
+  execution_conversation_id: string | null
   metadata: unknown
   started_at: unknown
   completed_at: unknown
@@ -72,6 +73,7 @@ export function toOfficeTask(row: OfficeTaskRecord): OfficeTask {
     assignedAgentId: row.assigned_agent_id ?? undefined,
     createdBy: row.created_by ?? undefined,
     workflowType: row.workflow_type ?? undefined,
+    executionConversationId: row.execution_conversation_id ?? undefined,
     metadata: parseRecord(row.metadata),
     startedAt: asOptionalTimestamp(row.started_at),
     completedAt: asOptionalTimestamp(row.completed_at),
@@ -100,6 +102,7 @@ export interface OfficeTaskCreateData {
   assignedAgentId?: string | null
   createdBy?: string | null
   workflowType?: string | null
+  executionConversationId?: string | null
   metadata?: Record<string, unknown> | null
   startedAt?: string | null
   completedAt?: string | null
@@ -117,6 +120,7 @@ export interface OfficeTaskUpdateData {
   assignedAgentId?: string | null
   createdBy?: string | null
   workflowType?: string | null
+  executionConversationId?: string | null
   metadata?: Record<string, unknown> | null
   startedAt?: string | null
   completedAt?: string | null
@@ -127,9 +131,9 @@ export class OfficeTaskRepository {
     const { rows } = await executor.query<OfficeTaskRecord>(
       `INSERT INTO tasks (
         office_id, project_id, parent_task_id, title, description, acceptance_criteria,
-        status, priority, assigned_agent_id, created_by, workflow_type, metadata,
+        status, priority, assigned_agent_id, created_by, workflow_type, execution_conversation_id, metadata,
         started_at, completed_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
       [
         data.officeId,
@@ -143,6 +147,7 @@ export class OfficeTaskRepository {
         data.assignedAgentId ?? null,
         data.createdBy ?? null,
         data.workflowType ?? null,
+        data.executionConversationId ?? null,
         jsonbOrNull(data.metadata),
         data.startedAt ?? null,
         data.completedAt ?? null,
@@ -179,8 +184,9 @@ export class OfficeTaskRepository {
        SET office_id = $1, project_id = $2, parent_task_id = $3, title = $4,
            description = $5, acceptance_criteria = $6, status = $7, priority = $8,
            assigned_agent_id = $9, created_by = $10, workflow_type = $11,
-           metadata = $12, started_at = $13, completed_at = $14, updated_at = NOW()
-       WHERE id = $15
+           execution_conversation_id = $12, metadata = $13, started_at = $14,
+           completed_at = $15, updated_at = NOW()
+       WHERE id = $16
        RETURNING *`,
       [
         data.officeId ?? existing.officeId,
@@ -204,6 +210,9 @@ export class OfficeTaskRepository {
         data.workflowType !== undefined
           ? (data.workflowType ?? null)
           : (existing.workflowType ?? null),
+        data.executionConversationId !== undefined
+          ? (data.executionConversationId ?? null)
+          : (existing.executionConversationId ?? null),
         data.metadata !== undefined ? jsonbOrNull(data.metadata) : jsonbOrNull(existing.metadata),
         coalesceDate(data.startedAt, existing.startedAt),
         coalesceDate(data.completedAt, existing.completedAt),
@@ -216,6 +225,39 @@ export class OfficeTaskRepository {
   async delete(id: string, executor: DbExecutor = pool): Promise<boolean> {
     const result = await executor.query('DELETE FROM tasks WHERE id = $1', [id])
     return (result.rowCount ?? 0) > 0
+  }
+
+  async findActiveCeoExecution(
+    officeId: string,
+    executor: DbExecutor = pool,
+  ): Promise<OfficeTask | null> {
+    const { rows } = await executor.query<OfficeTaskRecord>(
+      `SELECT *
+       FROM tasks
+       WHERE office_id = $1
+         AND created_by = 'ceo'
+         AND workflow_type = 'simple'
+         AND status IN ('backlog', 'planning', 'ready', 'assigned', 'working')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [officeId],
+    )
+    return rows[0] ? toOfficeTask(rows[0]) : null
+  }
+
+  async linkExecutionConversation(
+    taskId: string,
+    conversationId: string,
+    executor: DbExecutor = pool,
+  ): Promise<OfficeTask | null> {
+    const { rows } = await executor.query<OfficeTaskRecord>(
+      `UPDATE tasks
+       SET execution_conversation_id = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [conversationId, taskId],
+    )
+    return rows[0] ? toOfficeTask(rows[0]) : null
   }
 
   async setStatus(
