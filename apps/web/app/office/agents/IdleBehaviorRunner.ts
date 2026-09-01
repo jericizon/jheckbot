@@ -15,6 +15,9 @@ export interface IdleAgentController {
   readonly role: AgentRole
   // Current logical state (idle/waiting/walking/...).
   currentState(): AgentVisualState
+  // True while the agent is interrupted by a higher-priority event (spec §19).
+  // The runner pauses (does not advance) while this is true.
+  isInterrupted(): boolean
   // True while the agent is mid-path.
   isMoving(): boolean
   // Current tile the agent occupies.
@@ -127,7 +130,9 @@ export class IdleBehaviorRunner {
   }
 
   // Called every tick while the agent is idle/waiting and not moving.
+  // Pauses (does not advance) while the agent is interrupted (spec §19).
   update(dt: number): void {
+    if (this.controller.isInterrupted()) return
     if (!this.started) {
       this.enterStep()
       this.started = true

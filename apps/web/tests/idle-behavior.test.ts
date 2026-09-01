@@ -46,6 +46,7 @@ function makeFakeController(
   return {
     role,
     currentState: () => state,
+    isInterrupted: () => false,
     isMoving: () => moving,
     currentTile: () => tile,
     setPose: (p) => poses.push(p),
@@ -451,6 +452,7 @@ function makeAgentSimController(
   return {
     role,
     currentState: () => state,
+    isInterrupted: () => false,
     isMoving: () => moving,
     currentTile: () => tile,
     setPose: () => {},

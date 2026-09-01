@@ -1,5 +1,5 @@
 import { Container, type Renderer } from 'pixi.js'
-import type { ActivityKind, AgentDescriptor, AgentRole, AgentVisualState, Direction, IdleBehavior, Vec2 } from '../types'
+import type { ActivityKind, AgentDescriptor, AgentRole, AgentRuntimeState, AgentVisualState, Direction, IdleBehavior, InterruptPriority, Vec2 } from '../types'
 import { type FurnitureKind, type OfficeLayout, type Workstation, workstationForRole } from '../world/layout'
 import { NavigationGrid } from '../world/NavigationGrid'
 import { AgentSprite, isWorkingVisualState } from './AgentSprite'
@@ -7,6 +7,73 @@ import { AgentMovement, tileToPxCenter } from './AgentMovement'
 import { CHARACTER_SHEET } from '../characters/CharacterSheet'
 import { IdleBehaviorRunner, type IdleAgentController } from './IdleBehaviorRunner'
 import { WorkActivityRunner, type WorkAgentController } from './WorkActivityRunner'
+
+// Numeric rank for priority comparison (spec §19: LOW < MEDIUM < HIGH < CRITICAL).
+export function interruptPriorityRank(priority: InterruptPriority): number {
+  switch (priority) {
+    case 'LOW':
+      return 0
+    case 'MEDIUM':
+      return 1
+    case 'HIGH':
+      return 2
+    case 'CRITICAL':
+      return 3
+  }
+}
+
+// Pure interrupt state machine — extracted from AgentEntity so the priority
+// comparison and return-to-task memory (spec §19, §20) are testable without a
+// PIXI renderer. AgentEntity composes this and delegates interrupt()/resume().
+export class InterruptStateMachine {
+  state: AgentVisualState
+  activity: ActivityKind | null = null
+  previousState: AgentVisualState | null = null
+  previousActivity: ActivityKind | null = null
+  interruptedBy: InterruptPriority | null = null
+
+  constructor(initialState: AgentVisualState = 'idle') {
+    this.state = initialState
+  }
+
+  get isInterrupted(): boolean {
+    return this.interruptedBy !== null
+  }
+
+  get runtimeState(): AgentRuntimeState {
+    return {
+      state: this.state,
+      activity: this.activity,
+      previousState: this.previousState,
+      previousActivity: this.previousActivity,
+      interruptedBy: this.interruptedBy,
+    }
+  }
+
+  // Returns true if the interrupt was accepted (priority exceeded the current
+  // one or no interrupt was active). Lower-or-equal priorities are ignored.
+  interrupt(priority: InterruptPriority, newState: AgentVisualState, newActivity?: ActivityKind): boolean {
+    if (this.interruptedBy !== null && interruptPriorityRank(priority) <= interruptPriorityRank(this.interruptedBy)) {
+      return false
+    }
+    this.previousState = this.state
+    this.previousActivity = this.activity
+    this.interruptedBy = priority
+    this.state = newState
+    this.activity = newActivity ?? null
+    return true
+  }
+
+  // Restore the previous state/activity. No-op when not interrupted (spec §20).
+  resume(): void {
+    if (this.interruptedBy === null) return
+    this.state = this.previousState ?? this.state
+    this.activity = this.previousActivity
+    this.interruptedBy = null
+    this.previousState = null
+    this.previousActivity = null
+  }
+}
 
 // One agent in the office: sprite + movement + visual state machine.
 // The VirtualOffice coordinator routes EventBus events into method calls here.
@@ -25,6 +92,8 @@ export class AgentEntity {
   // Set by the idle controller's walkTo wrapper so setState('walking') does not
   // reset the runner mid-movement-step. Cleared on arrival / phase transition.
   private suppressRunnerReset = false
+  // Interrupt state machine tracking return-to-task memory (spec §19, §20).
+  private interruptState = new InterruptStateMachine('idle')
 
   constructor(
     private renderer: Renderer,
@@ -64,6 +133,18 @@ export class AgentEntity {
 
   get currentState(): AgentVisualState {
     return this.state
+  }
+
+  get isInterrupted(): boolean {
+    return this.interruptState.isInterrupted
+  }
+
+  get interruptedBy(): InterruptPriority | null {
+    return this.interruptState.interruptedBy
+  }
+
+  get runtimeState(): AgentRuntimeState {
+    return this.interruptState.runtimeState
   }
 
   get workstationSeat(): Vec2 | undefined {
@@ -109,6 +190,7 @@ export class AgentEntity {
     const wasIdle = this.state === 'idle' || this.state === 'waiting'
     const wasWorking = isWorkingVisualState(this.state)
     this.state = state
+    this.interruptState.state = state
     this.sprite.setState(state)
     // Leaving idle for a real task pauses the runner; reset so the next idle
     // period restarts the sequence cleanly. Suppressed when the state change
@@ -133,11 +215,35 @@ export class AgentEntity {
   // Apply the current work activity so the sprite picks the per-activity
   // working frame set (spec §16). Driven by the WorkActivityRunner.
   setActivity(activity: ActivityKind): void {
+    this.interruptState.activity = activity
     this.sprite.setActivity(activity)
   }
 
   setOffline(): void {
     this.setState('offline')
+  }
+
+  // Interrupt the current activity with a higher-priority event (spec §19).
+  // Stores the previous state/activity so resume() can restore them (§20).
+  // Returns true if the interrupt was accepted; false if a higher-or-equal
+  // priority interrupt is already active. A real interrupt resets the runners
+  // (suppressRunnerReset is NOT set) so they pick up the new state cleanly.
+  interrupt(priority: InterruptPriority, newState: AgentVisualState, newActivity?: ActivityKind): boolean {
+    const accepted = this.interruptState.interrupt(priority, newState, newActivity)
+    if (!accepted) return false
+    this.setState(newState)
+    if (newActivity) this.setActivity(newActivity)
+    return true
+  }
+
+  // Resume the previous activity after an interrupt resolves (spec §20).
+  // No-op when not interrupted. The runners pick up naturally based on the
+  // restored state since they check the current state each tick.
+  resume(): void {
+    if (!this.interruptState.isInterrupted) return
+    this.interruptState.resume()
+    this.setState(this.interruptState.state)
+    if (this.interruptState.activity) this.setActivity(this.interruptState.activity)
   }
 
   update(dt: number, t: number): void {
@@ -179,6 +285,7 @@ export class AgentEntity {
         return self.descriptor.role
       },
       currentState: () => self.state,
+      isInterrupted: () => self.isInterrupted,
       isMoving: () => self.movement.isMoving(),
       currentTile: () => self.currentTile,
       setPose: (pose) => self.setPose(pose),
@@ -209,6 +316,7 @@ export class AgentEntity {
         return self.descriptor.role
       },
       currentState: () => self.state,
+      isInterrupted: () => self.isInterrupted,
       setActivity: (activity) => self.setActivity(activity),
     }
   }

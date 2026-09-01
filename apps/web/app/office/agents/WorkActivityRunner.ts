@@ -17,6 +17,9 @@ export interface WorkAgentController {
   // Current logical visual state — the runner only advances while this is a
   // working state (spec §16).
   currentState(): AgentVisualState
+  // True while the agent is interrupted by a higher-priority event (spec §19).
+  // The runner pauses (does not advance) while this is true.
+  isInterrupted(): boolean
   // Apply the current activity so the sprite picks the right frame set.
   setActivity(activity: ActivityKind): void
 }
@@ -79,9 +82,11 @@ export class WorkActivityRunner {
     this.started = false
   }
 
-  // Called every tick. Self-pauses when the agent is not in a working state,
-  // so transitions to communicating/idle/etc. freeze the cycle (spec §16).
+  // Called every tick. Self-pauses when the agent is not in a working state
+  // or is interrupted, so transitions to communicating/idle/etc. freeze the
+  // cycle (spec §16, §19).
   update(dt: number): void {
+    if (this.controller.isInterrupted()) return
     if (!isWorkingVisualState(this.controller.currentState())) return
     if (!this.started) {
       this.enterStep()

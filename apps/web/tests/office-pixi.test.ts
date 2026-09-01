@@ -559,6 +559,9 @@ function makeFakeWorkController(role: AgentDescriptor['role']): WorkAgentControl
     currentState(): AgentVisualState {
       return fake.state
     },
+    isInterrupted(): boolean {
+      return false
+    },
     setActivity(a: ActivityKind): void {
       fake.activities.push(a)
     },
