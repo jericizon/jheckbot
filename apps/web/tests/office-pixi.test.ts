@@ -9,6 +9,8 @@ import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
 import { WorkActivityRunner, type WorkAgentController, activityDurationRangeFor } from '../app/office/agents/WorkActivityRunner'
 import { iconForKind, KIND_CONFIG, type MessageIcon } from '../app/office/effects/OfficeEffects'
 import { isPhysicalMessageKind, conversationApproachTile, faceDirection } from '../app/office/VirtualOffice'
+import { OfficeWorld } from '../app/office/world/OfficeWorld'
+import type { Renderer } from 'pixi.js'
 
 // Unit tests for the pure (PIXI-free) office logic: the navigation grid /
 // A* pathfinding, the layout's walkability, and the deterministic demo
@@ -827,6 +829,84 @@ describe('emergency message routing (spec §13)', () => {
     // config so any direct envelope render (e.g. notification) stays consistent.
     expect(KIND_CONFIG.emergency.icon).toBe('emergency')
     expect(KIND_CONFIG.emergency.pulse).toBe(true)
+  })
+})
+
+// --- Environmental micro-animations (spec §17, Task 8) ---
+
+// OfficeWorld only touches the renderer lazily (in setMonitorGlow), so a bare
+// cast is enough to drive construction + the update tick without a GPU.
+function makeWorld(): OfficeWorld {
+  const fakeRenderer = {} as unknown as Renderer
+  return new OfficeWorld(fakeRenderer, buildLayout())
+}
+
+describe('OfficeWorld micro-animations (spec §17)', () => {
+  it('exposes a micro-animation container populated with elements', () => {
+    const world = makeWorld()
+    expect(world.micro.children.length).toBeGreaterThan(0)
+  })
+
+  it('update(t) does not throw across a range of time values', () => {
+    const world = makeWorld()
+    for (const t of [0, 1.5, 3.0, 10.0, 100.0]) {
+      expect(() => world.update(t)).not.toThrow()
+    }
+  })
+
+  it('creates coffee steam particles above the break-room machine', () => {
+    const world = makeWorld()
+    expect(world.steamParticles.length).toBeGreaterThan(0)
+    // Each steam particle is a 2x2 rect added to the micro layer.
+    for (const p of world.steamParticles) {
+      expect(p.gfx.width).toBe(2)
+    }
+  })
+
+  it('creates blinking server LEDs on every server rack', () => {
+    const world = makeWorld()
+    const layout = buildLayout()
+    const racks = layout.furniture.filter((f) => f.kind === 'serverRack').length
+    // Two LEDs (green + red) per rack.
+    expect(world.serverLeds.length).toBe(racks * 2)
+    expect(world.serverLeds.length).toBeGreaterThan(0)
+  })
+
+  it('applies plant sway — container x shifts with different t values', () => {
+    const world = makeWorld()
+    expect(world.plantContainers.length).toBeGreaterThan(0)
+    const plant = world.plantContainers[0]!
+    world.update(0)
+    const xAt0 = plant.x
+    // Math.sin(t * 1.2): at t=0 -> 0; near t = ~1.3 sin(1.56) ~ 1 -> +1px.
+    world.update(1.3)
+    const xAt13 = plant.x
+    expect(xAt13).not.toBe(xAt0)
+    // Sway stays within the subtle ±1px budget.
+    expect(Math.abs(xAt13 - xAt0)).toBeLessThanOrEqual(1)
+  })
+
+  it('keeps plant sway within the ±1px subtle budget across a full cycle', () => {
+    const world = makeWorld()
+    const plant = world.plantContainers[0]!
+    const baseX = plant.x
+    let maxDev = 0
+    for (let i = 0; i <= 60; i++) {
+      world.update(i)
+      maxDev = Math.max(maxDev, Math.abs(plant.x - baseX))
+    }
+    expect(maxDev).toBeLessThanOrEqual(1)
+  })
+
+  it('creates a clock hand and notification dot for the layout', () => {
+    const world = makeWorld()
+    const layout = buildLayout()
+    const clocks = layout.furniture.filter((f) => f.kind === 'clock').length
+    const boards = layout.furniture.filter((f) => f.kind === 'taskBoard').length
+    expect(world.clockHands.length).toBe(clocks)
+    expect(world.notificationDots.length).toBe(boards)
+    expect(world.clockHands.length).toBeGreaterThan(0)
+    expect(world.notificationDots.length).toBeGreaterThan(0)
   })
 })
 
