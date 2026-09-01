@@ -130,7 +130,7 @@
         <!-- Header with exit button -->
         <div class="flex items-center gap-2 border-b border-border px-3 py-3 shrink-0">
           <div class="flex-1 min-w-0">
-            <h2 class="text-sm font-semibold text-content truncate">{{ project.name }}</h2>
+            <h2 class="text-sm font-semibold text-content truncate">{{ project?.name }}</h2>
             <p class="text-[10px] text-content-subtle truncate">Office · Fullscreen</p>
           </div>
           <button
