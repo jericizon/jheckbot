@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { buildLayout, NavigationGrid, WORLD_W, WORLD_H } from '../app/office'
 import { DemoTimeline, demoAgents } from '../app/office/simulation/DemoTimeline'
 import type { OfficeDirector } from '../app/office/simulation/OfficeDirector'
-import type { AgentDescriptor, AgentVisualState, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
-import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount } from '../app/office/agents/AgentSprite'
+import type { ActivityKind, AgentDescriptor, AgentVisualState, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
+import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount, workingFrameCount } from '../app/office/agents/AgentSprite'
 import { AgentMovement } from '../app/office/agents/AgentMovement'
 import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
+import { WorkActivityRunner, type WorkAgentController, activityDurationRangeFor } from '../app/office/agents/WorkActivityRunner'
 
 // Unit tests for the pure (PIXI-free) office logic: the navigation grid /
 // A* pathfinding, the layout's walkability, and the deterministic demo
@@ -223,7 +224,7 @@ describe('DemoTimeline', () => {
 })
 
 // Re-export types used only for assertions to keep the compiler aware of them.
-export type { AgentVisualState, MessageKind }
+export type { AgentVisualState, MessageKind, ActivityKind }
 
 // The visual states that AgentSprite builds a texture set for. Each must
 // produce at least one frame for every role.
@@ -431,3 +432,253 @@ describe('AgentMovement per-role speed and QA micro-stops (spec §9, §5)', () =
     expect(mv.isMoving(), 'QA should resume walking after micro-stop').toBe(true)
   })
 })
+
+// --- Per-role working animations (spec §16, Task 5) ---
+
+// All ActivityKinds the sprite bakes working frame sets for.
+const ALL_ACTIVITIES: ActivityKind[] = [
+  'coding',
+  'typing',
+  'drawing',
+  'testing',
+  'monitoring',
+  'reading',
+  'writing',
+  'thinking_pause',
+  'board_check',
+  'server_check',
+  'task_board_read',
+  'communicating',
+]
+
+// The working visual states that map to per-activity frame sets.
+const WORKING_STATES: AgentVisualState[] = ['working', 'coding', 'testing', 'reviewing', 'reading']
+
+// Stable string key for a rect-op list so two frame sets can be compared.
+function rectKey(ops: ReturnType<typeof drawCharacterOps>): string {
+  return ops.map((o) => `${o.x},${o.y},${o.w},${o.h},${o.color}`).join('|')
+}
+
+describe('per-role working frames (spec §16)', () => {
+  it('workingFrameCount returns >=1 frame for every role/activity', () => {
+    for (const role of ALL_ROLES) {
+      for (const activity of ALL_ACTIVITIES) {
+        expect(workingFrameCount(role, activity), `${role}/${activity}`).toBeGreaterThanOrEqual(1)
+      }
+    }
+  })
+
+  it('produces a non-empty rect set for every role/activity/frame', () => {
+    for (const role of ALL_ROLES) {
+      for (const activity of ALL_ACTIVITIES) {
+        const count = workingFrameCount(role, activity)
+        for (let f = 0; f < count; f++) {
+          const ops = drawCharacterOps(role, 'seated', 'down', f, activity)
+          expect(ops.length, `${role}/${activity}/${f} produced no rects`).toBeGreaterThan(0)
+        }
+      }
+    }
+  })
+
+  it('gives each role distinct working frame sets across activities (rect comparison)', () => {
+    // For every role, the rect set of each activity's first frame must differ
+    // from at least one other activity in that role's working sequence — i.e.
+    // activities are not all identical.
+    for (const role of ALL_ROLES) {
+      const seq = CHARACTER_SHEET[role].workingSequence
+      const keys = new Set<string>()
+      for (const activity of seq) {
+        const ops = drawCharacterOps(role, 'seated', 'down', 0, activity)
+        keys.add(rectKey(ops))
+      }
+      // The role's working sequence should produce more than one distinct frame.
+      expect(keys.size, `${role} working activities should not all be identical`).toBeGreaterThan(1)
+    }
+  })
+
+  it('working frames differ from idle frames per role', () => {
+    for (const role of ALL_ROLES) {
+      const idleOps = drawCharacterOps(role, 'idle', 'down', 0)
+      const idleKey = rectKey(idleOps)
+      // At least one activity in the role's working sequence must differ from idle.
+      const seq = CHARACTER_SHEET[role].workingSequence
+      const anyDiffer = seq.some(
+        (activity) => rectKey(drawCharacterOps(role, 'seated', 'down', 0, activity)) !== idleKey,
+      )
+      expect(anyDiffer, `${role} working frames should differ from idle`).toBe(true)
+    }
+  })
+
+  it('typing and thinking_pause produce distinct frames for backend', () => {
+    const typing = rectKey(drawCharacterOps('backend', 'seated', 'down', 0, 'typing'))
+    const pause = rectKey(drawCharacterOps('backend', 'seated', 'down', 0, 'thinking_pause'))
+    expect(typing).not.toBe(pause)
+  })
+
+  it('drawing and board_check produce distinct frames for frontend', () => {
+    const drawing = rectKey(drawCharacterOps('frontend', 'seated', 'down', 0, 'drawing'))
+    const board = rectKey(drawCharacterOps('frontend', 'seated', 'down', 0, 'board_check'))
+    expect(drawing).not.toBe(board)
+  })
+
+  it('monitoring and server_check produce distinct frames for devops', () => {
+    const mon = rectKey(drawCharacterOps('devops', 'seated', 'down', 0, 'monitoring'))
+    const srv = rectKey(drawCharacterOps('devops', 'seated', 'down', 0, 'server_check'))
+    expect(mon).not.toBe(srv)
+  })
+
+  it('reading and writing produce distinct frames for designer (research)', () => {
+    const read = rectKey(drawCharacterOps('designer', 'seated', 'down', 0, 'reading'))
+    const write = rectKey(drawCharacterOps('designer', 'seated', 'down', 0, 'writing'))
+    expect(read).not.toBe(write)
+  })
+
+  it('working silhouettes differ from idle silhouettes for each role', () => {
+    for (const role of ALL_ROLES) {
+      const idleHash = rasterizeSilhouette(drawCharacterOps(role, 'idle', 'down', 0))
+      const seq = CHARACTER_SHEET[role].workingSequence
+      const anyDiffer = seq.some(
+        (activity) =>
+          rasterizeSilhouette(drawCharacterOps(role, 'seated', 'down', 0, activity)) !== idleHash,
+      )
+      expect(anyDiffer, `${role} working silhouette should differ from idle`).toBe(true)
+    }
+  })
+})
+
+// A fake WorkAgentController that records setActivity calls and lets the test
+// drive the reported visual state via a mutable `state` field.
+function makeFakeWorkController(role: AgentDescriptor['role']): WorkAgentController & {
+  activities: ActivityKind[]
+  state: AgentVisualState
+} {
+  const fake = {
+    role,
+    state: 'coding' as AgentVisualState,
+    activities: [] as ActivityKind[],
+    currentState(): AgentVisualState {
+      return fake.state
+    },
+    setActivity(a: ActivityKind): void {
+      fake.activities.push(a)
+    },
+  }
+  return fake
+}
+
+describe('WorkActivityRunner (spec §16)', () => {
+  it('cycles through the role workingSequence steps in order', () => {
+    const role: AgentDescriptor['role'] = 'backend'
+    const seq = CHARACTER_SHEET[role].workingSequence
+    const ctrl = makeFakeWorkController(role)
+    // Deterministic RNG pinned to the min duration so we can step precisely.
+    const runner = new WorkActivityRunner(ctrl, seq, () => 0)
+
+    // Enter step 0.
+    runner.update(0.01)
+    expect(runner.stepIndex).toBe(0)
+    expect(runner.currentActivity).toBe(seq[0])
+    expect(ctrl.activities[0]).toBe(seq[0])
+
+    // Walk a full cycle: for each step, advance past its duration then re-enter
+    // the next. The runner enters a step on one update and advances on the next,
+    // so each step takes two update() calls.
+    const recorded: ActivityKind[] = [seq[0]!]
+    for (let i = 0; i < seq.length; i++) {
+      const cur = runner.currentActivity
+      const range = activityDurationRangeFor(cur)
+      runner.update(range.min + 0.01) // advance (started -> false)
+      runner.update(0.01) // enter next step
+      recorded.push(runner.currentActivity)
+    }
+    // After a full cycle we wrap back to step 0.
+    expect(runner.stepIndex).toBe(0)
+    expect(recorded).toEqual([seq[0], seq[1], seq[2], seq[3], seq[0]])
+  })
+
+  it('applies each activity via setActivity as it advances', () => {
+    const role: AgentDescriptor['role'] = 'qa'
+    const seq = CHARACTER_SHEET[role].workingSequence
+    const ctrl = makeFakeWorkController(role)
+    const runner = new WorkActivityRunner(ctrl, seq, () => 0)
+
+    runner.update(0.01) // enter step 0
+    expect(ctrl.activities).toEqual([seq[0]])
+    const range = activityDurationRangeFor(seq[0]!)
+    runner.update(range.min + 0.01) // advance (started -> false)
+    runner.update(0.01) // enter step 1
+    expect(ctrl.activities).toEqual([seq[0], seq[1]!])
+  })
+
+  it('pauses (does not advance or apply activities) when state is non-working', () => {
+    const role: AgentDescriptor['role'] = 'backend'
+    const seq = CHARACTER_SHEET[role].workingSequence
+    const ctrl = makeFakeWorkController(role)
+    const runner = new WorkActivityRunner(ctrl, seq, () => 0)
+
+    // Start in a working state and enter step 0.
+    ctrl.state = 'coding'
+    runner.update(0.01)
+    expect(ctrl.activities.length).toBe(1)
+
+    // Transition to a non-working state and pump a large dt — nothing happens.
+    ctrl.state = 'communicating'
+    const before = ctrl.activities.length
+    runner.update(100)
+    expect(ctrl.activities.length).toBe(before)
+    expect(runner.stepIndex).toBe(0)
+
+    // Return to a working state — the runner resumes from where it paused.
+    ctrl.state = 'coding'
+    const range = activityDurationRangeFor(seq[0]!)
+    runner.update(range.min + 0.01) // advance
+    runner.update(0.01) // enter step 1
+    expect(runner.stepIndex).toBe(1)
+  })
+
+  it('reset restarts the sequence from step 0', () => {
+    const role: AgentDescriptor['role'] = 'devops'
+    const seq = CHARACTER_SHEET[role].workingSequence
+    const ctrl = makeFakeWorkController(role)
+    const runner = new WorkActivityRunner(ctrl, seq, () => 0)
+
+    runner.update(0.01)
+    const range = activityDurationRangeFor(seq[0]!)
+    runner.update(range.min + 0.01) // advance
+    runner.update(0.01) // enter step 1
+    expect(runner.stepIndex).toBe(1)
+
+    runner.reset()
+    expect(runner.stepIndex).toBe(0)
+    runner.update(0.01)
+    expect(runner.currentActivity).toBe(seq[0])
+  })
+
+  it('exposes spec §22 duration ranges for each activity', () => {
+    for (const activity of ALL_ACTIVITIES) {
+      const range = activityDurationRangeFor(activity)
+      expect(range.min, `${activity} min`).toBeGreaterThan(0)
+      expect(range.max, `${activity} max`).toBeGreaterThanOrEqual(range.min)
+    }
+  })
+
+  it('only advances while in one of the working visual states', () => {
+    const role: AgentDescriptor['role'] = 'ceo'
+    const seq = CHARACTER_SHEET[role].workingSequence
+    for (const ws of WORKING_STATES) {
+      const ctrl = makeFakeWorkController(role)
+      ctrl.state = ws
+      const runner = new WorkActivityRunner(ctrl, seq, () => 0)
+      runner.update(0.01)
+      expect(ctrl.activities.length, `${ws} should drive the runner`).toBe(1)
+    }
+    for (const nonWorking of ['idle', 'communicating', 'walking', 'offline'] as AgentVisualState[]) {
+      const ctrl = makeFakeWorkController(role)
+      ctrl.state = nonWorking
+      const runner = new WorkActivityRunner(ctrl, seq, () => 0)
+      runner.update(0.01)
+      expect(ctrl.activities.length, `${nonWorking} should not drive the runner`).toBe(0)
+    }
+  })
+})
+

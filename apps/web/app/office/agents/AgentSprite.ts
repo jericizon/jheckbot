@@ -1,7 +1,7 @@
 import { AnimatedSprite, Container, Graphics, Rectangle, type Renderer, Texture } from 'pixi.js'
 import { PALETTE, ROLE_COLORS } from '../Palette'
 import { CHARACTER_SHEET } from '../characters/CharacterSheet'
-import type { AgentRole, AgentVisualState, Direction } from '../types'
+import type { ActivityKind, AgentRole, AgentVisualState, Direction } from '../types'
 
 // Procedural pixel-art characters (spec §10/§11).
 //
@@ -22,6 +22,23 @@ type FrameSet = Record<Direction, Texture[]> & {
   success: Texture[]
   error: Texture[]
   offline: Texture[]
+  // Per-activity working frames (spec §16). Each role bakes a distinct frame
+  // set per ActivityKind so working animations differ by what the agent is
+  // actually doing, not just by role.
+  workingFrames: Record<ActivityKind, Texture[]>
+}
+
+// Visual states that use the per-activity working frame sets (spec §16).
+export const WORKING_VISUAL_STATES: ReadonlySet<AgentVisualState> = new Set([
+  'working',
+  'coding',
+  'testing',
+  'reviewing',
+  'reading',
+])
+
+export function isWorkingVisualState(state: AgentVisualState): boolean {
+  return WORKING_VISUAL_STATES.has(state)
 }
 
 export interface AgentColorSet {
@@ -175,6 +192,7 @@ export function drawCharacterOps(
   state: DrawState,
   dir: Direction,
   frame: number,
+  activity?: ActivityKind,
 ): RectOp[] {
   const ops: RectOp[] = []
   const push = (x: number, y: number, w: number, h: number, color: string): void => {
@@ -263,6 +281,10 @@ export function drawCharacterOps(
   } else if (state === 'error') {
     push(torsoX - 2, 9, 2, 1, S(shirt))
     push(torsoX + torsoW, 9, 2, 1, S(shirt))
+  } else if (state === 'seated' && activity !== undefined) {
+    // Per-activity working arms (spec §16): each activity draws a distinct
+    // arm/hand posture so working animations reflect the actual work.
+    drawWorkingArms(push, role, activity, frame, torsoX, torsoW, S, shirt, skin)
   } else if (state === 'seated' || state === 'talking') {
     push(torsoX - 1, 9, 2, 2, S(shirt))
     push(torsoX + torsoW - 1, 9, 2, 2, S(shirt))
@@ -314,6 +336,11 @@ export function drawCharacterOps(
     // Blink
     push(hx + 1, faceY + 2, 1, 1, S(skin))
     push(hx + hw - 2, faceY + 2, 1, 1, S(skin))
+  }
+
+  // ---- Per-activity working head overlay (spec §16) ----
+  if (state === 'seated' && activity !== undefined) {
+    drawWorkingHeadOverlay(push, activity, dir, hx, faceY, hw, S, skin)
   }
 
   return ops
@@ -560,6 +587,169 @@ function drawWalkArms(
   }
 }
 
+// --- Per-role working animation frames (spec §16) ---
+//
+// Frame counts per activity. Typing/drawing/testing are rapid 3-frame cycles;
+// monitoring/reading/writing are 2-frame; pause/check/turn steps are single
+// held frames. Communicating reuses the talking cadence (2 frames).
+
+export function workingFrameCount(_role: AgentRole, activity: ActivityKind): number {
+  switch (activity) {
+    case 'typing':
+    case 'coding':
+    case 'drawing':
+    case 'testing':
+      return 3
+    case 'monitoring':
+    case 'reading':
+    case 'writing':
+    case 'communicating':
+      return 2
+    case 'thinking_pause':
+    case 'board_check':
+    case 'server_check':
+    case 'task_board_read':
+      return 1
+  }
+}
+
+// Per-activity working arms. Each activity draws a distinct arm/hand posture
+// so the rect set (and silhouette) differs across activities within a role.
+// Legs stay seated; only the upper body conveys the work being done.
+function drawWorkingArms(
+  push: PushFn,
+  _role: AgentRole,
+  activity: ActivityKind,
+  frame: number,
+  torsoX: number,
+  torsoW: number,
+  S: DesatFn,
+  shirt: string,
+  skin: string,
+): void {
+  const lx = torsoX - 1
+  const rx = torsoX + torsoW - 1
+  const cx = torsoX + Math.floor(torsoW / 2)
+  switch (activity) {
+    case 'typing':
+    case 'coding': {
+      // Rapid typing: arms bob up on the middle frame, hands on keyboard.
+      const y = frame === 1 ? 8 : 9
+      push(lx, y, 2, 2, S(shirt))
+      push(rx, y, 2, 2, S(shirt))
+      push(lx, y + 2, 2, 1, S(skin))
+      push(rx, y + 2, 2, 1, S(skin))
+      break
+    }
+    case 'drawing': {
+      // One arm extended to the mouse/drawing tablet; extension varies per frame.
+      const ext = frame === 1 ? 1 : 0
+      push(lx, 9, 2, 2, S(shirt))
+      push(rx + ext, 9, 2, 2, S(shirt))
+      push(rx + 2 + ext, 11, 1, 1, S(skin))
+      break
+    }
+    case 'testing': {
+      // Arms forward, leaning toward the monitor; lean deeper on frame 1.
+      const y = frame === 1 ? 10 : 9
+      push(lx, y, 2, 2, S(shirt))
+      push(rx, y, 2, 2, S(shirt))
+      push(lx, y + 2, 2, 1, S(skin))
+      push(rx, y + 2, 2, 1, S(skin))
+      break
+    }
+    case 'monitoring': {
+      // Arms on console, hands clasped at the center; frame 1 adds a knuckle.
+      push(lx, 9, 2, 2, S(shirt))
+      push(rx, 9, 2, 2, S(shirt))
+      push(cx - 1, 11, 2, 1, S(skin))
+      if (frame === 1) push(cx - 1, 10, 2, 1, S(skin))
+      break
+    }
+    case 'reading': {
+      // Head down over a notebook held in the lap.
+      push(lx, 9, 2, 2, S(shirt))
+      push(rx, 9, 2, 2, S(shirt))
+      push(torsoX + 1, 12, torsoW - 2, 1, S(skin))
+      break
+    }
+    case 'writing': {
+      // Pen hand moves down between frames.
+      const penY = frame === 1 ? 10 : 11
+      push(lx, 9, 2, 2, S(shirt))
+      push(rx, 9, 2, 2, S(shirt))
+      push(rx + 1, penY, 1, 1, S(skin))
+      break
+    }
+    case 'thinking_pause': {
+      // Hands off keyboard — arms relaxed down at the sides.
+      push(lx, 9, 1, 3, S(shirt))
+      push(rx + 1, 9, 1, 3, S(shirt))
+      break
+    }
+    case 'board_check': {
+      // Standing/upright, pointing toward the board (right arm raised).
+      push(lx, 9, 1, 3, S(shirt))
+      push(rx + 1, 7, 1, 2, S(shirt))
+      push(rx + 2, 7, 1, 1, S(skin))
+      break
+    }
+    case 'server_check': {
+      // Turned toward the server rack, one arm forward.
+      push(lx, 9, 1, 3, S(shirt))
+      push(rx + 1, 9, 2, 2, S(shirt))
+      break
+    }
+    case 'task_board_read': {
+      // Hands clasped, gaze turned toward the task board.
+      push(lx, 9, 2, 2, S(shirt))
+      push(rx, 9, 2, 2, S(shirt))
+      push(cx - 1, 11, 2, 1, S(skin))
+      break
+    }
+    case 'communicating': {
+      // Talking cadence: one arm gestures outward on frame 1.
+      push(lx, 9, 2, 2, S(shirt))
+      push(rx, 9, 2, 2, S(shirt))
+      if (frame === 1) push(rx + 2, 8, 1, 1, S(skin))
+      break
+    }
+  }
+}
+
+// Small per-activity head overlays drawn after the face so the gaze direction
+// reads distinctly for pause/turn/check activities (arms alone would make
+// several of them identical).
+function drawWorkingHeadOverlay(
+  push: PushFn,
+  activity: ActivityKind,
+  dir: Direction,
+  hx: number,
+  faceY: number,
+  hw: number,
+  S: DesatFn,
+  skin: string,
+): void {
+  if (dir === 'up') return
+  switch (activity) {
+    case 'thinking_pause':
+      // Looking up at a secondary monitor — cover the eyes (gaze lifted).
+      if (dir === 'down') push(hx + 1, faceY + 2, hw - 2, 1, S(skin))
+      break
+    case 'board_check':
+    case 'task_board_read':
+      // Head turned toward the board (left) — show only the left eye.
+      if (dir === 'down') push(hx + hw - 2, faceY + 2, 1, 1, S(skin))
+      break
+    case 'server_check':
+      // Head turned toward the server rack (right) — show only the right eye.
+      if (dir === 'down') push(hx + 1, faceY + 2, 1, 1, S(skin))
+      break
+    default:
+      break
+  }
+}
+
 // Apply a list of rect ops to a PIXI Graphics.
 function applyRectOps(g: Graphics, ops: RectOp[]): void {
   for (const o of ops) g.rect(o.x, o.y, o.w, o.h).fill(o.color)
@@ -594,8 +784,9 @@ function drawCharacter(
   state: DrawState,
   dir: Direction,
   frame: number,
+  activity?: ActivityKind,
 ): void {
-  applyRectOps(g, drawCharacterOps(role, state, dir, frame))
+  applyRectOps(g, drawCharacterOps(role, state, dir, frame, activity))
 }
 
 function makeTexture(renderer: Renderer, draw: (g: Graphics) => void): Texture {
@@ -627,6 +818,30 @@ function buildFrameSet(renderer: Renderer, role: AgentRole): FrameSet {
       makeTexture(renderer, (g) => drawCharacter(g, role, 'walk', 'right', f)),
     ),
   }
+  // Per-activity working frames (spec §16). Each ActivityKind gets its own
+  // baked frame set so the sprite can switch animations as the work cycle
+  // advances without re-rasterizing.
+  const ALL_ACTIVITIES: ActivityKind[] = [
+    'coding',
+    'typing',
+    'drawing',
+    'testing',
+    'monitoring',
+    'reading',
+    'writing',
+    'thinking_pause',
+    'board_check',
+    'server_check',
+    'task_board_read',
+    'communicating',
+  ]
+  const workingFrames = {} as Record<ActivityKind, Texture[]>
+  for (const activity of ALL_ACTIVITIES) {
+    const count = workingFrameCount(role, activity)
+    workingFrames[activity] = Array.from({ length: count }, (_, f) =>
+      makeTexture(renderer, (g) => drawCharacter(g, role, 'seated', 'down', f, activity)),
+    )
+  }
   return {
     ...walk,
     idle: [
@@ -645,15 +860,19 @@ function buildFrameSet(renderer: Renderer, role: AgentRole): FrameSet {
     success: [makeTexture(renderer, (g) => drawCharacter(g, role, 'success', 'down', 0))],
     error: [makeTexture(renderer, (g) => drawCharacter(g, role, 'error', 'down', 0))],
     offline: [makeTexture(renderer, (g) => drawCharacter(g, role, 'offline', 'down', 0))],
+    workingFrames,
   }
 }
 
-// Map visual state -> frame set key + animation speed.
+// Map visual state -> frame set key + animation speed. When the state is a
+// working state and an activity is supplied, the per-activity working frame
+// set is used (spec §16); otherwise the role's default seated frames apply.
 function stateToFrames(
   set: FrameSet,
   state: AgentVisualState,
   dir: Direction,
   role: AgentRole,
+  activity?: ActivityKind,
 ): { textures: Texture[]; fps: number; loop: boolean } {
   switch (state) {
     case 'walking':
@@ -663,6 +882,9 @@ function stateToFrames(
     case 'testing':
     case 'reviewing':
     case 'reading':
+      if (activity !== undefined) {
+        return { textures: set.workingFrames[activity], fps: workingFps(activity), loop: true }
+      }
       return { textures: set.seated, fps: 5, loop: true }
     case 'thinking':
     case 'blocked':
@@ -684,12 +906,35 @@ function stateToFrames(
   }
 }
 
+// Working animation speed (frames/sec) varies by activity intensity (spec §16).
+function workingFps(activity: ActivityKind): number {
+  switch (activity) {
+    case 'typing':
+    case 'coding':
+    case 'drawing':
+    case 'testing':
+      return 6 // rapid
+    case 'writing':
+      return 4
+    case 'monitoring':
+    case 'reading':
+    case 'communicating':
+      return 3
+    case 'thinking_pause':
+    case 'board_check':
+    case 'server_check':
+    case 'task_board_read':
+      return 1 // held
+  }
+}
+
 export class AgentSprite {
   readonly view: Container
   private sprite: AnimatedSprite
   private set: FrameSet
   private currentState: AgentVisualState = 'idle'
   private currentDir: Direction = 'down'
+  private currentActivity: ActivityKind | undefined = undefined
   private baseY = 0
   private walkBounces: number[]
 
@@ -715,19 +960,43 @@ export class AgentSprite {
     return CHARACTER_SHEET[role].silhouette.heightScale
   }
 
-  setState(state: AgentVisualState, dir: Direction = this.currentDir): void {
+  // Set the visual state, optionally supplying the current work activity so
+  // working states pick the per-activity frame set (spec §16). When the state
+  // is unchanged but the activity differs, the frames still refresh.
+  setState(state: AgentVisualState, dir: Direction = this.currentDir, activity?: ActivityKind): void {
     this.currentDir = dir
-    if (state === this.currentState) {
+    const activityChanged = activity !== this.currentActivity
+    if (state === this.currentState && !activityChanged) {
       // Direction may still change while walking.
       if (state === 'walking') this.applyFrames(state)
       return
     }
     this.currentState = state
+    if (activity !== undefined) this.currentActivity = activity
     this.applyFrames(state)
   }
 
+  // Update only the current work activity, refreshing the working frame set
+  // when the agent is already in a working state. Used by the WorkActivityRunner
+  // to cycle activities without changing the logical visual state.
+  setActivity(activity: ActivityKind): void {
+    if (activity === this.currentActivity) return
+    this.currentActivity = activity
+    if (isWorkingVisualState(this.currentState)) this.applyFrames(this.currentState)
+  }
+
+  getActivity(): ActivityKind | undefined {
+    return this.currentActivity
+  }
+
   private applyFrames(state: AgentVisualState): void {
-    const { textures, fps, loop } = stateToFrames(this.set, state, this.currentDir, this.role)
+    const { textures, fps, loop } = stateToFrames(
+      this.set,
+      state,
+      this.currentDir,
+      this.role,
+      this.currentActivity,
+    )
     // Avoid restarting the animation if the texture set is identical.
     if (this.sprite.textures !== textures) {
       this.sprite.textures = textures

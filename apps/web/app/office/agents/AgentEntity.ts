@@ -1,11 +1,12 @@
 import { Container, type Renderer } from 'pixi.js'
-import type { AgentDescriptor, AgentRole, AgentVisualState, Direction, IdleBehavior, Vec2 } from '../types'
+import type { ActivityKind, AgentDescriptor, AgentRole, AgentVisualState, Direction, IdleBehavior, Vec2 } from '../types'
 import { type FurnitureKind, type OfficeLayout, type Workstation, workstationForRole } from '../world/layout'
 import { NavigationGrid } from '../world/NavigationGrid'
-import { AgentSprite } from './AgentSprite'
+import { AgentSprite, isWorkingVisualState } from './AgentSprite'
 import { AgentMovement, tileToPxCenter } from './AgentMovement'
 import { CHARACTER_SHEET } from '../characters/CharacterSheet'
 import { IdleBehaviorRunner, type IdleAgentController } from './IdleBehaviorRunner'
+import { WorkActivityRunner, type WorkAgentController } from './WorkActivityRunner'
 
 // One agent in the office: sprite + movement + visual state machine.
 // The VirtualOffice coordinator routes EventBus events into method calls here.
@@ -20,6 +21,7 @@ export class AgentEntity {
   private workstation?: Workstation
   private onArrive?: () => void
   private idleRunner: IdleBehaviorRunner
+  private workRunner: WorkActivityRunner
   // Set by the idle controller's walkTo wrapper so setState('walking') does not
   // reset the runner mid-movement-step. Cleared on arrival / phase transition.
   private suppressRunnerReset = false
@@ -48,6 +50,10 @@ export class AgentEntity {
     this.idleRunner = new IdleBehaviorRunner(
       this.idleController(),
       CHARACTER_SHEET[descriptor.role].idleSequence,
+    )
+    this.workRunner = new WorkActivityRunner(
+      this.workController(),
+      CHARACTER_SHEET[descriptor.role].workingSequence,
     )
     this.setState('idle')
   }
@@ -101,6 +107,7 @@ export class AgentEntity {
 
   setState(state: AgentVisualState): void {
     const wasIdle = this.state === 'idle' || this.state === 'waiting'
+    const wasWorking = isWorkingVisualState(this.state)
     this.state = state
     this.sprite.setState(state)
     // Leaving idle for a real task pauses the runner; reset so the next idle
@@ -109,6 +116,11 @@ export class AgentEntity {
     if (wasIdle && state !== 'idle' && state !== 'waiting' && !this.suppressRunnerReset) {
       this.idleRunner.reset()
     }
+    // Leaving a working state pauses the work cycle; reset so the next working
+    // period restarts the sequence from the first activity (spec §16).
+    if (wasWorking && !isWorkingVisualState(state)) {
+      this.workRunner.reset()
+    }
   }
 
   // Set a visual pose without changing the logical state — used by the idle
@@ -116,6 +128,12 @@ export class AgentEntity {
   // while showing typing/reading/thinking frames.
   setPose(pose: AgentVisualState): void {
     this.sprite.setState(pose)
+  }
+
+  // Apply the current work activity so the sprite picks the per-activity
+  // working frame set (spec §16). Driven by the WorkActivityRunner.
+  setActivity(activity: ActivityKind): void {
+    this.sprite.setActivity(activity)
   }
 
   setOffline(): void {
@@ -137,6 +155,11 @@ export class AgentEntity {
     // Drive the idle behavior tree only while idle/waiting and stationary.
     if ((this.state === 'idle' || this.state === 'waiting') && !this.movement.isMoving()) {
       this.idleRunner.update(dt)
+    }
+    // Drive the working sub-activity cycle while in a working state and
+    // stationary (spec §16). The runner self-pauses on non-working states.
+    if (isWorkingVisualState(this.state) && !this.movement.isMoving()) {
+      this.workRunner.update(dt)
     }
     this.sprite.update(t)
   }
@@ -175,6 +198,18 @@ export class AgentEntity {
       deskTile: () => self.workstation?.desk,
       faceDirection: () => self.workstation?.face as Direction | undefined,
       poiTileFor: (step) => self.poiTileFor(step),
+    }
+  }
+
+  // Build the WorkAgentController the work runner uses to drive this agent.
+  private workController(): WorkAgentController {
+    const self = this
+    return {
+      get role(): AgentRole {
+        return self.descriptor.role
+      },
+      currentState: () => self.state,
+      setActivity: (activity) => self.setActivity(activity),
     }
   }
 
