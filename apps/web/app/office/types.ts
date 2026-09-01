@@ -62,6 +62,7 @@ export type MessageKind =
   | 'error'
   | 'success'
   | 'approval_request'
+  | 'emergency'
 
 // Event bus events (spec §27). The simulation/runtime emits these; the
 // renderer subscribes and decides how to visualize each one.

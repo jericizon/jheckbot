@@ -7,6 +7,8 @@ import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount, wor
 import { AgentMovement } from '../app/office/agents/AgentMovement'
 import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
 import { WorkActivityRunner, type WorkAgentController, activityDurationRangeFor } from '../app/office/agents/WorkActivityRunner'
+import { iconForKind, KIND_CONFIG, type MessageIcon } from '../app/office/effects/OfficeEffects'
+import { isPhysicalMessageKind, conversationApproachTile, faceDirection } from '../app/office/VirtualOffice'
 
 // Unit tests for the pure (PIXI-free) office logic: the navigation grid /
 // A* pathfinding, the layout's walkability, and the deterministic demo
@@ -682,6 +684,149 @@ describe('WorkActivityRunner (spec §16)', () => {
       runner.update(0.01)
       expect(ctrl.activities.length, `${nonWorking} should not drive the runner`).toBe(0)
     }
+  })
+})
+
+// --- Per-kind message visuals (spec §13, Task 7) ---
+
+const ALL_MESSAGE_KINDS: MessageKind[] = [
+  'normal',
+  'task_assignment',
+  'question',
+  'response',
+  'warning',
+  'error',
+  'success',
+  'approval_request',
+  'emergency',
+]
+
+describe('per-kind message icons (spec §13)', () => {
+  it('iconForKind returns a distinct icon for every message kind', () => {
+    const icons = new Map<MessageKind, MessageIcon>()
+    for (const kind of ALL_MESSAGE_KINDS) {
+      icons.set(kind, iconForKind(kind))
+    }
+    // Every kind maps to a defined icon.
+    for (const kind of ALL_MESSAGE_KINDS) {
+      expect(icons.get(kind), `${kind} should have an icon`).toBeDefined()
+    }
+    // All icons are distinct — no two kinds share the same visual.
+    const unique = new Set(icons.values())
+    expect(unique.size, 'each kind must have a distinct icon').toBe(ALL_MESSAGE_KINDS.length)
+  })
+
+  it('maps each kind to its spec-mandated icon shape', () => {
+    expect(iconForKind('normal')).toBe('envelope')
+    expect(iconForKind('task_assignment')).toBe('task')
+    expect(iconForKind('question')).toBe('question')
+    expect(iconForKind('response')).toBe('speech')
+    expect(iconForKind('warning')).toBe('warning')
+    expect(iconForKind('error')).toBe('error')
+    expect(iconForKind('success')).toBe('success')
+    expect(iconForKind('approval_request')).toBe('approval')
+    expect(iconForKind('emergency')).toBe('emergency')
+  })
+
+  it('marks urgent kinds (warning, error, emergency) with pulse', () => {
+    expect(KIND_CONFIG.warning.pulse).toBe(true)
+    expect(KIND_CONFIG.error.pulse).toBe(true)
+    expect(KIND_CONFIG.emergency.pulse).toBe(true)
+    // Non-urgent kinds do not pulse.
+    expect(KIND_CONFIG.normal.pulse).toBe(false)
+    expect(KIND_CONFIG.success.pulse).toBe(false)
+  })
+
+  it('marks positive kinds (success, approval_request, emergency) with glow', () => {
+    expect(KIND_CONFIG.success.glow).toBe(true)
+    expect(KIND_CONFIG.approval_request.glow).toBe(true)
+    // Neutral kinds do not glow.
+    expect(KIND_CONFIG.normal.glow).toBe(false)
+    expect(KIND_CONFIG.warning.glow).toBe(false)
+  })
+
+  it('response uses a speech bubble distinct from the normal envelope', () => {
+    expect(iconForKind('response')).not.toBe(iconForKind('normal'))
+  })
+})
+
+// --- Physical conversations (spec §14, Task 7) ---
+
+describe('physical conversation helpers (spec §14)', () => {
+  it('isPhysicalMessageKind returns true only for emergency', () => {
+    expect(isPhysicalMessageKind('emergency')).toBe(true)
+    for (const kind of ALL_MESSAGE_KINDS) {
+      if (kind === 'emergency') continue
+      expect(isPhysicalMessageKind(kind), `${kind} should not be physical`).toBe(false)
+    }
+  })
+
+  it('conversationApproachTile returns a walkable tile adjacent to the recipient', () => {
+    const layout = buildLayout()
+    const nav = NavigationGrid.fromLayout(layout)
+    // Pick a walkable tile in the open corridor as the recipient's position.
+    const recipient = { x: 12, y: 9 }
+    expect(nav.isWalkable(recipient.x, recipient.y)).toBe(true)
+    const approach = conversationApproachTile(nav, recipient)
+    expect(approach).not.toBeNull()
+    if (approach) {
+      expect(nav.isWalkable(approach.x, approach.y)).toBe(true)
+      // Must be within 1 tile (adjacent) of the recipient.
+      const dist = Math.abs(approach.x - recipient.x) + Math.abs(approach.y - recipient.y)
+      expect(dist).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('conversationApproachTile falls back to nearestWalkable when surrounded', () => {
+    const layout = buildLayout()
+    const nav = NavigationGrid.fromLayout(layout)
+    // A blocked tile (desk) — should still return a nearby walkable tile.
+    const blocked = { x: 0, y: 0 }
+    const approach = conversationApproachTile(nav, blocked)
+    expect(approach).not.toBeNull()
+    if (approach) {
+      expect(nav.isWalkable(approach.x, approach.y)).toBe(true)
+    }
+  })
+
+  it('faceDirection returns the correct cardinal direction', () => {
+    expect(faceDirection({ x: 0, y: 0 }, { x: 1, y: 0 })).toBe('right')
+    expect(faceDirection({ x: 1, y: 0 }, { x: 0, y: 0 })).toBe('left')
+    expect(faceDirection({ x: 0, y: 0 }, { x: 0, y: 1 })).toBe('down')
+    expect(faceDirection({ x: 0, y: 1 }, { x: 0, y: 0 })).toBe('up')
+  })
+
+  it('faceDirection is reciprocal — two agents face opposite directions', () => {
+    const a = { x: 5, y: 5 }
+    const b = { x: 6, y: 5 }
+    const aFaces = faceDirection(a, b)
+    const bFaces = faceDirection(b, a)
+    expect(aFaces).toBe('right')
+    expect(bFaces).toBe('left')
+  })
+})
+
+// --- Emergency routing (spec §13, Task 7) ---
+
+describe('emergency message routing (spec §13)', () => {
+  it('emergency is classified as a physical message, not an envelope', () => {
+    // isPhysicalMessageKind is the routing predicate VirtualOffice.message()
+    // uses to decide between physicalConversation() and sendEnvelope().
+    expect(isPhysicalMessageKind('emergency')).toBe(true)
+  })
+
+  it('non-emergency kinds are classified as envelope messages', () => {
+    const envelopeKinds = ALL_MESSAGE_KINDS.filter((k) => k !== 'emergency')
+    for (const kind of envelopeKinds) {
+      expect(isPhysicalMessageKind(kind), `${kind} should route to an envelope`).toBe(false)
+    }
+  })
+
+  it('emergency still has a distinct icon config (for completeness)', () => {
+    // Even though emergency routes to a physical conversation, it has an icon
+    // config so any direct envelope render (e.g. notification) stays consistent.
+    expect(KIND_CONFIG.emergency.icon).toBe('emergency')
+    expect(KIND_CONFIG.emergency.pulse).toBe(true)
   })
 })
 

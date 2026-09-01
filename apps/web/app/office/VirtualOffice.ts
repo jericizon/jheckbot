@@ -3,6 +3,7 @@ import type { EventBus } from './EventBus'
 import type {
   AgentDescriptor,
   AgentVisualState,
+  Direction,
   InterruptPriority,
   MessageKind,
   OfficeEvent,
@@ -184,6 +185,12 @@ export class VirtualOffice implements OfficeDirector {
     const from = this.agents.get(fromId)
     const to = this.agents.get(toId)
     if (!from || !to) return
+    // Emergency kinds trigger a physical conversation instead of an envelope
+    // (spec §13: emergency = agent physically walks to recipient).
+    if (isPhysicalMessageKind(kind)) {
+      await this.physicalConversation(fromId, toId, kind)
+      return
+    }
     from.interrupt('MEDIUM', 'communicating')
     const messageId = `msg_${Math.random().toString(36).slice(2, 9)}`
     this.emit({ type: 'agent.message.sent', from: fromId, to: toId, messageId, kind })
@@ -199,6 +206,51 @@ export class VirtualOffice implements OfficeDirector {
     })
     // Message complete — resume if still MEDIUM-interrupted (spec §20).
     if (from.interruptedBy === 'MEDIUM') from.resume()
+  }
+
+  // Physical conversation (spec §14): the sender walks to a tile adjacent to
+  // the recipient, both turn to face each other, both enter `communicating`,
+  // speech bubbles appear, then the sender walks back and the recipient resumes.
+  async physicalConversation(fromId: string, toId: string, kind: MessageKind): Promise<void> {
+    const from = this.agents.get(fromId)
+    const to = this.agents.get(toId)
+    if (!from || !to) return
+    const messageId = `msg_${Math.random().toString(36).slice(2, 9)}`
+    this.emit({ type: 'agent.message.sent', from: fromId, to: toId, messageId, kind })
+
+    const senderHome = { ...from.currentTile }
+    const recipientTile = to.currentTile
+    const approach = conversationApproachTile(this.nav, recipientTile)
+    if (!approach) return
+
+    // Interrupt both agents for the conversation.
+    from.interrupt('HIGH', 'communicating')
+    to.interrupt('HIGH', 'communicating')
+
+    // Sender walks to the tile adjacent to the recipient.
+    await this.walk(fromId, approach)
+
+    // Both face each other.
+    from.face(faceDirection(from.currentTile, to.currentTile))
+    to.face(faceDirection(to.currentTile, from.currentTile))
+    from.setState('communicating')
+    to.setState('communicating')
+
+    // Speech indicators above both heads for the conversation duration.
+    if (this.isReady) {
+      const duration = 2 + Math.random() * 2 // 2-4 seconds
+      this.effects.speechBubble(from.headPixelPosition(), duration)
+      this.effects.speechBubble(to.headPixelPosition(), duration)
+      await new Promise<void>((resolve) => setTimeout(resolve, duration * 1000))
+    }
+
+    // Sender walks back to their previous position.
+    await this.walk(fromId, senderHome)
+
+    // Both resume their previous activities (spec §20).
+    from.resume()
+    to.resume()
+    this.emit({ type: 'agent.message.received', messageId, to: toId })
   }
 
   think(agentId: string): void {
@@ -525,6 +577,37 @@ export class VirtualOffice implements OfficeDirector {
       this.emitting = false
     }
   }
+}
+
+// ---- Pure helpers for physical conversations (spec §14) ----
+
+// Kinds that trigger a physical walk instead of a traveling envelope.
+export function isPhysicalMessageKind(kind: MessageKind): boolean {
+  return kind === 'emergency'
+}
+
+// Find a walkable tile adjacent to the recipient for the sender to stand on.
+// Falls back to the nearest walkable tile if no direct neighbor is walkable.
+export function conversationApproachTile(nav: NavigationGrid, recipientTile: Vec2): Vec2 | null {
+  const dirs: Array<[number, number]> = [
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0],
+  ]
+  for (const [dx, dy] of dirs) {
+    const t = { x: recipientTile.x + dx, y: recipientTile.y + dy }
+    if (nav.isWalkable(t.x, t.y)) return t
+  }
+  return nav.nearestWalkable(recipientTile)
+}
+
+// Direction one agent should face to look at another, based on tile positions.
+export function faceDirection(from: Vec2, to: Vec2): Direction {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left'
+  return dy > 0 ? 'down' : 'up'
 }
 
 const PALETTE_BG = '#1c1c22'
