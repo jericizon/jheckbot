@@ -24,6 +24,9 @@ export interface IdleAgentController {
   setPose(pose: AgentVisualState): void
   face(dir: Direction): void
   walkTo(target: Vec2): Promise<void>
+  // Clear the suppress-runner-reset flag once a movement phase ends so a
+  // subsequent real task interrupting idle properly resets the runner.
+  clearMovementSuppress(): void
   // The agent's workstation seat/desk/face for return + desk-facing steps.
   seatTile(): Vec2 | undefined
   deskTile(): Vec2 | undefined
@@ -151,6 +154,7 @@ export class IdleBehaviorRunner {
         // We only reach here once the outbound walk has completed (the agent
         // was moving, so update() wasn't called until arrival).
         if (!this.controller.isMoving()) {
+          this.controller.clearMovementSuppress()
           if (step === 'return') {
             this.advance()
           } else {
@@ -165,6 +169,7 @@ export class IdleBehaviorRunner {
         if (this.elapsed >= this.duration) {
           if (step === 'sit') {
             // 'sit' stays at the seat; no return walk needed.
+            this.controller.clearMovementSuppress()
             this.advance()
           } else {
             const seat = this.controller.seatTile()
@@ -172,6 +177,7 @@ export class IdleBehaviorRunner {
               this.phase = 'return'
               void this.controller.walkTo(seat)
             } else {
+              this.controller.clearMovementSuppress()
               this.advance()
             }
           }
@@ -179,6 +185,7 @@ export class IdleBehaviorRunner {
         break
       case 'return':
         if (!this.controller.isMoving()) {
+          this.controller.clearMovementSuppress()
           this.advance()
         }
         break

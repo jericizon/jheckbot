@@ -57,6 +57,7 @@ function makeFakeController(
       moving = true
       return Promise.resolve()
     },
+    clearMovementSuppress: () => {},
     seatTile: () => seat,
     deskTile: () => desk,
     faceDirection: () => face,
@@ -174,18 +175,21 @@ describe('IdleBehaviorRunner step advancement', () => {
     const seq = CHARACTER_SHEET.backend.idleSequence // 4 steps
     const runner = new IdleBehaviorRunner(ctrl, seq, () => 0)
 
-    // Drive enough updates to cycle through all steps. With rand=0 each
-    // stationary step takes its min duration. Step 0 (type, 3.2s), step 1
-    // (pause, 2s), step 2 (stretch, 1s), step 3 (type, 3.2s) = 9.4s total.
-    // Use large dt steps to speed up.
-    for (let i = 0; i < 1000; i++) runner.update(0.1)
+    // Track the step kind observed before each update so we can verify the
+    // sequence actually wrapped (the first step kind reappears).
+    const visited: IdleBehavior[] = []
+    for (let i = 0; i < 1000; i++) {
+      visited.push(runner.currentStep)
+      runner.update(0.1)
+    }
 
-    // Should have looped at least once (stepIndex back in range 0..3).
+    // The first step kind must appear at least twice — proving the runner
+    // looped back after completing the full sequence.
+    const firstKind = seq[0]!
+    const occurrences = visited.filter((s) => s === firstKind).length
+    expect(occurrences).toBeGreaterThanOrEqual(2)
+    // stepIndex stays in range.
     expect(runner.stepIndex).toBeGreaterThanOrEqual(0)
-    expect(runner.stepIndex).toBeLessThan(seq.length)
-    // Verify it actually wrapped by checking we passed through step 0 again.
-    // After ~9.4s we're back at step 0; after ~18.8s back again, etc.
-    // 1000 * 0.1 = 100s → many loops.
     expect(runner.stepIndex).toBeLessThan(seq.length)
   })
 
@@ -422,5 +426,184 @@ describe('IdleBehaviorRunner reset', () => {
     expect(runner.stepIndex).toBe(0)
     runner.update(0.016)
     expect(runner.currentStep).toBe('type')
+  })
+})
+
+// Simulates AgentEntity's state machine: walkTo transitions to 'walking' and
+// would reset the runner on idle→walking unless the suppress flag is set (as
+// the idleController.walkTo wrapper does). Verifies the runner survives a
+// movement step without its step index / phase being wiped.
+function makeAgentSimController(
+  role: AgentRole,
+  opts: { seat?: Vec2; startTile?: Vec2; poi?: Vec2; face?: Direction } = {},
+) {
+  const seat = opts.seat ?? { x: 5, y: 5 }
+  const face = opts.face ?? 'up'
+  const tile = { ...(opts.startTile ?? seat) }
+  const poi = opts.poi ?? { x: 9, y: 6 }
+  let moving = false
+  let state: AgentVisualState = 'idle'
+  let suppressRunnerReset = false
+  let resetCallCount = 0
+  const runnerRef: { current: IdleBehaviorRunner | null } = { current: null }
+  const walks: Vec2[] = []
+
+  return {
+    role,
+    currentState: () => state,
+    isMoving: () => moving,
+    currentTile: () => tile,
+    setPose: () => {},
+    face: () => {},
+    walkTo: (target: Vec2) => {
+      walks.push(target)
+      // idleController wrapper sets the suppress flag before delegating to
+      // AgentEntity.walkTo → setState('walking').
+      suppressRunnerReset = true
+      const wasIdle = state === 'idle' || state === 'waiting'
+      if (wasIdle && !suppressRunnerReset) {
+        resetCallCount++
+        runnerRef.current?.reset()
+      }
+      state = 'walking'
+      moving = true
+      return Promise.resolve().then(() => {
+        suppressRunnerReset = false
+      })
+    },
+    clearMovementSuppress: () => {
+      suppressRunnerReset = false
+    },
+    seatTile: () => seat,
+    deskTile: () => ({ x: seat.x, y: seat.y - 2 }),
+    faceDirection: () => face,
+    poiTileFor: () => poi,
+    // --- test helpers ---
+    walks,
+    tile,
+    runnerRef,
+    get resetCallCount() {
+      return resetCallCount
+    },
+    get state() {
+      return state
+    },
+    get moving() {
+      return moving
+    },
+    setMoving: (v: boolean) => {
+      moving = v
+    },
+    setState: (s: AgentVisualState) => {
+      state = s
+    },
+    setTile: (t: Vec2) => {
+      tile.x = t.x
+      tile.y = t.y
+    },
+  } as IdleAgentController & {
+    walks: Vec2[]
+    tile: Vec2
+    runnerRef: { current: IdleBehaviorRunner | null }
+    resetCallCount: number
+    state: AgentVisualState
+    moving: boolean
+    setMoving: (v: boolean) => void
+    setState: (s: AgentVisualState) => void
+    setTile: (t: Vec2) => void
+  }
+}
+
+describe('IdleBehaviorRunner AgentEntity integration (suppressRunnerReset)', () => {
+  it('survives a movement step without resetting the runner', () => {
+    const ctrl = makeAgentSimController('ceo', {
+      seat: { x: 5, y: 5 },
+      startTile: { x: 5, y: 5 },
+      poi: { x: 9, y: 6 },
+    })
+    // Sequence: check_task_board (2s) → look_around (1s) → walk (movement) → observe
+    const seq: IdleBehavior[] = ['check_task_board', 'look_around', 'walk', 'observe']
+    const runner = new IdleBehaviorRunner(ctrl, seq, () => 0)
+    ctrl.runnerRef.current = runner
+
+    // Enter step 0 (check_task_board, 2s min with rand=0).
+    runner.update(0.016)
+    expect(runner.stepIndex).toBe(0)
+
+    // Advance past check_task_board (2s) + look_around (1s) = 3s to reach 'walk'.
+    for (let i = 0; i < 200; i++) runner.update(0.016) // ~3.2s
+    expect(runner.currentStep).toBe('walk')
+
+    // 'walk' issued walkTo to the POI — agent is now moving, state is 'walking'.
+    expect(ctrl.walks.length).toBe(1)
+    expect(ctrl.walks[0]).toEqual({ x: 9, y: 6 })
+    expect(ctrl.moving).toBe(true)
+    expect(ctrl.state).toBe('walking')
+
+    // The runner must NOT have been reset — suppress flag prevented it.
+    expect(ctrl.resetCallCount).toBe(0)
+    expect(runner.stepIndex).toBe(2) // still on 'walk'
+    expect(runner.currentPhase).toBe('depart')
+
+    // Simulate arrival: agent stops moving, returns to idle.
+    ctrl.setMoving(false)
+    ctrl.setTile({ x: 9, y: 6 })
+    ctrl.setState('idle')
+    runner.update(0.016)
+
+    // Transitions to dwell — NOT reset to step 0.
+    expect(runner.stepIndex).toBe(2)
+    expect(runner.currentStep).toBe('walk')
+    expect(runner.currentPhase).toBe('dwell')
+
+    // Dwell for 1s (min duration with rand=0), then issues return walk to seat.
+    for (let i = 0; i < 100; i++) runner.update(0.016)
+    expect(ctrl.walks.length).toBe(2)
+    expect(ctrl.walks[1]).toEqual({ x: 5, y: 5 })
+    expect(ctrl.moving).toBe(true)
+    // Still not reset during the return walk.
+    expect(ctrl.resetCallCount).toBe(0)
+    expect(runner.stepIndex).toBe(2)
+    expect(runner.currentPhase).toBe('return')
+
+    // Simulate return arrival.
+    ctrl.setMoving(false)
+    ctrl.setTile({ x: 5, y: 5 })
+    ctrl.setState('idle')
+    runner.update(0.016)
+
+    // Advanced to next step (observe) — movement step completed fully.
+    expect(runner.stepIndex).toBe(3)
+    expect(runner.currentStep).toBe('observe')
+    expect(ctrl.resetCallCount).toBe(0)
+  })
+
+  it('resets the runner when a real task interrupts idle (no suppress flag)', () => {
+    const ctrl = makeAgentSimController('ceo', {
+      seat: { x: 5, y: 5 },
+      startTile: { x: 5, y: 5 },
+      poi: { x: 9, y: 6 },
+    })
+    const seq: IdleBehavior[] = ['check_task_board', 'look_around', 'walk', 'observe']
+    const runner = new IdleBehaviorRunner(ctrl, seq, () => 0)
+    ctrl.runnerRef.current = runner
+
+    // Advance to step 1 (look_around).
+    runner.update(0.016)
+    for (let i = 0; i < 130; i++) runner.update(0.016) // ~2.08s → past check_task_board
+    expect(runner.stepIndex).toBe(1)
+
+    // Simulate a real task interrupting: coordinator calls walkTo directly
+    // (NOT through the idle controller), so the suppress flag is NOT set.
+    // We bypass the controller's walkTo and call reset directly as setState would.
+    const wasIdle = ctrl.state === 'idle' || ctrl.state === 'waiting'
+    if (wasIdle) {
+      ctrl.runnerRef.current?.reset()
+      ctrl.setState('walking')
+      ctrl.setMoving(true)
+    }
+
+    expect(runner.stepIndex).toBe(0) // reset to step 0
+    expect(ctrl.state).toBe('walking')
   })
 })

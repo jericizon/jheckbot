@@ -20,6 +20,9 @@ export class AgentEntity {
   private workstation?: Workstation
   private onArrive?: () => void
   private idleRunner: IdleBehaviorRunner
+  // Set by the idle controller's walkTo wrapper so setState('walking') does not
+  // reset the runner mid-movement-step. Cleared on arrival / phase transition.
+  private suppressRunnerReset = false
 
   constructor(
     private renderer: Renderer,
@@ -101,8 +104,9 @@ export class AgentEntity {
     this.state = state
     this.sprite.setState(state)
     // Leaving idle for a real task pauses the runner; reset so the next idle
-    // period restarts the sequence cleanly.
-    if (wasIdle && state !== 'idle' && state !== 'waiting') {
+    // period restarts the sequence cleanly. Suppressed when the state change
+    // originates from the idle runner's own walkTo (movement step).
+    if (wasIdle && state !== 'idle' && state !== 'waiting' && !this.suppressRunnerReset) {
       this.idleRunner.reset()
     }
   }
@@ -156,7 +160,17 @@ export class AgentEntity {
       currentTile: () => self.currentTile,
       setPose: (pose) => self.setPose(pose),
       face: (dir) => self.face(dir),
-      walkTo: (target) => self.walkTo(target),
+      walkTo: (target) => {
+        // Suppress runner reset so setState('walking') inside walkTo does not
+        // wipe the runner's step index / phase mid-movement-step.
+        self.suppressRunnerReset = true
+        return self.walkTo(target).then(() => {
+          self.suppressRunnerReset = false
+        })
+      },
+      clearMovementSuppress: () => {
+        self.suppressRunnerReset = false
+      },
       seatTile: () => self.workstation?.seat,
       deskTile: () => self.workstation?.desk,
       faceDirection: () => self.workstation?.face as Direction | undefined,
