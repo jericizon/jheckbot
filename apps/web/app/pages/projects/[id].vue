@@ -93,7 +93,6 @@
          requestFullscreen() synchronously within the click handler. -->
     <div
       v-show="fullscreen && project"
-      ref="fullscreenContainer"
       class="fixed inset-0 z-50 flex bg-[#1c1c22]"
     >
       <!-- Office fills the remaining space -->
@@ -532,44 +531,37 @@ const chatResizeStartWidth = ref(0)
 const mobileChatOpen = ref(false)
 const chatViewportReady = ref(false)
 const fullscreen = ref(false)
-const fullscreenContainer = ref<HTMLElement | null>(null)
 // Refs to the two OfficePixi instances so the page can trigger the
 // collaboration choreography on the one that's currently visible.
 const officePixiRef = ref<{ runCollaboration: () => void } | null>(null)
 const officePixiFullscreenRef = ref<{ runCollaboration: () => void } | null>(null)
 
 // Enter real browser fullscreen (covers the whole monitor) using the
-// Fullscreen API on the overlay container, then show the overlay layout.
-// Exit reverses both. We also listen for the browser's fullscreenchange
-// event so exiting via the browser's own UI (Esc, F11) stays in sync.
-async function toggleFullscreen() {
+// Fullscreen API. We fullscreen document.documentElement (always visible)
+// rather than the overlay container, because the overlay uses v-show and
+// may still be display:none when the click handler runs -- browsers reject
+// requestFullscreen() on hidden elements. The overlay's fixed inset-0 z-50
+// covers everything in fullscreen mode regardless of which element is
+// fullscreened. requestFullscreen() must be called synchronously within
+// the user-gesture (click) handler.
+function toggleFullscreen() {
   if (fullscreen.value) {
-    await exitFullscreen()
-  } else {
-    fullscreen.value = true
-    // requestFullscreen() must be called synchronously within the click
-    // handler — awaiting nextTick breaks the user-gesture chain and the
-    // browser silently ignores the call. The overlay uses v-show so the
-    // container already exists in the DOM.
-    const el = fullscreenContainer.value
-    if (el && el.requestFullscreen) {
-      try {
-        await el.requestFullscreen()
-      } catch {
-        // If the browser rejects (e.g. user gesture required), keep the
-        // CSS overlay fullscreen as a fallback — it still fills the tab.
-      }
-    }
+    exitFullscreen()
+    return
+  }
+  fullscreen.value = true
+  const el = document.documentElement
+  if (el && el.requestFullscreen) {
+    el.requestFullscreen().catch(() => {
+      // If the browser rejects, the CSS overlay (fixed inset-0) still
+      // fills the browser tab as a fallback.
+    })
   }
 }
 
-async function exitFullscreen() {
+function exitFullscreen() {
   if (document.fullscreenElement) {
-    try {
-      await document.exitFullscreen()
-    } catch {
-      // Ignore — the fullscreenchange listener will still sync state.
-    }
+    document.exitFullscreen().catch(() => {})
   }
   fullscreen.value = false
 }
