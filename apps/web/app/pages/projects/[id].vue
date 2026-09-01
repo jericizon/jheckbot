@@ -90,6 +90,7 @@
          chatbox as a side panel beside it. Toggled by the header button. -->
     <div
       v-if="fullscreen && project"
+      ref="fullscreenContainer"
       class="fixed inset-0 z-50 flex bg-[#1c1c22]"
     >
       <!-- Office fills the remaining space -->
@@ -527,14 +528,47 @@ const chatResizeStartWidth = ref(0)
 const mobileChatOpen = ref(false)
 const chatViewportReady = ref(false)
 const fullscreen = ref(false)
+const fullscreenContainer = ref<HTMLElement | null>(null)
 
-function toggleFullscreen() {
-  fullscreen.value = !fullscreen.value
+// Enter real browser fullscreen (covers the whole monitor) using the
+// Fullscreen API on the overlay container, then show the overlay layout.
+// Exit reverses both. We also listen for the browser's fullscreenchange
+// event so exiting via the browser's own UI (Esc, F11) stays in sync.
+async function toggleFullscreen() {
+  if (fullscreen.value) {
+    await exitFullscreen()
+  } else {
+    fullscreen.value = true
+    await nextTick()
+    const el = fullscreenContainer.value
+    if (el && el.requestFullscreen) {
+      try {
+        await el.requestFullscreen()
+      } catch {
+        // If the browser rejects (e.g. user gesture required), keep the
+        // CSS overlay fullscreen as a fallback — it still fills the tab.
+      }
+    }
+  }
 }
 
-// Exit fullscreen on Escape key.
-function onFullscreenKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && fullscreen.value) fullscreen.value = false
+async function exitFullscreen() {
+  if (document.fullscreenElement) {
+    try {
+      await document.exitFullscreen()
+    } catch {
+      // Ignore — the fullscreenchange listener will still sync state.
+    }
+  }
+  fullscreen.value = false
+}
+
+// Keep the Vue state in sync if the user exits via the browser's own
+// controls (Esc, F11, mouse gesture) rather than our button.
+function onFullscreenChange() {
+  if (!document.fullscreenElement && fullscreen.value) {
+    fullscreen.value = false
+  }
 }
 
 function autoResize() {
@@ -818,7 +852,7 @@ async function sendMessage() {
 onMounted(async () => {
   updateViewport()
   window.addEventListener('resize', updateViewport)
-  window.addEventListener('keydown', onFullscreenKeydown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   await load()
   await loadOffice()
   await loadTasks()
@@ -831,7 +865,11 @@ onUnmounted(() => {
     unsubscribeEvents = null
   }
   window.removeEventListener('resize', updateViewport)
-  window.removeEventListener('keydown', onFullscreenKeydown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  // Make sure we don't leave the monitor fullscreen if the user navigates away.
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {})
+  }
 })
 
 watch(
