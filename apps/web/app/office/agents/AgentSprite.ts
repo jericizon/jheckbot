@@ -168,7 +168,6 @@ export function drawCharacterOps(
   drawTorsoDetail(push, role, dir, torsoX, torsoW, S, shirt, shirtD, accent, acc, accD)
 
   // ---- Arms ----
-  const armPhase = state === 'walk' ? frame : 0
   if (state === 'success') {
     push(torsoX - 1, 8, 1, 2, S(shirt))
     push(torsoX - 2, 6, 1, 2, S(skin))
@@ -187,7 +186,6 @@ export function drawCharacterOps(
     push(torsoX - 1, 9, 1, 3, S(shirt))
     push(torsoX + torsoW, 9, 1, 3, S(shirt))
   }
-  void armPhase
 
   // ---- Legs ----
   const legL = Math.round((SPRITE_W - 4) / 2)
@@ -275,11 +273,13 @@ function drawHair(
       push(hx - 1, hairY, hw + 2, 2, S(hair))
       break
     case 'frontend':
-      // Spiky hair: base cap + upward spikes.
-      push(hx, hairY, hw, 2, S(hair))
-      push(hx + 1, hairY - 1, 1, 1, S(hair))
-      push(hx + 3, hairY - 1, 1, 1, S(hair))
-      push(hx + 5, hairY - 1, 1, 1, S(hair))
+      // Spiky hair: upward spikes at y=0 (in-frame) + base cap below them.
+      // Spikes must stay within the 16×18 texture frame, so they sit at
+      // hairY (y=0 when postureOffset=0) and the cap starts at hairY+1.
+      push(hx + 1, hairY, 1, 1, S(hair))
+      push(hx + 3, hairY, 1, 1, S(hair))
+      push(hx + 5, hairY, 1, 1, S(hair))
+      push(hx, hairY + 1, hw, 2, S(hair))
       break
     case 'qa':
       // Short neat hair.
@@ -560,6 +560,7 @@ export class AgentSprite {
   private set: FrameSet
   private currentState: AgentVisualState = 'idle'
   private currentDir: Direction = 'down'
+  private baseY = 0
 
   constructor(private renderer: Renderer, private role: AgentRole) {
     this.set = buildFrameSet(renderer, role)
@@ -568,12 +569,18 @@ export class AgentSprite {
     this.sprite.anchor.set(0.5, 1.0) // feet at bottom-center of the tile
     // Per-role height scale (spec §11): taller roles read larger, shorter
     // roles smaller, while sharing the same 16×18 base art.
-    this.sprite.scale.set(CHARACTER_SHEET[role].silhouette.heightScale)
+    this.sprite.scale.set(AgentSprite.scaleFor(role))
     this.sprite.animationSpeed = initial.fps / 60
     this.sprite.loop = initial.loop
     this.sprite.play()
     this.view = new Container()
     this.view.addChild(this.sprite)
+  }
+
+  // Per-role height scale (spec §11). Extracted as a static method so the
+  // scale applied to the sprite is testable without a PIXI renderer.
+  static scaleFor(role: AgentRole): number {
+    return CHARACTER_SHEET[role].silhouette.heightScale
   }
 
   setState(state: AgentVisualState, dir: Direction = this.currentDir): void {
@@ -605,6 +612,7 @@ export class AgentSprite {
   }
 
   setPixelPosition(x: number, y: number): void {
+    this.baseY = y
     this.view.position.set(x, y)
   }
 
@@ -612,11 +620,14 @@ export class AgentSprite {
     return this.currentState
   }
 
-  // Subtle vertical bob while idle (breathing) — handled here so the agent
-  // layer stays simple.
+  // Subtle vertical bob while idle (breathing) — a 0.5px amplitude bob
+  // rounded to whole pixels so it stays crisp under nearest-neighbor scaling.
   update(t: number): void {
     if (this.currentState === 'idle' || this.currentState === 'waiting') {
-      this.view.y = Math.round(this.view.y + Math.sin(t * 2) * 0.0) // no float jitter
+      const bob = Math.round(Math.sin(t * 2) * 0.5)
+      this.view.y = this.baseY + bob
+    } else {
+      this.view.y = this.baseY
     }
   }
 }

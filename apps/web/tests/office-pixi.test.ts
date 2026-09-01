@@ -3,7 +3,7 @@ import { buildLayout, NavigationGrid, WORLD_W, WORLD_H } from '../app/office'
 import { DemoTimeline, demoAgents } from '../app/office/simulation/DemoTimeline'
 import type { OfficeDirector } from '../app/office/simulation/OfficeDirector'
 import type { AgentDescriptor, AgentVisualState, MessageKind, TaskDescriptor, Vec2 } from '../app/office/types'
-import { drawCharacterOps, rasterizeSilhouette } from '../app/office/agents/AgentSprite'
+import { drawCharacterOps, rasterizeSilhouette, AgentSprite } from '../app/office/agents/AgentSprite'
 import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
 
 // Unit tests for the pure (PIXI-free) office logic: the navigation grid /
@@ -254,6 +254,24 @@ describe('AgentSprite silhouettes', () => {
     expect(CHARACTER_SHEET.ceo.silhouette.heightScale).toBe(1.1)
     expect(CHARACTER_SHEET.designer.silhouette.heightScale).toBe(0.9)
     expect(new Set(scales).size).toBe(ALL_ROLES.length)
+  })
+
+  it('AgentSprite.scaleFor returns the heightScale applied to the sprite', () => {
+    // scaleFor is the static method the constructor calls via
+    // sprite.scale.set(scaleFor(role)); verifying it directly makes the
+    // scale application testable without a PIXI renderer.
+    expect(AgentSprite.scaleFor('ceo')).toBe(1.1)
+    const scales = ALL_ROLES.map((r) => AgentSprite.scaleFor(r))
+    expect(new Set(scales).size).toBe(ALL_ROLES.length)
+  })
+
+  it('draws frontend spiky hair within the texture frame (y=0 row)', () => {
+    // Regression: frontend spikes were drawn at y=-1 (off-frame) and clipped
+    // by the Rectangle(0,0,16,18) texture. They must now appear at y=0.
+    const ops = drawCharacterOps('frontend', 'idle', 'down', 0)
+    const grid = rasterizeSilhouette(ops).split('\n')
+    const row0 = grid[0]!
+    expect(row0).toContain('1')
   })
 
   it('gives each role a distinct down-state idle silhouette (rasterized hash)', () => {
