@@ -1,10 +1,215 @@
 import { Container, Graphics, Rectangle, Sprite, type Renderer, Texture } from 'pixi.js'
 import { PALETTE } from '../Palette'
-import type { MessageKind, Vec2 } from '../types'
+import type { ActivityKind, MessageKind, Vec2 } from '../types'
 
 // Effects layer (spec §14): traveling message icons, message notifications,
 // status effects, and speech bubbles above agents' heads. All drawn as pixel
 // art — no chat UI.
+
+// ---- Per-activity icons (persistent activity bubble, spec §16 visibility) ----
+//
+// Each ActivityKind gets a distinct 8x8 pixel icon so a passing viewer can
+// tell what an agent is actually doing at a glance: coding, testing, reading,
+// monitoring servers, etc. Drawn into the activity bubble that floats above
+// working agents.
+
+export type ActivityIcon =
+  | 'code'
+  | 'keyboard'
+  | 'pencil'
+  | 'bug'
+  | 'screen'
+  | 'book'
+  | 'write'
+  | 'thought'
+  | 'search'
+  | 'server'
+  | 'list'
+  | 'speech'
+
+export const ACTIVITY_ICON: Record<ActivityKind, ActivityIcon> = {
+  coding: 'code',
+  typing: 'keyboard',
+  drawing: 'pencil',
+  testing: 'bug',
+  monitoring: 'screen',
+  reading: 'book',
+  writing: 'write',
+  thinking_pause: 'thought',
+  board_check: 'search',
+  server_check: 'server',
+  task_board_read: 'list',
+  communicating: 'speech',
+}
+
+export function iconForActivity(activity: ActivityKind): ActivityIcon {
+  return ACTIVITY_ICON[activity]
+}
+
+// Draw a single activity icon into `g` within an 8x8 frame (origin 0,0).
+// Each icon uses a distinct shape so activities are visually distinguishable.
+export function drawActivityIcon(g: Graphics, icon: ActivityIcon): void {
+  const ink = PALETTE.ink
+  const cream = PALETTE.cream
+  const blue = PALETTE.mutedBlue
+  const green = PALETTE.mutedGreen
+  const red = PALETTE.mutedRed
+  const orange = PALETTE.softOrange
+  const yellow = PALETTE.accentYellow
+  switch (icon) {
+    case 'code':
+      // </> angle brackets.
+      g.rect(1, 2, 1, 1).fill(blue)
+      g.rect(2, 3, 1, 1).fill(blue)
+      g.rect(3, 4, 1, 1).fill(blue)
+      g.rect(4, 5, 1, 1).fill(blue)
+      g.rect(5, 4, 1, 1).fill(blue)
+      g.rect(6, 3, 1, 1).fill(blue)
+      g.rect(7, 2, 1, 1).fill(blue)
+      g.rect(2, 5, 1, 1).fill(blue)
+      g.rect(6, 5, 1, 1).fill(blue)
+      break
+    case 'keyboard':
+      // Small keyboard: base + key dots.
+      g.rect(1, 4, 6, 3).fill(cream)
+      g.rect(1, 4, 6, 1).fill(ink)
+      g.rect(1, 6, 6, 1).fill(ink)
+      g.rect(1, 4, 1, 3).fill(ink)
+      g.rect(6, 4, 1, 3).fill(ink)
+      g.rect(2, 5, 1, 1).fill(ink)
+      g.rect(4, 5, 1, 1).fill(ink)
+      g.rect(5, 5, 1, 1).fill(ink)
+      // Space bar.
+      g.rect(2, 5, 2, 1).fill(blue)
+      break
+    case 'pencil':
+      // Diagonal pencil.
+      g.rect(2, 1, 1, 1).fill(yellow)
+      g.rect(3, 2, 1, 1).fill(yellow)
+      g.rect(4, 3, 1, 1).fill(yellow)
+      g.rect(5, 4, 1, 1).fill(yellow)
+      g.rect(6, 5, 1, 1).fill(orange)
+      g.rect(1, 2, 1, 1).fill(ink)
+      g.rect(7, 6, 1, 1).fill(ink)
+      break
+    case 'bug':
+      // Bug body + legs, with a small check overlay.
+      g.rect(3, 3, 2, 3).fill(red)
+      g.rect(2, 2, 4, 1).fill(red)
+      g.rect(2, 4, 1, 1).fill(ink)
+      g.rect(5, 4, 1, 1).fill(ink)
+      g.rect(2, 6, 1, 1).fill(ink)
+      g.rect(5, 6, 1, 1).fill(ink)
+      g.rect(3, 2, 1, 1).fill(ink)
+      g.rect(4, 2, 1, 1).fill(ink)
+      // Check mark overlay (bottom-right).
+      g.rect(6, 5, 1, 1).fill(green)
+      g.rect(5, 6, 1, 1).fill(green)
+      g.rect(7, 7, 1, 1).fill(green)
+      break
+    case 'screen':
+      // Monitor with signal bars.
+      g.rect(1, 1, 6, 5).fill(ink)
+      g.rect(2, 2, 4, 3).fill(blue)
+      g.rect(3, 6, 2, 1).fill(ink)
+      g.rect(2, 7, 4, 1).fill(ink)
+      // Signal bars inside.
+      g.rect(3, 3, 1, 1).fill(green)
+      g.rect(4, 3, 1, 1).fill(green)
+      g.rect(5, 4, 1, 1).fill(green)
+      break
+    case 'book':
+      // Open book.
+      g.rect(1, 2, 6, 5).fill(cream)
+      g.rect(1, 2, 6, 1).fill(ink)
+      g.rect(1, 6, 6, 1).fill(ink)
+      g.rect(1, 2, 1, 5).fill(ink)
+      g.rect(6, 2, 1, 5).fill(ink)
+      g.rect(4, 2, 1, 5).fill(ink)
+      // Text lines.
+      g.rect(2, 3, 1, 1).fill(ink)
+      g.rect(2, 5, 1, 1).fill(ink)
+      g.rect(5, 3, 1, 1).fill(ink)
+      g.rect(5, 5, 1, 1).fill(ink)
+      break
+    case 'write':
+      // Paper with pencil writing.
+      g.rect(1, 1, 5, 6).fill(cream)
+      g.rect(1, 1, 5, 1).fill(ink)
+      g.rect(1, 6, 5, 1).fill(ink)
+      g.rect(1, 1, 1, 6).fill(ink)
+      g.rect(5, 1, 1, 6).fill(ink)
+      // Text lines.
+      g.rect(2, 3, 3, 1).fill(ink)
+      g.rect(2, 5, 2, 1).fill(ink)
+      // Pencil tip.
+      g.rect(6, 2, 1, 1).fill(yellow)
+      g.rect(7, 3, 1, 1).fill(yellow)
+      g.rect(7, 4, 1, 1).fill(orange)
+      break
+    case 'thought':
+      // Thought cloud: small puffs + dots.
+      g.rect(2, 1, 4, 1).fill(cream)
+      g.rect(1, 2, 6, 3).fill(cream)
+      g.rect(2, 5, 4, 1).fill(cream)
+      g.rect(1, 6, 1, 1).fill(cream)
+      g.rect(6, 6, 1, 1).fill(cream)
+      g.rect(3, 7, 1, 1).fill(cream)
+      g.rect(5, 7, 1, 1).fill(cream)
+      // Dots inside.
+      g.rect(3, 3, 1, 1).fill(ink)
+      g.rect(5, 3, 1, 1).fill(ink)
+      g.rect(4, 4, 1, 1).fill(ink)
+      break
+    case 'search':
+      // Magnifying glass.
+      g.rect(2, 1, 3, 1).fill(blue)
+      g.rect(1, 2, 1, 3).fill(blue)
+      g.rect(5, 2, 1, 3).fill(blue)
+      g.rect(2, 5, 3, 1).fill(blue)
+      g.rect(3, 3, 1, 1).fill(cream)
+      g.rect(4, 6, 1, 1).fill(ink)
+      g.rect(5, 7, 1, 1).fill(ink)
+      break
+    case 'server':
+      // Server rack with LED.
+      g.rect(1, 1, 6, 6).fill(ink)
+      g.rect(2, 2, 4, 1).fill(blue)
+      g.rect(2, 4, 4, 1).fill(blue)
+      g.rect(2, 6, 4, 1).fill(blue)
+      g.rect(6, 2, 1, 1).fill(green)
+      g.rect(6, 4, 1, 1).fill(green)
+      g.rect(6, 6, 1, 1).fill(red)
+      break
+    case 'list':
+      // Checklist with items + check.
+      g.rect(1, 1, 6, 6).fill(cream)
+      g.rect(1, 1, 6, 1).fill(ink)
+      g.rect(1, 6, 6, 1).fill(ink)
+      g.rect(1, 1, 1, 6).fill(ink)
+      g.rect(6, 1, 1, 6).fill(ink)
+      // Checkboxes.
+      g.rect(2, 2, 1, 1).fill(green)
+      g.rect(2, 4, 1, 1).fill(ink)
+      // Lines.
+      g.rect(3, 2, 3, 1).fill(ink)
+      g.rect(3, 4, 3, 1).fill(ink)
+      break
+    case 'speech':
+      // Speech bubble with dots.
+      g.rect(1, 1, 6, 4).fill(cream)
+      g.rect(1, 1, 6, 1).fill(ink)
+      g.rect(1, 4, 6, 1).fill(ink)
+      g.rect(1, 1, 1, 4).fill(ink)
+      g.rect(6, 1, 1, 4).fill(ink)
+      g.poly([2, 5, 4, 5, 2, 7]).fill(cream)
+      g.poly([2, 5, 3, 5, 2, 6]).fill(ink)
+      g.rect(2, 2, 1, 1).fill(ink)
+      g.rect(4, 2, 1, 1).fill(ink)
+      g.rect(6, 2, 1, 1).fill(ink)
+      break
+  }
+}
 
 // ---- Per-kind message icons (spec §13) ----
 
@@ -413,6 +618,112 @@ class SpeechBubble {
   }
 }
 
+// ---- Persistent activity bubble (spec §16 visibility) ----
+//
+// A small thought-style bubble that floats above a working agent's head and
+// stays visible for as long as the agent is in a working visual state. It
+// shows a distinct pixel icon per ActivityKind so a viewer can tell at a
+// glance what the agent is doing: coding, testing, reading, monitoring, etc.
+// The bubble follows the agent's head position (updated each tick by the
+// manager) and gently bobs. A short pop-in scale animation plays on appear.
+
+class ActivityBubble {
+  readonly view: Container
+  private icon: ActivityIcon
+  private time = 0
+  private popIn = 0 // 0..1 pop-in progress
+  private iconTex: Texture
+
+  constructor(renderer: Renderer, icon: ActivityIcon) {
+    this.icon = icon
+    this.view = new Container()
+    // Bubble background: rounded-ish rect with a tiny tail puff.
+    const bg = new Graphics()
+    const W = 12
+    const H = 10
+    bg.rect(0, 0, W, H).fill(PALETTE.cream)
+    bg.rect(0, 0, W, 1).fill(PALETTE.ink)
+    bg.rect(0, H - 1, W, 1).fill(PALETTE.ink)
+    bg.rect(0, 0, 1, H).fill(PALETTE.ink)
+    bg.rect(W - 1, 0, 1, H).fill(PALETTE.ink)
+    // Tail: small puff below the bubble.
+    bg.rect(4, H, 2, 1).fill(PALETTE.cream)
+    bg.rect(4, H, 2, 1).fill(PALETTE.ink)
+    bg.rect(3, H, 1, 1).fill(PALETTE.ink)
+    bg.rect(6, H, 1, 1).fill(PALETTE.ink)
+    const bgTex = renderer.generateTexture({
+      target: bg,
+      resolution: 1,
+      antialias: false,
+      frame: new Rectangle(0, 0, W + 2, H + 2),
+    })
+    bg.destroy()
+    const bgSprite = new Sprite(bgTex)
+    bgSprite.anchor.set(0.5, 1.0) // tail points down at the agent
+    this.view.addChild(bgSprite)
+
+    // Activity icon centered inside the bubble.
+    const iconG = new Graphics()
+    drawActivityIcon(iconG, icon)
+    this.iconTex = renderer.generateTexture({
+      target: iconG,
+      resolution: 1,
+      antialias: false,
+      frame: new Rectangle(0, 0, 8, 8),
+    })
+    iconG.destroy()
+    const iconSprite = new Sprite(this.iconTex)
+    iconSprite.anchor.set(0.5, 0.5)
+    iconSprite.position.set(0, -H / 2)
+    this.view.addChild(iconSprite)
+
+    this.view.scale.set(0.1) // start small for pop-in
+  }
+
+  setPosition(p: Vec2): void {
+    this.view.position.set(p.x, p.y)
+  }
+
+  updateIcon(renderer: Renderer, icon: ActivityIcon): void {
+    if (icon === this.icon) return
+    this.icon = icon
+    const g = new Graphics()
+    drawActivityIcon(g, icon)
+    const tex = renderer.generateTexture({
+      target: g,
+      resolution: 1,
+      antialias: false,
+      frame: new Rectangle(0, 0, 8, 8),
+    })
+    g.destroy()
+    this.iconTex.destroy(true)
+    const sprite = this.view.children[1] as Sprite
+    sprite.texture = tex
+    this.iconTex = tex
+  }
+
+  update(dt: number): void {
+    this.time += dt
+    if (this.popIn < 1) {
+      this.popIn = Math.min(1, this.popIn + dt * 5)
+      const s = 0.1 + 0.9 * easeOutBack(this.popIn)
+      this.view.scale.set(s)
+    }
+    // Gentle vertical bob (±1px).
+    this.view.y += Math.sin(this.time * 3) * dt * 1.5
+  }
+
+  destroy(): void {
+    this.view.destroy({ children: true })
+  }
+}
+
+function easeOutBack(t: number): number {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
+}
+
 // ---- Effects manager ----
 
 export class OfficeEffects {
@@ -421,6 +732,8 @@ export class OfficeEffects {
   private notifications: Notification[] = []
   private statuses: StatusEffect[] = []
   private bubbles: SpeechBubble[] = []
+  // Persistent activity bubbles keyed by agent id (spec §16 visibility).
+  private activityBubbles = new Map<string, ActivityBubble>()
 
   constructor(private renderer: Renderer) {
     this.view = new Container()
@@ -452,11 +765,46 @@ export class OfficeEffects {
     this.view.addChild(b.view)
   }
 
+  // Show or update a persistent activity bubble for an agent. Creates the
+  // bubble if none exists for `agentId`; updates the icon if the activity
+  // changed; repositions it above the agent's head each call. Pass `null` as
+  // the activity to hide the bubble.
+  setActivityBubble(agentId: string, headPos: Vec2, activity: ActivityKind | null): void {
+    if (activity === null) {
+      this.hideActivityBubble(agentId)
+      return
+    }
+    const icon = ACTIVITY_ICON[activity]
+    const existing = this.activityBubbles.get(agentId)
+    if (existing) {
+      existing.updateIcon(this.renderer, icon)
+      existing.setPosition(headPos)
+    } else {
+      const b = new ActivityBubble(this.renderer, icon)
+      b.setPosition(headPos)
+      this.activityBubbles.set(agentId, b)
+      this.view.addChild(b.view)
+    }
+  }
+
+  hideActivityBubble(agentId: string): void {
+    const b = this.activityBubbles.get(agentId)
+    if (!b) return
+    this.view.removeChild(b.view)
+    b.destroy()
+    this.activityBubbles.delete(agentId)
+  }
+
+  get activeActivityBubbles(): number {
+    return this.activityBubbles.size
+  }
+
   update(dt: number): void {
     this.updateList(this.envelopes, dt)
     this.updateList(this.notifications, dt)
     this.updateList(this.statuses, dt)
     this.updateList(this.bubbles, dt)
+    for (const b of this.activityBubbles.values()) b.update(dt)
   }
 
   private updateList<T extends { update: (dt: number) => void; done: boolean; destroy: () => void; view: Container }>(
@@ -480,10 +828,12 @@ export class OfficeEffects {
     for (const n of this.notifications) n.destroy()
     for (const s of this.statuses) s.destroy()
     for (const b of this.bubbles) b.destroy()
+    for (const b of this.activityBubbles.values()) b.destroy()
     this.envelopes = []
     this.notifications = []
     this.statuses = []
     this.bubbles = []
+    this.activityBubbles.clear()
     this.view.removeChildren()
   }
 }

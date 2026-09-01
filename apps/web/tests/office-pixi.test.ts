@@ -7,7 +7,7 @@ import { drawCharacterOps, rasterizeSilhouette, AgentSprite, walkFrameCount, wor
 import { AgentMovement } from '../app/office/agents/AgentMovement'
 import { CHARACTER_SHEET } from '../app/office/characters/CharacterSheet'
 import { WorkActivityRunner, type WorkAgentController, activityDurationRangeFor } from '../app/office/agents/WorkActivityRunner'
-import { iconForKind, KIND_CONFIG, type MessageIcon } from '../app/office/effects/OfficeEffects'
+import { iconForKind, KIND_CONFIG, type MessageIcon, iconForActivity, ACTIVITY_ICON, drawActivityIcon, type ActivityIcon } from '../app/office/effects/OfficeEffects'
 import { isPhysicalMessageKind, conversationApproachTile, faceDirection, runIntroduction, runExit, type LifecycleAgent, type IntroductionPlan } from '../app/office/VirtualOffice'
 import { ReactionGlance } from '../app/office/agents/AgentEntity'
 import { OfficeWorld } from '../app/office/world/OfficeWorld'
@@ -1077,6 +1077,93 @@ describe('ReactionGlance contextual reaction (spec §18)', () => {
     expect(glance.start('up', { x: 5, y: 5 }, { x: 4, y: 5 })).toBe('left')
     expect(glance.start('up', { x: 5, y: 5 }, { x: 5, y: 6 })).toBe('down')
     expect(glance.start('up', { x: 5, y: 5 }, { x: 5, y: 4 })).toBe('up')
+  })
+})
+
+// ---- Activity bubble icons (spec §16 visibility) ----
+
+const ALL_ACTIVITY_KINDS: ActivityKind[] = [
+  'coding', 'typing', 'drawing', 'testing', 'monitoring', 'reading',
+  'writing', 'thinking_pause', 'board_check', 'server_check', 'task_board_read', 'communicating',
+]
+
+// Minimal Graphics recorder: records rect/poly fill calls as strings so we
+// can verify each icon produces a distinct, non-empty draw signature.
+class FakeGraphics {
+  ops: string[] = []
+  rect(x: number, y: number, w: number, h: number): this {
+    this.ops.push(`r:${x},${y},${w},${h}`)
+    return this
+  }
+  poly(_pts: number[]): this {
+    this.ops.push(`p:${_pts.join(',')}`)
+    return this
+  }
+  circle(x: number, y: number, r: number): this {
+    this.ops.push(`c:${x},${y},${r}`)
+    return this
+  }
+  fill(_color: unknown): this {
+    return this
+  }
+  stroke(_opts: unknown): this {
+    return this
+  }
+}
+
+describe('per-activity icons (spec §16 visibility)', () => {
+  it('iconForActivity returns a defined icon for every ActivityKind', () => {
+    for (const activity of ALL_ACTIVITY_KINDS) {
+      expect(iconForActivity(activity), `${activity} should have an icon`).toBeDefined()
+    }
+  })
+
+  it('every activity maps to a distinct icon', () => {
+    const icons = ALL_ACTIVITY_KINDS.map((a) => iconForActivity(a))
+    const unique = new Set(icons)
+    expect(unique.size, 'each activity must have a distinct icon').toBe(ALL_ACTIVITY_KINDS.length)
+  })
+
+  it('ACTIVITY_ICON maps each activity to the expected icon shape', () => {
+    expect(ACTIVITY_ICON.coding).toBe('code')
+    expect(ACTIVITY_ICON.typing).toBe('keyboard')
+    expect(ACTIVITY_ICON.drawing).toBe('pencil')
+    expect(ACTIVITY_ICON.testing).toBe('bug')
+    expect(ACTIVITY_ICON.monitoring).toBe('screen')
+    expect(ACTIVITY_ICON.reading).toBe('book')
+    expect(ACTIVITY_ICON.writing).toBe('write')
+    expect(ACTIVITY_ICON.thinking_pause).toBe('thought')
+    expect(ACTIVITY_ICON.board_check).toBe('search')
+    expect(ACTIVITY_ICON.server_check).toBe('server')
+    expect(ACTIVITY_ICON.task_board_read).toBe('list')
+    expect(ACTIVITY_ICON.communicating).toBe('speech')
+  })
+
+  it('drawActivityIcon produces a non-empty draw signature for every icon', () => {
+    const allIcons: ActivityIcon[] = [
+      'code', 'keyboard', 'pencil', 'bug', 'screen', 'book',
+      'write', 'thought', 'search', 'server', 'list', 'speech',
+    ]
+    for (const icon of allIcons) {
+      const g = new FakeGraphics()
+      drawActivityIcon(g as unknown as import('pixi.js').Graphics, icon)
+      expect(g.ops.length, `${icon} produced no draw ops`).toBeGreaterThan(0)
+    }
+  })
+
+  it('each activity icon has a distinct draw signature', () => {
+    const signatures = new Map<ActivityIcon, string>()
+    const allIcons: ActivityIcon[] = [
+      'code', 'keyboard', 'pencil', 'bug', 'screen', 'book',
+      'write', 'thought', 'search', 'server', 'list', 'speech',
+    ]
+    for (const icon of allIcons) {
+      const g = new FakeGraphics()
+      drawActivityIcon(g as unknown as import('pixi.js').Graphics, icon)
+      signatures.set(icon, g.ops.join('|'))
+    }
+    const unique = new Set(signatures.values())
+    expect(unique.size, 'each icon must have a distinct draw signature').toBe(allIcons.length)
   })
 })
 

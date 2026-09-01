@@ -1,6 +1,7 @@
 import { Application, Container, type Renderer } from 'pixi.js'
 import type { EventBus } from './EventBus'
 import type {
+  ActivityKind,
   AgentDescriptor,
   AgentVisualState,
   Direction,
@@ -15,6 +16,7 @@ import { NavigationGrid } from './world/NavigationGrid'
 import { OfficeWorld } from './world/OfficeWorld'
 import { Camera } from './camera/Camera'
 import { AgentEntity } from './agents/AgentEntity'
+import { isWorkingVisualState } from './agents/AgentSprite'
 import { OfficeEffects, type StatusIcon } from './effects/OfficeEffects'
 import type { OfficeDirector } from './simulation/OfficeDirector'
 
@@ -609,6 +611,7 @@ export class VirtualOffice implements OfficeDirector {
     this.effects?.update(dt)
     this.camera?.update(this.app.ticker)
     this.updateContextualReactions(dt)
+    this.syncActivityBubbles()
     if (this.selectedId) {
       // Live state refresh for the panel.
       const a = this.agents.get(this.selectedId)
@@ -616,6 +619,28 @@ export class VirtualOffice implements OfficeDirector {
         this.lastSelectedState = a.currentState
         this.emitSelection()
       }
+    }
+  }
+
+  // Sync persistent activity bubbles (spec §16 visibility) above each agent
+  // so a viewer can see at a glance what everyone is doing. Working visual
+  // states show the current activity icon; thinking shows a thought cloud;
+  // communicating shows a speech bubble. All other states hide the bubble.
+  private syncActivityBubbles(): void {
+    if (!this.effects) return
+    for (const [id, agent] of this.agents) {
+      const state = agent.currentState
+      let activity: ActivityKind | null = null
+      if (isWorkingVisualState(state)) {
+        activity = agent.currentActivity ?? 'coding'
+      } else if (state === 'thinking') {
+        activity = 'thinking_pause'
+      } else if (state === 'communicating') {
+        activity = 'communicating'
+      }
+      // Offset above the head so the bubble tail doesn't overlap the sprite.
+      const head = agent.headPixelPosition()
+      this.effects.setActivityBubble(id, { x: head.x, y: head.y - 10 }, activity)
     }
   }
 

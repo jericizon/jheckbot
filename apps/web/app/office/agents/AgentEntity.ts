@@ -179,6 +179,11 @@ export class AgentEntity {
     return this.state
   }
 
+  // Current work activity (spec §16), or null when not actively working.
+  get currentActivity(): ActivityKind | null {
+    return this.sprite.getActivity() ?? null
+  }
+
   get isInterrupted(): boolean {
     return this.interruptState.isInterrupted
   }
